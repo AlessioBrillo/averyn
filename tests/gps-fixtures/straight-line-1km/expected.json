@@ -1,0 +1,10 @@
+{
+  "description": "Synthetic 1 km due-north line at 10 m/s, 11 samples, 10 s apart, no noise, no pauses.",
+  "algorithm_versions": { "distance": "distance-v1" },
+  "expected": {
+    "distance_m": { "value": 1000.0, "tolerance_m": 1.0 },
+    "duration_s": 100,
+    "moving_time_s": 100,
+    "quality_flags": []
+  }
+}

@@ -1,0 +1,24 @@
+name: Feature request
+description: Propose a feature or improvement
+labels: ["type/feature"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / use case
+    validations: { required: true }
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations: { required: true }
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy impact
+      description: What data would this collect, store or expose?
+  - type: dropdown
+    id: milestone
+    attributes:
+      label: Roadmap fit
+      options: [MVP-0 tracking, MVP-1 core, MVP-2 analysis, MVP-3 maps, MVP-4 social, Later, Not sure]

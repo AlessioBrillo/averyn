@@ -1,0 +1,10 @@
+.git
+.gradle
+.kotlin
+**/build
+**/node_modules
+apps/ios
+apps/web
+docs
+local.properties
+.env

@@ -1,0 +1,12 @@
+ktor:
+  application:
+    modules:
+      - dev.averyn.backend.ApplicationKt.module
+  deployment:
+    port: "$PORT:8080"
+
+averyn:
+  database:
+    url: "$DATABASE_URL"
+    user: "$DATABASE_USER"
+    password: "$DATABASE_PASSWORD"

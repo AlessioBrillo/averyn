@@ -1,0 +1,32 @@
+name: Bug report
+description: Something does not work as documented
+labels: ["type/bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "Security vulnerability? Do **not** file it here — see SECURITY.md. Do not paste real coordinates or routes near your home."
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [tracking, backend, web, android, ios, infra, docs]
+    validations: { required: true }
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations: { required: true }
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+    validations: { required: true }
+  - type: input
+    id: device
+    attributes:
+      label: Device, OS version and app version (tracking bugs)
+  - type: textarea
+    id: gps
+    attributes:
+      label: Tracking details
+      description: App state (foreground/background/locked), permission level, battery saver, duration, GPS quality report if available.

@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "averyn-dev",
+      "credentials": [{ "accessKey": "averyn-dev-access", "secretKey": "averyn-dev-secret-change-me" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

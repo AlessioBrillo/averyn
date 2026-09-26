@@ -1,0 +1,50 @@
+# Local development and single-node self-hosting stack.
+#   cp .env.example .env   # then edit secrets
+#   docker compose --env-file .env up -d --build
+name: averyn
+
+services:
+  db:
+    image: postgis/postgis:17-3.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-averyn}
+      POSTGRES_USER: ${POSTGRES_USER:-averyn}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  storage:
+    # S3-compatible object storage (ADR-0006). Any S3 API implementation can replace it.
+    image: chrislusf/seaweedfs:4.47
+    restart: unless-stopped
+    command: ["server", "-dir=/data", "-s3", "-s3.config=/etc/seaweedfs/s3.json"]
+    volumes:
+      - storage-data:/data
+      - ./seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/backend.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-averyn}
+      DATABASE_USER: ${POSTGRES_USER:-averyn}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      # Bound to localhost; put a reverse proxy (Caddy/nginx) in front for public access.
+      # /metrics is unauthenticated: never expose it publicly (ADR-0009).
+      - "127.0.0.1:8080:8080"
+
+volumes:
+  db-data:
+  storage-data:

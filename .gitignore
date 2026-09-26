@@ -1,0 +1,52 @@
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.jks
+*.keystore
+local.properties
+google-services.json
+GoogleService-Info.plist
+
+# Gradle / Kotlin / JVM
+.gradle/
+.kotlin/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+*.class
+hs_err_pid*
+
+# Android
+*.apk
+*.aab
+.cxx/
+captures/
+
+# iOS / Xcode (project is generated from apps/ios/project.yml via XcodeGen)
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+DerivedData/
+Pods/
+*.xcframework
+
+# Web
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.vite/
+
+# Local data
+infrastructure/compose/data/
+*.log

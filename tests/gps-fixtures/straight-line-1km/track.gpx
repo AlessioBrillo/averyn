@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="averyn-fixtures" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>straight-line-1km</name>
+    <trkseg>
+      <trkpt lat="45.0000000" lon="9.0000000"><ele>100.0</ele><time>2026-01-01T08:00:00Z</time></trkpt>
+      <trkpt lat="45.0008993" lon="9.0000000"><ele>100.0</ele><time>2026-01-01T08:00:10Z</time></trkpt>
+      <trkpt lat="45.0017986" lon="9.0000000"><ele>100.0</ele><time>2026-01-01T08:00:20Z</time></trkpt>
+      <trkpt lat="45.0026980" lon="9.0000000"><ele>100.0</ele><time>2026-01-01T08:00:30Z</time></trkpt>
+      <trkpt lat="45.0035973" lon="9.0000000"><ele>100.0</ele><time>2026-01-01T08:00:40Z</time></trkpt>
+      <trkpt lat="45.0044966" lon="9.0000000"><ele>100.0</ele><time>2026-01-01T08:00:50Z</time></trkpt>
+      <trkpt lat="45.0053959" lon="9.0000000"><ele>100.0</ele><time>2026-01-01T08:01:00Z</time></trkpt>
+      <trkpt lat="45.0062952" lon="9.0000000"><ele>100.0</ele><time>2026-01-01T08:01:10Z</time></trkpt>
+      <trkpt lat="45.0071946" lon="9.0000000"><ele>100.0</ele><time>2026-01-01T08:01:20Z</time></trkpt>
+      <trkpt lat="45.0080939" lon="9.0000000"><ele>100.0</ele><time>2026-01-01T08:01:30Z</time></trkpt>
+      <trkpt lat="45.0089932" lon="9.0000000"><ele>100.0</ele><time>2026-01-01T08:01:40Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

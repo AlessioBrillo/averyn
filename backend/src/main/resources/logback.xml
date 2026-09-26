@@ -1,0 +1,9 @@
+<configuration>
+  <!-- Structured JSON to stdout (ADR-0009). Never log coordinates, tokens or user content. -->
+  <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
+  </appender>
+  <root level="INFO">
+    <appender-ref ref="JSON"/>
+  </root>
+</configuration>

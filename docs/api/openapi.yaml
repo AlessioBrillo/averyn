@@ -1,0 +1,47 @@
+openapi: 3.1.0
+info:
+  title: Averyn API
+  version: 0.0.1
+  description: |
+    Contract-first: change this file in the same PR as the code.
+    Versioning: breaking changes go to a new URL prefix (/v2); additive changes stay in /v1.
+    Only operational endpoints exist so far; /v1 resources arrive with MVP-1 (sync design doc first).
+paths:
+  /health:
+    get:
+      summary: Liveness — the process is up
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Status" }
+  /ready:
+    get:
+      summary: Readiness — dependencies (database) are reachable
+      responses:
+        "200":
+          description: Ready
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Status" }
+        "503":
+          description: Not ready
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Status" }
+  /metrics:
+    get:
+      summary: Prometheus metrics (internal network only)
+      responses:
+        "200":
+          description: Prometheus text format
+          content:
+            text/plain: { schema: { type: string } }
+components:
+  schemas:
+    Status:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string }
