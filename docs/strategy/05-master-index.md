@@ -27,7 +27,7 @@
 2. **[04-synapse-device-sdk-spec.md](04-synapse-device-sdk-spec.md)** → Sezione C/C++ SDK + Esempio `main.c`
 3. **Priorità assolute (Ordine)**:
    - `ble_gatt_server.c` (Standard + Custom Service)
-   - `fit_writer.c` (LittleFS, validato Garmin/an existing platform)
+   - `fit_writer.c` (LittleFS, validato contro software FIT standard)
    - `provisioning.c` (BLE → WiFi + Cloud + Cert)
    - `ota_update.c` (Ed25519, rollback)
    - `acquisition_fsm.c` (T0/T1/T2 + Motion Gate)
@@ -123,7 +123,7 @@
 ### Phase 3: Prodotto Vendibile (Mesi 5-9)
 - [ ] **PCB Synapse Band**: Design, Fab, Assembly, Test (100-500 unità)
 - [ ] **Certificazioni**: CE, FCC, RoHS (wellness, non medicale)
-- [ ] **Averyn MVP-1/2/3**: Core platform, Analysis, Maps — parità an existing platform 80%+
+- [ ] **Averyn MVP-1/2/3**: Core platform, Analysis, Maps — parità con le piattaforme esistenti 80%+
 - [ ] **Self-Host Documentation**: Guide complete, troubleshooting, backup/restore
 - [ ] **Community**: Contributor guide, CLA bot, issue templates, Discord/Forum
 
@@ -164,7 +164,7 @@
 ## 💡 Ricorda: Il Contratto Fondamentale
 
 > **SYNAPSE-24 = Device Software Platform** (firmware, SDK, tooling)  
-> **AVERYN = an existing platform Free + Synapse Showcase** (app, backend, web, social, maps)  
+> **AVERYN = piattaforma sportiva gratuita + Synapse Showcase** (app, backend, web, social, maps)  
 > **SYNAPSE CLOUD = Ingestion + Batch AI + Sync** (FastAPI, Celery, ONNX, TimescaleDB, AGPL)  
 >  
 > **Nessun codice cloud in SYNAPSE-24. Nessun firmware in Averyn. Nessuna UI in SYNAPSE CLOUD.**  

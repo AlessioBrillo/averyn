@@ -45,3 +45,11 @@ The project is AGPL-3.0-or-later. Every contribution requires signing the [CLA](
 ## Reporting security issues
 
 See [SECURITY.md](SECURITY.md). Do not open public issues for vulnerabilities.
+
+## Public-repo hygiene
+
+This is a public repository; nothing here should expose a contributor's real email or read as a comparison against a named competitor.
+
+- **Commit identity:** set `git config user.email <id>+<username>@users.noreply.github.com` (GitHub's noreply address, from Settings → Emails) before your first commit. Enable the guard rail: `git config core.hooksPath .githooks` — `.githooks/pre-push` rejects a push containing a non-noreply author/committer email or `Co-authored-by` trailer.
+- **No competitor names or disparagement.** Describe the market generically ("established sports-tracking platforms"). Interoperability format/API names (GPX, FIT, TCX, HealthKit, Health Connect, BLE GATT profiles) are fine where technically required.
+- **No personal traces.** Never commit real GPS recordings, home/work coordinates, or other personal data — see `tests/gps-fixtures/README.md` for the anonymization rule.

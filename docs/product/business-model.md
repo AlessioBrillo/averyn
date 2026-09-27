@@ -10,7 +10,7 @@ Averyn is free and fully functional without any hardware purchase. Nothing in [v
 
 | User type | What they get free | What funds their cost |
 |---|---|---|
-| GPS-only (the majority, coming from an existing platform) | Tracking, sync, analysis, export, self-host option, base storage/routing/maps quota — everything in [vision.md](vision.md)'s never-paywalled list | Fair-use quotas on the few genuinely expensive resources (offline map packages, routing calls, photo storage above a generous baseline); donations; club/team plans (optional, recurring, not required for any core feature) |
+| GPS-only (the majority, coming from other tracking apps) | Tracking, sync, analysis, export, self-host option, base storage/routing/maps quota — everything in [vision.md](vision.md)'s never-paywalled list | Fair-use quotas on the few genuinely expensive resources (offline map packages, routing calls, photo storage above a generous baseline); donations; club/team plans (optional, recurring, not required for any core feature) |
 | Synapse hardware owner | Everything above, plus HRV/stress/sleep-adjacent features via the [Synapse integration](../integrations/synapse.md) | Hardware margin, see below |
 
 Fair-use quotas are a **cost-shape decision, not a feature lock**: past the free quota, a self-hoster pays nothing extra (it's their own infrastructure), and a managed-cloud user either accepts a soft cap (e.g. lower-resolution offline maps) or opts into a paid club/team plan. This needs an actual number once MVP-3 (maps/routing) has real usage data — tracked as an open decision below, not invented here.

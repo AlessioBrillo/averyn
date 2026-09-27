@@ -5,7 +5,7 @@
 
 ## 🎯 L'Obiettivo Finale (In Una Frase)
 
-> **Creare l'unico ecosistema al mondo dove un hardware bio-sensing open-source di livello ricerca (SYNAPSE) viene venduto a consumatori sportivi mainstream attraverso una piattaforma sportiva gratuita "alla an existing platform" (Averyn) che ne mostra il valore reale — senza paywall, senza lock-in, con self-hosting reale — finanziando il cloud con il margine sull'hardware.**
+> **Creare l'unico ecosistema al mondo dove un hardware bio-sensing open-source di livello ricerca (SYNAPSE) viene venduto a consumatori sportivi mainstream attraverso una piattaforma sportiva gratuita (Averyn) che ne mostra il valore reale — senza paywall, senza lock-in, con self-hosting reale — finanziando il cloud con il margine sull'hardware.**
 
 ---
 
@@ -13,7 +13,7 @@
 
 ### SYNAPSE-24: La Nascita da un'Insoddisfazione Tecnica
 SYNAPSE-24 nasce perché **non esiste oggi nessun wearable che faccia davvero "24/7 multimodale"**:
-- Apple Watch / Garmin / Whoop: ottimi per sport, **zero neuro** (niente EEG, fNIRS, EDA research-grade)
+- Wearable sportivi mainstream: ottimi per sport, **zero neuro** (niente EEG, fNIRS, EDA research-grade)
 - Muse / EmotiBit / OpenBCI: ottimi per neuro, **zero sport** (niente GPS, mappe, segmenti, social)
 - Tutti: **closed source, cloud proprietario, dati bloccati, subscription obbligatorie**
 
@@ -25,11 +25,11 @@ SYNAPSE-24 ha già risolto la parte difficile: **il software**. Phase 0 completa
 
 **Ma manca il prodotto vendibile** e manca il canale per arrivare agli utenti.
 
-### Averyn: La Nascita da un'Insoddisfazione Utente
-Averyn nasce perché **an existing platform ha tradito i suoi utenti**:
+### Averyn: La Nascita da Bisogni Non Coperti dal Mercato
+Averyn nasce per coprire bisogni che le piattaforme sportive mainstream lasciano scoperti:
 - Paywall su funzioni base (segmenti, analisi, mappe offline)
 - Dati non esportabili facilmente, API restrittive
-- Nessun self-hosting reale, dipendenza totale dal loro cloud
+- Nessun self-hosting reale, dipendenza totale dal cloud del fornitore
 - Nessuna integrazione hardware aperta (solo partner selezionati)
 
 Averyn è **pre-alpha**: ha solo l'architettura (KMP, Ktor, PostGIS, Docker Compose) e un piano dettagliato. Manca tutto il prodotto.
@@ -46,8 +46,8 @@ Averyn è **pre-alpha**: ha solo l'architettura (KMP, Ktor, PostGIS, Docker Comp
 
 | Problema Averyn | Soluzione SYNAPSE |
 |-----------------|-------------------|
-| "Solo GPS" = commodity, stesso di an existing platform | Synapse Band = **differenziazione unica**: HRV reale, stress, sleep staging, readiness |
-| Nessun hardware proprio = dipende da Garmin/Apple | Synapse Band = hardware proprietario, margine, controllo totale |
+| "Solo GPS" = commodity, come le altre piattaforme | Synapse Band = **differenziazione unica**: HRV reale, stress, sleep staging, readiness |
+| Nessun hardware proprio = dipende da produttori terzi | Synapse Band = hardware proprietario, margine, controllo totale |
 | Self-hosting costoso da mantenere | Synapse hardware sales finanziano cloud gestito gratuito |
 
 ---
@@ -106,7 +106,7 @@ Averyn è **pre-alpha**: ha solo l'architettura (KMP, Ktor, PostGIS, Docker Comp
 
 ## 🎭 Perché Questa Cosa Non È Mai Stata Fatta Prima
 
-1. **Hardware companies** (Garmin, Apple, Whoop) → **chiudono tutto** per vendere subscription
+1. **Hardware companies** (produttori mainstream di wearable sportivi) → **chiudono tutto** per vendere subscription
 2. **Open hardware projects** (OpenBCI, Muse) → **non fanno consumer apps**, restano nicchia ricerca
 3. **Open source apps** (Gadgetbridge, OpenTracks) → **niente hardware**, niente cloud, niente AI
 4. **Research projects** → **non pensano a business model**, finiscono in paper accademici
@@ -141,7 +141,7 @@ Averyn è **pre-alpha**: ha solo l'architettura (KMP, Ktor, PostGIS, Docker Comp
 | Progetto | Stato Reale | Gap Principale |
 |----------|-------------|----------------|
 | **SYNAPSE-24** | Phase 0 ✅ (software validated). Phase 1 ready (€90 breadboard rig). Firmware ESP32-S3 parziale. | Manca: Band firmware completo, BLE GATT standard, FIT writer, OTA, provisioning, Python SDK |
-| **Averyn** | Scaffold only. MVP-0 (GPS tracking) in corso. Architettura solida. | Manca: tutto il prodotto (tracking, analysis, social, maps, segments, Synapse section) |
+| **Averyn** | MVP-0 (GPS tracking) in corso. Architettura solida. | Manca: gran parte del prodotto (analysis, social, maps, segments, Synapse section) |
 | **Synapse Cloud** | **Non esiste** | Da creare da zero (FastAPI, TimescaleDB, Celery, ONNX Runtime, Authentik) |
 | **Integrazione** | Zero | Da definire protocolli, data models, consent, UI |
 
@@ -166,7 +166,7 @@ Averyn è **pre-alpha**: ha solo l'architettura (KMP, Ktor, PostGIS, Docker Comp
 - [ ] **PCB Synapse Band** (non breadboard): design, fab, assembly, test
 - [ ] **Certificazioni base** (CE, FCC, RoHS) — non medicale, wellness
 - [ ] **Produzione batch 100-500 unità**: supply chain, logistica, supporto
-- [ ] **Averyn MVP-1/2/3**: Core platform, Analysis, Maps — parità an existing platform
+- [ ] **Averyn MVP-1/2/3**: Core platform, Analysis, Maps — parità con le piattaforme esistenti
 
 ### Fase 4: Espansione (Anno 2+)
 - [ ] **Synapse Headband** (EEG 8ch + fNIRS) — per ricercatori/quantified-self avanzato
@@ -184,9 +184,9 @@ Averyn è **pre-alpha**: ha solo l'architettura (KMP, Ktor, PostGIS, Docker Comp
 | **BLE/GPS/HRV reliability su massa** | Alta | Critico | Test su 20+ device reali prima di produzione; dogfooding esteso |
 | **Cloud costs > hardware margin** | Media | Alto | Monitoring costi da giorno 1; modelli edge-first; batch not real-time |
 | **AGPL managed cloud complexity** | Media | Medio | CLA bot da giorno 1; legal review prima di launch; documenta tutto |
-| **Averyn scope creep (an existing platform parity)** | Alta | Alto | MVP verticali rigorosi; no social/mappe finché tracking non è rock-solid |
+| **Averyn scope creep (parità funzionale)** | Alta | Alto | MVP verticali rigorosi; no social/mappe finché tracking non è rock-solid |
 | **Single developer burnout** | Alta | Critico | Automazione CI/CD; issue templates; community contributors prima possibile |
-| **Competitor copia (Garmin aggiunge HRV/stress)** | Certa | Medio | Differenziazione: open source, self-host, neuro futuro, community, prezzo |
+| **Competitor copia (produttori mainstream aggiungono HRV/stress)** | Certa | Medio | Differenziazione: open source, self-host, neuro futuro, community, prezzo |
 
 ---
 
@@ -216,7 +216,7 @@ Averyn è **pre-alpha**: ha solo l'architettura (KMP, Ktor, PostGIS, Docker Comp
 **Tra 24 mesi, successo significa:**
 
 - Synapse Headband in pre-order per ricercatori
-- Averyn = alternativa credibile a an existing platform (parità funzionale 80%+)
+- Averyn = alternativa credibile alle piattaforme sportive esistenti (parità funzionale 80%+)
 - Ecosistema developer attivo (plugin, integrazi, research studies)
 - Modello replicabile: nuovo hardware → nuova sezione Averyn → stesso flywheel
 

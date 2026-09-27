@@ -1,6 +1,6 @@
 # Strategy input (frozen)
 
-These six files are the original Synapse × Averyn ecosystem strategy, written before the technical review below. Like [`product/reference-report-v0.1.md`](../product/reference-report-v0.1.md), they are a **frozen input**, kept in their original language (Italian) and unedited. They are superseded wherever an ADR, `docs/integrations/synapse.md`, `docs/product/business-model.md` or the roadmap says otherwise.
+These six files are the original Synapse × Averyn ecosystem strategy, written before the technical review below. Like [`product/reference-report-v0.1.md`](../product/reference-report-v0.1.md), they are a **frozen input**, kept in their original language (Italian) and substantively unedited — the only change made after the fact is redacting named third-party brands to generic descriptions, for brand neutrality on a public repo (no other content was altered). They are superseded wherever an ADR, `docs/integrations/synapse.md`, `docs/product/business-model.md` or the roadmap says otherwise.
 
 Read [`review-2026-09-27.md`](review-2026-09-27.md) first — it lists every correction, and which document now supersedes which claim.
 

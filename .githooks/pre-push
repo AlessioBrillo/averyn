@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Rejects a push if any outgoing commit's author/committer email, or a
+# Co-authored-by trailer, isn't a noreply address. Enable with:
+#   git config core.hooksPath .githooks
+set -euo pipefail
+
+allowed='@users\.noreply\.github\.com$|^noreply@github\.com$|^noreply@anthropic\.com$'
+zero="0000000000000000000000000000000000000000"
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue
+  if [ "$remote_sha" = "$zero" ]; then
+    range="$local_sha"
+  else
+    range="$remote_sha..$local_sha"
+  fi
+
+  bad=0
+
+  while IFS= read -r email; do
+    [ -z "$email" ] && continue
+    if ! echo "$email" | grep -qE "$allowed"; then
+      echo "pre-push: non-noreply commit email: $email" >&2
+      bad=1
+    fi
+  done < <(git log "$range" --format='%ae%n%ce' 2>/dev/null || true)
+
+  while IFS= read -r trailer_email; do
+    [ -z "$trailer_email" ] && continue
+    if ! echo "$trailer_email" | grep -qE "$allowed"; then
+      echo "pre-push: non-noreply Co-authored-by trailer: $trailer_email" >&2
+      bad=1
+    fi
+  done < <(git log "$range" --format='%B' 2>/dev/null | grep -ioE 'co-authored-by:.*<[^>]+>' | grep -oE '<[^>]+>' | tr -d '<>' || true)
+
+  if [ "$bad" != "0" ]; then
+    echo "pre-push: blocked. Use a noreply email (git config user.email <id>+<user>@users.noreply.github.com)." >&2
+    exit 1
+  fi
+done
+
+exit 0

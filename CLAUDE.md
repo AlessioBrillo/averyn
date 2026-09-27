@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Averyn (codename): open-source, self-hostable an existing platform alternative. iOS + Android + Web. Pre-alpha; focus is **MVP-0, a reliable GPS tracking engine**. Read `docs/README.md` for the docs system, `docs/product/roadmap.md` for scope, `docs/design/TDD-0001-tracking-engine.md` for the active design.
+Averyn (codename): open-source, self-hostable sports-tracking platform. iOS + Android + Web. Pre-alpha; focus is **MVP-0, a reliable GPS tracking engine**. Read `docs/README.md` for the docs system, `docs/product/roadmap.md` for scope, `docs/design/TDD-0001-tracking-engine.md` for the active design.
 
 ## Layout
 
@@ -32,6 +32,8 @@ iOS cannot be built on Windows; CI (macOS runner) verifies it. The Docker backen
 - Never log coordinates, tokens or user content. Private by default. See `docs/privacy/data-classification.md`.
 - Hard-to-reverse decisions need an ADR (`docs/adr/`); accepted ADRs are immutable (supersede instead).
 - PR titles: Conventional Commits. Tests ship with logic. No secrets in the repo.
+- Commit identity: noreply email only (`git config user.email <id>+<user>@users.noreply.github.com`), never a real address, in commit metadata or `Co-authored-by` trailers. Enforced by `.githooks/pre-push` (`git config core.hooksPath .githooks`).
+- Brand neutrality: no competitor names, no disparagement of any product or company, anywhere in the repo (code, docs, commit messages, issues). Describe the market and prior art generically. Naming an interoperability format (GPX, FIT, TCX, HealthKit, Health Connect, Bluetooth GATT profiles) is fine where it's technically required.
 - Don't scaffold ahead: later areas (maps, social, segments, watch) get code only when their milestone starts.
 - Third-party sensor ecosystems (e.g. Synapse) are optional integrations, never a dependency of a core feature: see [ADR-0010](docs/adr/0010-ecosystem-boundary.md) and [ADR-0014](docs/adr/0014-sensor-integration-contract.md). Averyn is the only backend/system of record; a vendor's cloud is at most a stateless job worker.
 - HRV/ECG/sleep/stress-adjacent data is a special data class (health), with its own consent-per-scope and DPIA-before-launch rule: see [ADR-0013](docs/adr/0013-health-data-special-category.md).
