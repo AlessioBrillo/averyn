@@ -16,7 +16,7 @@ final class RecorderViewModel: ObservableObject {
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("activities", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let store = openActivityStore(directoryPath: dir.path)
+        let store = ActivityStore.companion.open(directoryPath: dir.path)
         self.store = store
         let recorder = ActivityRecorder(store: store)
         self.recorder = recorder
@@ -36,7 +36,7 @@ final class RecorderViewModel: ObservableObject {
     }
 
     func pause() {
-        recorder.pause(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs())
+        recorder.pause(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs(), reason: .user)
     }
 
     func resume() {
@@ -75,7 +75,7 @@ final class RecorderViewModel: ObservableObject {
 
     private func export(activityId: String) {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(activityId).gpx")
-        exportGpxToFile(store: store, activityId: activityId, filePath: url.path)
+        store.exportGpxToFile(activityId: activityId, filePath: url.path, content: .raw)
         exportURL = url
     }
 }

@@ -63,6 +63,16 @@ class ActivityStore(
         if (!SystemFileSystem.exists(directory)) SystemFileSystem.createDirectories(directory)
     }
 
+    companion object {
+        /**
+         * Convenience for native adapters that don't otherwise need kotlinx-io types on their side of the
+         * FFI boundary (Swift/iOS): a plain directory path in, an [ActivityStore] out. From Swift:
+         * `ActivityStore.companion.open(directoryPath:)` — a top-level function here isn't reliably
+         * callable from Swift, but a companion object member is.
+         */
+        fun open(directoryPath: String): ActivityStore = ActivityStore(Path(directoryPath))
+    }
+
     private fun pathFor(activityId: String) = Path(directory, "$activityId.jsonl")
 
     fun create(metadata: ActivityMetadata) {
@@ -182,9 +192,3 @@ class ActivityStore(
         if (SystemFileSystem.exists(path)) SystemFileSystem.delete(path)
     }
 }
-
-/**
- * Convenience for native adapters that don't otherwise need kotlinx-io types on their side of the FFI
- * boundary (Swift/iOS) — a plain directory path in, an [ActivityStore] out.
- */
-fun openActivityStore(directoryPath: String): ActivityStore = ActivityStore(Path(directoryPath))

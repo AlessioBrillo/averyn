@@ -21,19 +21,25 @@ data class CompletedActivity(
     val quality: QualityReport,
 )
 
-/** What [ActivityRecorder.recover] found for one interrupted activity (TDD-0001 F4). */
-sealed interface RecoveryResult {
+/**
+ * What [ActivityRecorder.recover] found for one interrupted activity (TDD-0001 F4).
+ *
+ * A `sealed class`, not a `sealed interface`: Kotlin/Native's Objective-C/Swift export turns a sealed
+ * interface into a Swift `protocol`, whose nested implementations aren't reachable as `Foo.Bar` from Swift
+ * (a `sealed class` exports as a real base class with genuinely nested subclasses instead).
+ */
+sealed class RecoveryResult {
     /** Was RECORDING or PAUSED: the recorder is live again, ready for the user to resume/pause/stop it. */
     data class Resumed(
         val activityId: String,
         val sport: Sport,
         val snapshot: LiveSnapshot,
-    ) : RecoveryResult
+    ) : RecoveryResult()
 
     /** Was STOPPING (killed mid-finalize): finalizing is a pure computation, so it's just re-run now. */
     data class Completed(
         val activity: CompletedActivity,
-    ) : RecoveryResult
+    ) : RecoveryResult()
 }
 
 /**

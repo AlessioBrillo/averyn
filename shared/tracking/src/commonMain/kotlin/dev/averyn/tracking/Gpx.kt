@@ -133,12 +133,15 @@ private fun pad4(value: Long): String =
         else -> "$value"
     }
 
-/** Convenience for native adapters (Swift/iOS) that don't otherwise need kotlinx-io types on their side. */
-fun exportGpxToFile(
-    store: ActivityStore,
+/**
+ * Convenience for native adapters (Swift/iOS) that don't otherwise need kotlinx-io types on their side —
+ * an extension function on [ActivityStore] so Swift reaches it as `store.exportGpxToFile(...)` (a top-level
+ * function isn't reliably callable from Swift, but an instance/extension method is).
+ */
+fun ActivityStore.exportGpxToFile(
     activityId: String,
     filePath: String,
     content: GpxContent = GpxContent.RAW,
 ) {
-    SystemFileSystem.sink(Path(filePath)).buffered().use { sink -> writeGpx(store, activityId, sink, content) }
+    SystemFileSystem.sink(Path(filePath)).buffered().use { sink -> writeGpx(this, activityId, sink, content) }
 }
