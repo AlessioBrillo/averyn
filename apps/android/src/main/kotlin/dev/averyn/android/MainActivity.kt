@@ -61,6 +61,7 @@ private fun RecordScreen(app: AverynApplication) {
     var snapshot by remember { mutableStateOf(recorder.snapshot()) }
     var pendingRecovery by remember { mutableStateOf<ActivityMetadata?>(null) }
     var exportActivityId by remember { mutableStateOf<String?>(null) }
+    var pendingSport by remember { mutableStateOf(Sport.RUN) }
 
     DisposableEffect(recorder) {
         recorder.listener = { snapshot = it }
@@ -73,7 +74,7 @@ private fun RecordScreen(app: AverynApplication) {
 
     val permissionLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) startRecording(context, app, Sport.RUN)
+            if (granted) startRecording(context, app, pendingSport)
         }
     val exportLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/gpx+xml")) { uri ->
@@ -120,6 +121,7 @@ private fun RecordScreen(app: AverynApplication) {
                     if (hasLocationPermission(context)) {
                         startRecording(context, app, sport)
                     } else {
+                        pendingSport = sport
                         permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
                     }
                 },
