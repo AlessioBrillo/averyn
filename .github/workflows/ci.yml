@@ -74,8 +74,10 @@ jobs:
         working-directory: apps/ios
         run: |
           xcodegen
+          # EXCLUDED_ARCHS=x86_64: the generic simulator destination requests an Intel slice we
+          # don't build (no iosX64 target — nothing here runs on an Intel simulator).
           xcodebuild build -project Averyn.xcodeproj -scheme Averyn \
-            -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
+            -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO EXCLUDED_ARCHS=x86_64
 
   web:
     name: Web (lint, typecheck, test, build)
