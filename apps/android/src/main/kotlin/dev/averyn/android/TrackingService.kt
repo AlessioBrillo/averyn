@@ -47,9 +47,10 @@ class TrackingService : Service() {
                 if (recorder.currentState == ActivityState.PREPARING) {
                     recorder.gpsReady(SystemClock.elapsedRealtime(), System.currentTimeMillis())
                 }
-                if (recorder.currentState == ActivityState.RECORDING) {
-                    recorder.onSample(location.toSample())
-                }
+                // Always forward the fix: ActivityRecorder.onSample stores it in every non-terminal state
+                // (F5) and only feeds live metrics while RECORDING — gating the call itself here would
+                // silently lose every fix that arrives while PAUSED instead of just excluding it from metrics.
+                recorder.onSample(location.toSample())
             }
 
             @Deprecated("Deprecated in Java") // required override pre-API 29; no-op, no status info to act on
@@ -63,9 +64,14 @@ class TrackingService : Service() {
 
             override fun onProviderDisabled(provider: String) {
                 // F9: a permission/provider change mid-activity is surfaced, not a silent stop. The user
-                // resumes explicitly once the provider is back (no auto-resume: less surprising).
-                if (recorder.currentState == ActivityState.RECORDING) {
-                    recorder.pause(SystemClock.elapsedRealtime(), System.currentTimeMillis(), Reason.PROVIDER_DISABLED)
+                // resumes explicitly once the provider is back (no auto-resume: less surprising). A provider
+                // lost while still PREPARING (before the first fix) has no "resume" to offer, so it fails
+                // outright instead of pausing — otherwise the activity would wait for GPS forever.
+                val (elapsedMs, timeMs) = SystemClock.elapsedRealtime() to System.currentTimeMillis()
+                when (recorder.currentState) {
+                    ActivityState.RECORDING -> recorder.pause(elapsedMs, timeMs, Reason.PROVIDER_DISABLED)
+                    ActivityState.PREPARING -> recorder.fail(elapsedMs, timeMs, Reason.PROVIDER_DISABLED)
+                    else -> {}
                 }
             }
         }
@@ -116,13 +122,12 @@ class TrackingService : Service() {
     }
 
     private fun Location.toSample() =
-        LocationSample(
+        buildLocationSample(
             timeMs = time,
             elapsedRealtimeMs = elapsedRealtimeNanos / 1_000_000,
             latitude = latitude,
             longitude = longitude,
-            // No accuracy reported is treated as very poor (flagged POOR_ACCURACY downstream), never as 0/perfect.
-            horizontalAccuracyM = if (hasAccuracy()) accuracy.toDouble() else 9_999.0,
+            accuracyM = if (hasAccuracy()) accuracy.toDouble() else null,
             altitudeM = if (hasAltitude()) altitude else null,
             speedMps = if (hasSpeed()) speed.toDouble() else null,
             bearingDeg = if (hasBearing()) bearing.toDouble() else null,
@@ -142,3 +147,30 @@ class TrackingService : Service() {
             .setOngoing(true)
             .build()
 }
+
+/**
+ * The platform-conversion part of `Location.toSample()`, pulled out as a pure function (no `android.location
+ * .Location` dependency) so the accuracy/altitude/speed/bearing fallback logic is unit-testable without
+ * Robolectric or an instrumented device (TDD-0001 §8: this component can't be fully verified on this
+ * project's dev machine, so what CAN be a plain unit test should be one — see LocationSampleConversionTest).
+ */
+internal fun buildLocationSample(
+    timeMs: Long,
+    elapsedRealtimeMs: Long,
+    latitude: Double,
+    longitude: Double,
+    accuracyM: Double?,
+    altitudeM: Double?,
+    speedMps: Double?,
+    bearingDeg: Double?,
+) = LocationSample(
+    timeMs = timeMs,
+    elapsedRealtimeMs = elapsedRealtimeMs,
+    latitude = latitude,
+    longitude = longitude,
+    // No accuracy reported is treated as very poor (flagged POOR_ACCURACY downstream), never as 0/perfect.
+    horizontalAccuracyM = accuracyM ?: 9_999.0,
+    altitudeM = altitudeM,
+    speedMps = speedMps,
+    bearingDeg = bearingDeg,
+)

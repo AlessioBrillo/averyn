@@ -6,6 +6,9 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 16) {
+            if let warning = viewModel.recoveryWarning {
+                Text(warning)
+            }
             liveMetrics
             controls
             if let url = viewModel.exportURL {

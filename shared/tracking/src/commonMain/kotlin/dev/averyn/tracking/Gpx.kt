@@ -21,13 +21,16 @@ enum class GpxContent { RAW, ACCEPTED_ONLY }
  * is how GPX consumers expect a pause to look. Samples recorded while PAUSED are never exported (they aren't
  * part of the track); [content] then further chooses between every RECORDING-time sample (`RAW`, unfiltered
  * by quality) or only ones not excluded from distance (`ACCEPTED_ONLY`, docs/metrics/distance.md).
+ *
+ * Returns the number of corrupt/truncated store lines skipped (F5: counted, never silently dropped) — a
+ * non-zero result means the export is missing some points and the caller should surface that, not ignore it.
  */
 fun writeGpx(
     store: ActivityStore,
     activityId: String,
     sink: Sink,
     content: GpxContent = GpxContent.RAW,
-) {
+): Int {
     val metadata = store.metadataOf(activityId) ?: error("no stored activity: $activityId")
     sink.writeString(GPX_HEADER)
     sink.writeString("  <trk>\n    <name>${xmlEscape("${metadata.sport} ${metadata.activityId}")}</name>\n")
@@ -35,13 +38,14 @@ fun writeGpx(
     val assessor = QualityAssessor()
     var inSegment = false
     var recording = false
+    var droppedRecordCount = 0
 
     fun closeSegmentIfOpen() {
         if (inSegment) sink.writeString("    </trkseg>\n")
         inSegment = false
     }
 
-    store.forEachRecord(activityId) { record ->
+    store.forEachRecord(activityId, onLoss = { droppedRecordCount++ }) { record ->
         when (record) {
             is ActivityRecord.Event -> {
                 recording = record.event.state == ActivityState.RECORDING
@@ -64,6 +68,7 @@ fun writeGpx(
     closeSegmentIfOpen()
     sink.writeString("  </trk>\n")
     sink.writeString(GPX_FOOTER)
+    return droppedRecordCount
 }
 
 private fun writeTrkpt(
@@ -136,12 +141,17 @@ private fun pad4(value: Long): String =
 /**
  * Convenience for native adapters (Swift/iOS) that don't otherwise need kotlinx-io types on their side —
  * an extension function on [ActivityStore] so Swift reaches it as `store.exportGpxToFile(...)` (a top-level
- * function isn't reliably callable from Swift, but an instance/extension method is).
+ * function isn't reliably callable from Swift, but an instance/extension method is). Returns the same
+ * dropped-record count as [writeGpx].
  */
 fun ActivityStore.exportGpxToFile(
     activityId: String,
     filePath: String,
     content: GpxContent = GpxContent.RAW,
-) {
-    SystemFileSystem.sink(Path(filePath)).buffered().use { sink -> writeGpx(this, activityId, sink, content) }
+): Int {
+    var droppedRecordCount = 0
+    SystemFileSystem.sink(Path(filePath)).buffered().use { sink ->
+        droppedRecordCount = writeGpx(this, activityId, sink, content)
+    }
+    return droppedRecordCount
 }

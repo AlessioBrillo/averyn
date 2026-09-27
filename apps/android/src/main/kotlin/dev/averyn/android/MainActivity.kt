@@ -25,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,6 +38,8 @@ import dev.averyn.tracking.ActivityMetadata
 import dev.averyn.tracking.LiveSnapshot
 import dev.averyn.tracking.RecoveryResult
 import dev.averyn.tracking.writeGpx
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.io.asSink
 import kotlinx.io.buffered
 import java.util.UUID
@@ -58,10 +61,13 @@ private fun now() = SystemClock.elapsedRealtime() to System.currentTimeMillis()
 private fun RecordScreen(app: AverynApplication) {
     val context = LocalContext.current
     val recorder = app.recorder
+    val scope = rememberCoroutineScope()
     var snapshot by remember { mutableStateOf(recorder.snapshot()) }
     var pendingRecovery by remember { mutableStateOf<ActivityMetadata?>(null) }
     var exportActivityId by remember { mutableStateOf<String?>(null) }
     var pendingSport by remember { mutableStateOf(Sport.RUN) }
+    // F5: a recovery that lost store lines is surfaced, never silent — see RecoveryResult.droppedRecordCount.
+    var recoveryWarning by remember { mutableStateOf<String?>(null) }
 
     DisposableEffect(recorder) {
         recorder.listener = { snapshot = it }
@@ -80,8 +86,11 @@ private fun RecordScreen(app: AverynApplication) {
         rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/gpx+xml")) { uri ->
             val id = exportActivityId
             if (uri != null && id != null) {
-                context.contentResolver.openOutputStream(uri)?.use { out ->
-                    writeGpx(app.store, id, out.asSink().buffered())
+                // Streams and re-serializes every stored sample: real I/O, kept off the main thread.
+                scope.launch(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri)?.use { out ->
+                        writeGpx(app.store, id, out.asSink().buffered())
+                    }
                 }
             }
             exportActivityId = null
@@ -95,17 +104,30 @@ private fun RecordScreen(app: AverynApplication) {
                 when (val result = recorder.recover(metadata.activityId, elapsedMs, timeMs)) {
                     is RecoveryResult.Resumed -> {
                         snapshot = result.snapshot
+                        recoveryWarning = droppedRecordWarning(result.droppedRecordCount)
                         context.startForegroundService(Intent(context, TrackingService::class.java))
                     }
-                    is RecoveryResult.Completed -> exportActivityId = result.activity.activityId
+                    is RecoveryResult.Completed -> {
+                        exportActivityId = result.activity.activityId
+                        recoveryWarning = droppedRecordWarning(result.droppedRecordCount)
+                    }
                 }
                 pendingRecovery = null
             },
             onFinish = {
                 val (elapsedMs, timeMs) = now()
-                when (recorder.recover(metadata.activityId, elapsedMs, timeMs)) {
-                    is RecoveryResult.Resumed -> exportActivityId = recorder.stop(elapsedMs, timeMs).activityId
-                    is RecoveryResult.Completed -> exportActivityId = metadata.activityId
+                when (val result = recorder.recover(metadata.activityId, elapsedMs, timeMs)) {
+                    is RecoveryResult.Resumed -> {
+                        // The last known activity time, not "now": the app can be reopened long after the
+                        // kill, and stopping at wall-clock now would count that whole gap as moving time.
+                        val completed = recorder.stop(recorder.lastKnownElapsedRealtimeMs, recorder.lastKnownTimeMs)
+                        exportActivityId = completed.activityId
+                        recoveryWarning = droppedRecordWarning(result.droppedRecordCount)
+                    }
+                    is RecoveryResult.Completed -> {
+                        exportActivityId = metadata.activityId
+                        recoveryWarning = droppedRecordWarning(result.droppedRecordCount)
+                    }
                 }
                 pendingRecovery = null
             },
@@ -114,6 +136,7 @@ private fun RecordScreen(app: AverynApplication) {
 
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            recoveryWarning?.let { Text(it) }
             LiveMetrics(snapshot)
             Controls(
                 snapshot = snapshot,
@@ -198,6 +221,13 @@ private fun RecoveryDialog(
         dismissButton = { TextButton(onClick = onFinish) { Text("Finish now") } },
     )
 }
+
+private fun droppedRecordWarning(droppedRecordCount: Int): String? =
+    if (droppedRecordCount > 0) {
+        "Recovery lost $droppedRecordCount corrupted record(s) from the interrupted activity"
+    } else {
+        null
+    }
 
 private fun hasLocationPermission(context: android.content.Context) =
     ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==

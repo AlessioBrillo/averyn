@@ -10,6 +10,8 @@ final class RecorderViewModel: ObservableObject {
     @Published var snapshot: LiveSnapshot
     @Published var pendingRecovery: ActivityMetadata?
     @Published var exportURL: URL?
+    /// F5: a recovery that lost store lines is surfaced, never silent — see RecoveryResult.droppedRecordCount.
+    @Published var recoveryWarning: String?
 
     init() {
         let dir = FileManager.default
@@ -54,8 +56,10 @@ final class RecorderViewModel: ObservableObject {
         let result = recorder.recover(activityId: metadata.activityId, nowElapsedRealtimeMs: nowElapsedRealtimeMs(), nowTimeMs: nowTimeMs())
         if let resumed = result as? RecoveryResult.Resumed {
             snapshot = resumed.snapshot
+            recoveryWarning = droppedRecordWarning(resumed.droppedRecordCount)
             tracker.start()
         } else if let completed = result as? RecoveryResult.Completed {
+            recoveryWarning = droppedRecordWarning(completed.droppedRecordCount)
             export(activityId: completed.activity.activityId)
         }
         pendingRecovery = nil
@@ -65,9 +69,18 @@ final class RecorderViewModel: ObservableObject {
         guard let metadata = pendingRecovery else { return }
         let result = recorder.recover(activityId: metadata.activityId, nowElapsedRealtimeMs: nowElapsedRealtimeMs(), nowTimeMs: nowTimeMs())
         if result is RecoveryResult.Resumed {
-            let completed = recorder.stop(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs())
+            // The last known activity time, not "now": the app can be reopened long after the kill, and
+            // stopping at wall-clock now would count that whole gap as moving time.
+            let completed = recorder.stop(
+                elapsedRealtimeMs: recorder.lastKnownElapsedRealtimeMs,
+                timeMs: recorder.lastKnownTimeMs
+            )
+            if let resumed = result as? RecoveryResult.Resumed {
+                recoveryWarning = droppedRecordWarning(resumed.droppedRecordCount)
+            }
             export(activityId: completed.activityId)
         } else if let completed = result as? RecoveryResult.Completed {
+            recoveryWarning = droppedRecordWarning(completed.droppedRecordCount)
             export(activityId: completed.activity.activityId)
         }
         pendingRecovery = nil
@@ -75,9 +88,19 @@ final class RecorderViewModel: ObservableObject {
 
     private func export(activityId: String) {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(activityId).gpx")
-        store.exportGpxToFile(activityId: activityId, filePath: url.path, content: .raw)
-        exportURL = url
+        let store = self.store
+        // Streams and re-serializes every stored sample: real I/O, kept off the main thread.
+        DispatchQueue.global(qos: .utility).async {
+            store.exportGpxToFile(activityId: activityId, filePath: url.path, content: .raw)
+            DispatchQueue.main.async { [weak self] in
+                self?.exportURL = url
+            }
+        }
     }
+}
+
+private func droppedRecordWarning(_ droppedRecordCount: Int32) -> String? {
+    droppedRecordCount > 0 ? "Recovery lost \(droppedRecordCount) corrupted record(s) from the interrupted activity" : nil
 }
 
 private func nowElapsedRealtimeMs() -> Int64 {

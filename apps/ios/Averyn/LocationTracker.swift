@@ -32,12 +32,19 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
     }
 
     // F9: a permission change mid-activity is surfaced, not a silent stop. No auto-resume on re-grant —
-    // the user resumes explicitly, which is less surprising than the app deciding on its own.
+    // the user resumes explicitly, which is less surprising than the app deciding on its own. A denial
+    // while still PREPARING (no fix yet) has no "resume" to offer, so it fails outright instead of
+    // pausing — otherwise the activity would be stuck showing "Waiting for GPS…" forever.
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         switch manager.authorizationStatus {
         case .denied, .restricted:
-            if recorder.currentState == .recording {
+            switch recorder.currentState {
+            case .recording:
                 recorder.pause(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs(), reason: .permissionRevoked)
+            case .preparing:
+                recorder.fail(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs(), reason: .permissionRevoked)
+            default:
+                break
             }
         default:
             break
@@ -49,9 +56,10 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
             if recorder.currentState == .preparing {
                 recorder.gpsReady(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs())
             }
-            if recorder.currentState == .recording {
-                recorder.onSample(sample: location.toLocationSample())
-            }
+            // Always forward the fix: ActivityRecorder.onSample stores it in every non-terminal state (F5)
+            // and only feeds live metrics while RECORDING — gating the call itself here would silently lose
+            // every fix that arrives while PAUSED instead of just excluding it from metrics.
+            recorder.onSample(sample: location.toLocationSample())
         }
     }
 }

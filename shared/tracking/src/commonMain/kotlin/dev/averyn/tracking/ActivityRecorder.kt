@@ -34,11 +34,15 @@ sealed class RecoveryResult {
         val activityId: String,
         val sport: Sport,
         val snapshot: LiveSnapshot,
+        /** Corrupt/truncated lines skipped during replay (F5: counted, never silently dropped). */
+        val droppedRecordCount: Int,
     ) : RecoveryResult()
 
     /** Was STOPPING (killed mid-finalize): finalizing is a pure computation, so it's just re-run now. */
     data class Completed(
         val activity: CompletedActivity,
+        /** Corrupt/truncated lines skipped during replay (F5: counted, never silently dropped). */
+        val droppedRecordCount: Int,
     ) : RecoveryResult()
 }
 
@@ -62,6 +66,25 @@ class ActivityRecorder(
 
     val currentState: ActivityState get() = state
 
+    /**
+     * The elapsed/wall-clock time of the last thing that actually happened to this activity — a sample, a
+     * pause/resume, or (after [recover]) the last pre-crash record. Unlike "now", this never jumps forward
+     * across an app-relaunch gap: use it (not the caller's own clock) to finalize a recovered activity that
+     * the user chooses to finish without resuming live tracking.
+     */
+    var lastKnownElapsedRealtimeMs: Long = 0
+        private set
+    var lastKnownTimeMs: Long = 0
+        private set
+
+    private fun trackLastKnown(
+        elapsedRealtimeMs: Long,
+        timeMs: Long,
+    ) {
+        lastKnownElapsedRealtimeMs = elapsedRealtimeMs
+        lastKnownTimeMs = timeMs
+    }
+
     /** Current numbers, callable anytime (not just from [listener]) — e.g. right after [start] or [recover]. */
     fun snapshot(): LiveSnapshot = LiveSnapshot(state, metrics.snapshot(), qualityAccumulator.build())
 
@@ -74,6 +97,7 @@ class ActivityRecorder(
         state = state.transitionTo(ActivityState.PREPARING)
         this.activityId = activityId
         this.sport = sport
+        trackLastKnown(elapsedRealtimeMs, timeMs)
         store.create(ActivityMetadata(activityId, sport, timeMs))
         logEvent(elapsedRealtimeMs, timeMs, ActivityState.PREPARING, Reason.USER)
         emit()
@@ -85,18 +109,23 @@ class ActivityRecorder(
         timeMs: Long,
     ) {
         state = state.transitionTo(ActivityState.RECORDING)
+        trackLastKnown(elapsedRealtimeMs, timeMs)
         logEvent(elapsedRealtimeMs, timeMs, ActivityState.RECORDING, Reason.GPS_READY)
         emit()
     }
 
-    /** Every raw sample, in every non-terminal state; stored durably before use (F3), never dropped (F5). */
+    /**
+     * Every raw sample, in every non-terminal state (PREPARING/RECORDING/PAUSED/STOPPING) — stored durably
+     * before use (F3), never dropped (F5). The native adapter should call this unconditionally for every
+     * fix it receives; gating the call itself on `currentState == RECORDING` would silently lose samples
+     * that arrive while PAUSED instead of just excluding them from live metrics, which is what this does.
+     */
     fun onSample(sample: LocationSample) {
         val id = activityId ?: return
+        if (state.isTerminal) return // a stray late callback after stop()/fail(): nothing to append to anymore
         store.appendSample(id, sample)
-        if (state != ActivityState.RECORDING) return // stored for the record, but not fed into live metrics
-        val flags = qualityAssessor.assess(sample)
-        qualityAccumulator.add(sample, flags)
-        if (flags.none { it.excludesFromDistance }) metrics.onSample(sample)
+        trackLastKnown(sample.elapsedRealtimeMs, sample.timeMs)
+        if (state == ActivityState.RECORDING) ingestSample(sample)
         emit()
     }
 
@@ -107,6 +136,7 @@ class ActivityRecorder(
     ) {
         state = state.transitionTo(ActivityState.PAUSED)
         metrics.onPause(elapsedRealtimeMs)
+        trackLastKnown(elapsedRealtimeMs, timeMs)
         logEvent(elapsedRealtimeMs, timeMs, ActivityState.PAUSED, reason)
         emit()
     }
@@ -117,6 +147,7 @@ class ActivityRecorder(
     ) {
         state = state.transitionTo(ActivityState.RECORDING)
         metrics.onResume(elapsedRealtimeMs)
+        trackLastKnown(elapsedRealtimeMs, timeMs)
         logEvent(elapsedRealtimeMs, timeMs, ActivityState.RECORDING, Reason.USER)
         emit()
     }
@@ -129,6 +160,7 @@ class ActivityRecorder(
         state = state.transitionTo(ActivityState.STOPPING)
         logEvent(elapsedRealtimeMs, timeMs, ActivityState.STOPPING, Reason.USER)
         metrics.finish(elapsedRealtimeMs)
+        trackLastKnown(elapsedRealtimeMs, timeMs)
         state = state.transitionTo(ActivityState.COMPLETED)
         logEvent(elapsedRealtimeMs, timeMs, ActivityState.COMPLETED, Reason.USER)
         val completed = CompletedActivity(activityId!!, sport!!, metrics.snapshot(), qualityAccumulator.build())
@@ -142,8 +174,16 @@ class ActivityRecorder(
         reason: Reason,
     ) {
         state = state.transitionTo(ActivityState.FAILED)
+        trackLastKnown(elapsedRealtimeMs, timeMs)
         logEvent(elapsedRealtimeMs, timeMs, ActivityState.FAILED, reason)
         emit()
+    }
+
+    /** Shared by the live path ([onSample]) and crash replay ([recover]) so they can never silently diverge. */
+    private fun ingestSample(sample: LocationSample) {
+        val flags = qualityAssessor.assess(sample)
+        qualityAccumulator.add(sample, flags)
+        if (flags.none { it.excludesFromDistance }) metrics.onSample(sample)
     }
 
     private fun logEvent(
@@ -176,15 +216,12 @@ class ActivityRecorder(
         this.activityId = activityId
         this.sport = metadata.sport
         var lastState = ActivityState.IDLE
-        var lastEventElapsedRealtimeMs = 0L
-        store.forEachRecord(activityId) { record ->
+        var droppedRecordCount = 0
+        store.forEachRecord(activityId, onLoss = { droppedRecordCount++ }) { record ->
             when (record) {
                 is ActivityRecord.Sample -> {
-                    if (lastState == ActivityState.RECORDING) {
-                        val flags = qualityAssessor.assess(record.sample)
-                        qualityAccumulator.add(record.sample, flags)
-                        if (flags.none { it.excludesFromDistance }) metrics.onSample(record.sample)
-                    }
+                    trackLastKnown(record.sample.elapsedRealtimeMs, record.sample.timeMs)
+                    if (lastState == ActivityState.RECORDING) ingestSample(record.sample)
                 }
                 is ActivityRecord.Event -> {
                     when (record.event.state) {
@@ -198,7 +235,7 @@ class ActivityRecorder(
                         else -> {}
                     }
                     lastState = record.event.state
-                    lastEventElapsedRealtimeMs = record.event.elapsedRealtimeMs
+                    trackLastKnown(record.event.elapsedRealtimeMs, record.event.timeMs)
                 }
             }
         }
@@ -209,15 +246,17 @@ class ActivityRecorder(
             state = state.transitionTo(ActivityState.COMPLETED)
             logEvent(nowElapsedRealtimeMs, nowTimeMs, ActivityState.COMPLETED, Reason.RECOVERED)
             // Finalize at the last known activity time, not "now" (relaunch can happen long after the kill).
-            metrics.finish(lastEventElapsedRealtimeMs)
+            metrics.finish(lastKnownElapsedRealtimeMs)
             RecoveryResult.Completed(
                 CompletedActivity(activityId, metadata.sport, metrics.snapshot(), qualityAccumulator.build()),
+                droppedRecordCount,
             )
         } else {
             RecoveryResult.Resumed(
                 activityId,
                 metadata.sport,
                 LiveSnapshot(state, metrics.snapshot(), qualityAccumulator.build()),
+                droppedRecordCount,
             )
         }
     }

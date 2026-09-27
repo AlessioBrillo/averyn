@@ -109,7 +109,6 @@ class ActivityRecorderTest {
         val fresh = ActivityRecorder(store)
         val result = fresh.recover("a1", 20_000, 20_000)
         assertTrue(result is RecoveryResult.Resumed)
-        result as RecoveryResult.Resumed
         assertEquals(100.0, result.snapshot.metrics.distanceM, 1.0)
         assertEquals(ActivityState.RECORDING, fresh.currentState)
 
@@ -132,7 +131,6 @@ class ActivityRecorderTest {
         val fresh = ActivityRecorder(store)
         val result = fresh.recover("a1", 20_000, 20_000)
         assertTrue(result is RecoveryResult.Completed)
-        result as RecoveryResult.Completed
         assertEquals(100.0, result.activity.metrics.distanceM, 1.0)
     }
 }

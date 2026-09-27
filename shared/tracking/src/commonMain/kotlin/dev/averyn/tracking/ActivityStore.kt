@@ -101,6 +101,12 @@ class ActivityStore(
         } // close() flushes; no fsync beyond the OS page cache (ADR-0015's accepted gap for hard power loss).
     }
 
+    // ponytail: a kill exactly mid-write of the META line (the file's very first write) makes this return
+    // null, and list()/interrupted() then silently skip the whole activity via mapNotNull — unlike a
+    // corrupt SAMPLE/EVENT line, which forEachRecord's onLoss still counts. Narrower exposure than any other
+    // single write (there's only ever one META write per activity, vs. potentially thousands of samples),
+    // and the same class of gap ADR-0015 already accepts for hard power loss; a real fix needs a way to
+    // surface an "orphaned activity file" that isn't just a null metadata, which no caller needs yet.
     fun metadataOf(activityId: String): ActivityMetadata? {
         val path = pathFor(activityId)
         if (!SystemFileSystem.exists(path)) return null
