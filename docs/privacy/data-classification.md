@@ -6,7 +6,8 @@ Sports data reveals home, workplace, routines, schedule, physical condition and 
 
 | Class | Examples | Handling |
 |---|---|---|
-| **Restricted** | Raw location samples, routes, start/end points, heart-rate and other health metrics, exact timestamps of activities | Encrypted in transit and at rest; never in logs, analytics or error reports; access checked per object (IDOR tests); included in user export and hard delete |
+| **Health (special category)** | HRV, raw ECG/PPG, sleep stage, stress classification, and other biosignal-derived metrics from any sensor vendor | Everything Restricted requires, **plus**: a specific, revocable, per-scope consent record before processing ([ADR-0013](../adr/0013-health-data-special-category.md)); a DPIA before any managed-cloud processing; UI copy stays wellness framing, never diagnostic |
+| **Restricted** | Raw location samples, routes, start/end points, heart rate, exact timestamps of activities | Encrypted in transit and at rest; never in logs, analytics or error reports; access checked per object (IDOR tests); included in user export and hard delete |
 | **Confidential** | Email, password hash, session tokens, device identifiers | Hashed/encrypted as appropriate; never logged; revocable |
 | **Internal** | Aggregated operational metrics, job status, audit events | May be logged; contain ids and counts only |
 | **Public** | Content the user explicitly made public (activity marked public, profile) | Subject to privacy zones and start/end hiding *before* exposure |
@@ -23,4 +24,4 @@ Sports data reveals home, workplace, routines, schedule, physical condition and 
 
 ## To be written
 
-Threat model (STRIDE) at MVP-1 start; retention policy; DPIA/GDPR notes before any public hosted service.
+Threat model (STRIDE) at MVP-1 start; retention policy; DPIA/GDPR notes before any public hosted service — the DPIA is a hard release gate specifically for Health-class data ([ADR-0013](../adr/0013-health-data-special-category.md)), not only a note.

@@ -12,6 +12,17 @@ Rule: **vertical slices, GPS validated on real devices first.** The biggest risk
 
 Later (Phase 6): standalone smartwatch, training load / fitness-fatigue, challenges, events, public API and plugins, club features, automated cloud deployment.
 
+## Synapse track
+
+Optional third-party sensor integration, see [ADR-0010](../adr/0010-ecosystem-boundary.md), [ADR-0014](../adr/0014-sensor-integration-contract.md) and the [integration contract](../integrations/synapse.md). Sequenced after its dependencies, not in parallel with them — the strategy input's own sequencing put this before MVP-1's account/sync work it depends on ([review](../strategy/review-2026-09-27.md) #19):
+
+| When | What |
+|---|---|
+| Now | Contracts only (this roadmap entry, the ADRs, the integration doc). No code. |
+| MVP-2 | Generic BLE Heart Rate support lands with **zero** Synapse-specific code — any standard-compliant strap or the Synapse device (once its firmware exposes the standard service) works identically. |
+| After MVP-1 (accounts/sync) and alongside MVP-2 | Synapse-specific native adapter (compressed-feature characteristic) and FIT import fields, gated by per-scope consent ([ADR-0013](../adr/0013-health-data-special-category.md)). |
+| After that | Inference worker job/result plumbing (ADR-0010), only once there's a real, contract-conformant firmware to integrate against — `SYNAPSE-24` does not have one yet (see the review). |
+
 ## MVP-0 work order
 
 From [report §22](reference-report-v0.1.md), steps 1–9: requirements → sample model → iOS adapter → Android adapter → local storage → pause/resume/recovery → base metrics → fixtures and tests → real-device validation. Spec: [TDD-0001](../design/TDD-0001-tracking-engine.md).
@@ -24,8 +35,9 @@ Tracked here until they become ADRs (report §24). ● = needed for MVP-0.
 - ● Mobile local database (candidates: SQLDelight, Room + GRDB) → TDD-0001
 - ● Sports supported in MVP (proposal: run, ride, walk, hike)
 - Final project name → [ADR-0008](../adr/0008-project-codename.md)
-- CLA vs DCO → [ADR-0002](../adr/0002-license-agplv3.md)
-- Authentication system (own vs. OIDC provider; passkeys/MFA timing)
+- ~~CLA vs DCO~~ → resolved, [ADR-0012](../adr/0012-cla-and-store-distribution.md)
+- Default bundled IdP (Authentik vs. Zitadel vs. Keycloak) → spike at MVP-1 start, [ADR-0011](../adr/0011-identity-oidc.md); passkeys/MFA timing decided alongside it
 - Map data source, routing engine (Valhalla vs. GraphHopper), DEM source, pilot region
-- Cloud provider; notification strategy; retention policy; monetization model; moderation policy
-- Device compatibility level (watches, sensors)
+- Cloud provider; notification strategy; retention policy; moderation policy
+- Fair-use quota thresholds and club/team plan pricing → [business-model.md](business-model.md)
+- Device compatibility level (watches, sensors) beyond generic BLE HR → see the Synapse track above for the one integration currently planned

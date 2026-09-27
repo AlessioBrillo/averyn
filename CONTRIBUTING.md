@@ -36,10 +36,11 @@ Branch names: `feat/…`, `fix/…`, `docs/…`, `chore/…`. Track work in GitH
 - Platform specifics (location, background execution, BLE, HealthKit, Health Connect) live in the app modules behind interfaces defined in `shared/tracking`.
 - Backend modules are packages under `backend/src/main/kotlin/…`; a domain must not reach into another domain's internals.
 - Raw location samples are **never overwritten**; derived data is stored separately and versioned.
+- Third-party sensor integrations (any vendor, not just Synapse) follow [ADR-0014](docs/adr/0014-sensor-integration-contract.md): standard GATT profiles first, vendor extensions stay in native adapters, cloud/vendor-computed scores are stored as imported data, never as a `shared/metrics` type.
 
 ## Licensing of contributions
 
-The project is AGPL-3.0-or-later. A CLA (or DCO) decision is pending in [ADR-0002](docs/adr/0002-license-agplv3.md); until it is settled, external code contributions are not accepted.
+The project is AGPL-3.0-or-later. Every contribution requires signing the [CLA](CLA.md) (enforced by `cla-assistant` on your first PR) — see [ADR-0012](docs/adr/0012-cla-and-store-distribution.md) for why a CLA rather than a DCO.
 
 ## Reporting security issues
 

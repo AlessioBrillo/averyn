@@ -33,3 +33,5 @@ iOS cannot be built on Windows; CI (macOS runner) verifies it. The Docker backen
 - Hard-to-reverse decisions need an ADR (`docs/adr/`); accepted ADRs are immutable (supersede instead).
 - PR titles: Conventional Commits. Tests ship with logic. No secrets in the repo.
 - Don't scaffold ahead: later areas (maps, social, segments, watch) get code only when their milestone starts.
+- Third-party sensor ecosystems (e.g. Synapse) are optional integrations, never a dependency of a core feature: see [ADR-0010](docs/adr/0010-ecosystem-boundary.md) and [ADR-0014](docs/adr/0014-sensor-integration-contract.md). Averyn is the only backend/system of record; a vendor's cloud is at most a stateless job worker.
+- HRV/ECG/sleep/stress-adjacent data is a special data class (health), with its own consent-per-scope and DPIA-before-launch rule: see [ADR-0013](docs/adr/0013-health-data-special-category.md).

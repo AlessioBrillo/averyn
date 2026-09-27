@@ -1,6 +1,6 @@
 # ADR-0002: License — AGPL-3.0-or-later
 
-- **Status:** accepted (CLA/DCO sub-decision pending)
+- **Status:** accepted (CLA/DCO sub-decision resolved by [ADR-0012](0012-cla-and-store-distribution.md))
 - **Date:** 2026-09-26
 - **Deciders:** @AlessioBrillo
 
@@ -22,7 +22,7 @@ The project is open-source with an optional managed cloud and first-class self-h
 
 - Good: protects the managed-cloud business model and the self-hosting community.
 - Cost: dependency licenses must be compatible (no GPL-incompatible or proprietary SDKs in the core); app-store distribution of AGPL code needs care with store terms.
-- **Pending:** to keep the option of dual-licensing (e.g. a commercial license for organizations), external contributors would have to sign a **CLA**, or contributions must be accepted under a DCO only. Until decided, **external code contributions are not accepted** ([CONTRIBUTING](../../CONTRIBUTING.md)).
+- **Resolved (ADR-0012):** a CLA is required, not a DCO — this also unblocks App Store distribution, which needs the CLA holder to grant additional distribution rights a DCO-only project can't. See [ADR-0012](0012-cla-and-store-distribution.md) and [CONTRIBUTING](../../CONTRIBUTING.md).
 - Follow-up: legal review before the first public release (report §17); add a dependency-license check to CI.
 - Map data (OSM/ODbL) and DEM licenses are separate concerns, handled in the maps ADR.
 
