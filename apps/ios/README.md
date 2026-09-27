@@ -10,4 +10,4 @@ open Averyn.xcodeproj    # the pre-build script builds the Kotlin `Shared` frame
 
 Requires macOS and Xcode 16+. The `Shared` framework comes from `shared/ios-umbrella`, which re-exports `domain`, `tracking` and `metrics`.
 
-Native tracking (Core Location, background modes, HealthKit, WatchConnectivity) lives here and implements `LocationSource` from `shared/tracking` — see [TDD-0001](../../docs/design/TDD-0001-tracking-engine.md).
+Native tracking lives here: `LocationTracker.swift` wraps `CLLocationManager` (background modes, no HealthKit/WatchConnectivity yet — those are later milestones) and drives the shared `ActivityRecorder` from `shared/tracking` — see [TDD-0001](../../docs/design/TDD-0001-tracking-engine.md).

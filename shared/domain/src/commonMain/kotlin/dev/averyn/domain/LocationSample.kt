@@ -1,10 +1,13 @@
 package dev.averyn.domain
 
+import kotlinx.serialization.Serializable
+
 /**
  * One raw location fix, as reported by the platform. See TDD-0001 §5.3.
  *
  * Raw samples are immutable and never modified by filtering; quality problems are flagged elsewhere.
  */
+@Serializable
 data class LocationSample(
     /** Wall-clock UTC epoch millis. Can jump (NTP, user change): do not use alone for ordering. */
     val timeMs: Long,

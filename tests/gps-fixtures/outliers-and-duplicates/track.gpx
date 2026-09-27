@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="averyn-fixtures" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>outliers-and-duplicates</name>
+    <trkseg>
+      <trkpt lat="0.0000000" lon="9.0000000"><time>2026-01-01T08:00:00Z</time></trkpt>
+      <trkpt lat="0.0008993" lon="9.0000000"><time>2026-01-01T08:00:10Z</time></trkpt>
+      <trkpt lat="0.0008993" lon="9.0000000"><time>2026-01-01T08:00:10Z</time></trkpt>
+      <trkpt lat="0.0098925" lon="9.0000000"><time>2026-01-01T08:00:11Z</time></trkpt>
+      <trkpt lat="0.0107918" lon="9.0000000"><time>2026-01-01T08:00:21Z</time></trkpt>
+      <trkpt lat="0.0116912" lon="9.0000000"><time>2026-01-01T08:00:22Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

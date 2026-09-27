@@ -1,0 +1,19 @@
+{
+  "description": "Steady 2 m/s walking pace with two erratic altitude jumps.",
+  "algorithm_versions": {
+    "distance": "distance-v1",
+    "quality": "quality-v1",
+    "time": "time-v1"
+  },
+  "expected": {
+    "distance_m": {
+      "value": 80.0,
+      "tolerance_m": 1.0
+    },
+    "duration_s": 40,
+    "moving_time_s": 40,
+    "quality_flags": [
+      "ALTITUDE_SPIKE"
+    ]
+  }
+}

@@ -105,16 +105,31 @@ Canonical `LocationSample` (in `shared/domain`):
 
 Sensor channels (HR, cadence, power) are separate streams keyed by time, added in MVP-2, so GPS records stay compact.
 
+Supported sports in MVP-0 (Q1, closes the [roadmap open decision](../product/roadmap.md#open-decisions)): **run, ride, walk, hike** — `Sport` enum in `shared/domain`. All four share one sampling policy for MVP-0: **1 s fixed interval, no distance filter**. A per-sport interval (e.g. coarser for hike) is a tuning follow-up once battery numbers exist (§4), not a v0 requirement.
+
 ### 5.4 Quality assessment
 
-Per-sample flags (a sample can carry several; raw data is preserved): `POOR_ACCURACY`, `DUPLICATE`, `NON_MONOTONIC_TIME`, `SPEED_OUTLIER`, `JUMP`, `ALTITUDE_SPIKE`. Per-activity report: counts per flag, longest gap, sample-interval distribution, % time with accuracy ≤ 20 m, and a summarized grade (`GOOD/FAIR/POOR`). Thresholds start as constants versioned with `algorithm_version` and are tuned from fixtures (Q3).
+Per-sample flags (a sample can carry several; raw data is preserved): `POOR_ACCURACY`, `DUPLICATE`, `NON_MONOTONIC_TIME`, `SPEED_OUTLIER`, `JUMP`, `ALTITUDE_SPIKE`. Per-activity report: counts per flag, longest gap, sample-interval distribution, % time with accuracy ≤ 20 m, and a summarized grade (`GOOD/FAIR/POOR`).
+
+**`quality-v1` (Q3 — threshold rules, not Kalman/Savitzky–Golay for v0):** evaluated incrementally against the last *accepted* sample (spec in [`docs/metrics/gps-quality.md`](../metrics/gps-quality.md)):
+
+| Flag | Rule |
+|---|---|
+| `POOR_ACCURACY` | `horizontalAccuracyM > 30` |
+| `DUPLICATE` | same `latitude`/`longitude`/`timeMs` as the last accepted sample |
+| `NON_MONOTONIC_TIME` | `elapsedRealtimeMs` does not increase |
+| `SPEED_OUTLIER` | implied speed since last accepted sample `> 50 m/s` and leg distance `< 500 m` |
+| `JUMP` | implied speed `> 50 m/s` and leg distance `≥ 500 m` (a `SPEED_OUTLIER`-sized jump but too far to be GPS jitter) |
+| `ALTITUDE_SPIKE` | implied vertical speed `> 10 m/s` |
+
+Grade: `GOOD` if ≤ 5% of samples flagged and % time accuracy ≤ 20 m is ≥ 90; `POOR` if > 20% flagged or that percentage is < 50; `FAIR` otherwise. Thresholds are constants versioned with `QUALITY_ALGORITHM_VERSION`; retuned only as a new version, from fixtures.
 
 ### 5.5 Local persistence and recovery
 
 - Append-only write path: samples are appended to the local store in small batches (flush by count **or** time, whichever first). Activity metadata records `state`, `startedAt`, `lastFlushAt`.
 - On launch, any activity whose state is `RECORDING`/`PAUSED`/`STOPPING` without a clean end is **interrupted**: recover, show the user what was kept, let them resume or finish.
 - Background execution: iOS uses the location background mode with `allowsBackgroundLocationUpdates` and pause-safe settings; Android uses a foreground service of type `location` with a persistent notification. Vendor battery-killer behavior is documented per device in the matrix.
-- Storage engine is an open question (Q2); the interface is `ActivityStore` in `shared/tracking` so engines can be compared in the PoC.
+- **Storage engine (Q2/Q4 — resolved, [ADR-0015](../adr/0015-local-activity-store.md)):** an append-only JSON Lines file per activity, one `SAMPLE` or `EVENT` record per line, written and flushed before the caller can use a sample for live metrics. `ActivityStore` in `shared/tracking` exposes `create`/`appendSample`/`appendEvent`/`forEachRecord` (streaming) /`interrupted`/`list`. A truncated or corrupt trailing line (mid-write kill) is dropped and counted as a loss with reason `TRUNCATED_RECORD` — never guessed at or silently repaired.
 
 ### 5.6 Pause semantics
 
@@ -145,11 +160,11 @@ PoC apps are internal builds (Android debug APK, iOS via a personal dev team). N
 
 ## 9. Open questions
 
-| # | Question | Produces |
-|---|---|---|
-| Q1 | Sampling interval and distance filter per sport | ADR + constants |
-| Q2 | Local DB: SQLDelight (shared) vs. platform-native (Room / GRDB) | ADR |
-| Q3 | Filtering algorithm (threshold rules vs. Kalman/Savitzky–Golay) and thresholds | Metric spec + ADR |
-| Q4 | On-disk/raw-blob sample encoding (also used for sync upload) | ADR |
-| Q5 | Battery budget per hour by sport | Number in this doc |
-| Q6 | Altitude source policy (GPS vs. barometer vs. DEM correction) | ADR |
+| # | Question | Produces | Status |
+|---|---|---|---|
+| Q1 | Sampling interval and distance filter per sport | ADR + constants | **Resolved** — §5.3: 1 s / no filter, all MVP-0 sports |
+| Q2 | Local DB: SQLDelight (shared) vs. platform-native (Room / GRDB) | ADR | **Resolved** — [ADR-0015](../adr/0015-local-activity-store.md): neither, append-only file |
+| Q3 | Filtering algorithm (threshold rules vs. Kalman/Savitzky–Golay) and thresholds | Metric spec + ADR | **Resolved** — §5.4, [`docs/metrics/gps-quality.md`](../metrics/gps-quality.md): threshold rules, `quality-v1` |
+| Q4 | On-disk/raw-blob sample encoding (also used for sync upload) | ADR | **Resolved** — [ADR-0015](../adr/0015-local-activity-store.md): JSON Lines |
+| Q5 | Battery budget per hour by sport | Number in this doc | Open — needs real-device measurements (MVP-0 exit criterion) |
+| Q6 | Altitude source policy (GPS vs. barometer vs. DEM correction) | ADR | Open — deferred; MVP-0 uses the platform-reported `altitudeM` as-is |

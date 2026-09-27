@@ -1,0 +1,22 @@
+{
+  "description": "Straight north line with an exact duplicate fix, a long jump, and a short fast blip.",
+  "algorithm_versions": {
+    "distance": "distance-v1",
+    "quality": "quality-v1",
+    "time": "time-v1"
+  },
+  "expected": {
+    "distance_m": {
+      "value": 1300.0,
+      "tolerance_m": 1.0
+    },
+    "duration_s": 22,
+    "moving_time_s": 22,
+    "quality_flags": [
+      "DUPLICATE",
+      "NON_MONOTONIC_TIME",
+      "JUMP",
+      "SPEED_OUTLIER"
+    ]
+  }
+}

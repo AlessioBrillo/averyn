@@ -1,0 +1,17 @@
+{
+  "description": "A five-minute signal gap within one recording segment; no flags, but the gap counts as stationary time.",
+  "algorithm_versions": {
+    "distance": "distance-v1",
+    "quality": "quality-v1",
+    "time": "time-v1"
+  },
+  "expected": {
+    "distance_m": {
+      "value": 205.0,
+      "tolerance_m": 1.0
+    },
+    "duration_s": 320,
+    "moving_time_s": 20,
+    "quality_flags": []
+  }
+}

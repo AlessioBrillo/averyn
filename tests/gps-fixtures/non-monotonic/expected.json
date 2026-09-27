@@ -1,0 +1,19 @@
+{
+  "description": "One fix whose timestamp goes backward relative to the previous one.",
+  "algorithm_versions": {
+    "distance": "distance-v1",
+    "quality": "quality-v1",
+    "time": "time-v1"
+  },
+  "expected": {
+    "distance_m": {
+      "value": 200.0,
+      "tolerance_m": 1.0
+    },
+    "duration_s": 20,
+    "moving_time_s": 20,
+    "quality_flags": [
+      "NON_MONOTONIC_TIME"
+    ]
+  }
+}

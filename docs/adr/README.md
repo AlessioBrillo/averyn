@@ -18,5 +18,6 @@ Format: [MADR](https://adr.github.io/madr/)-style, see [template](template.md). 
 | [0012](0012-cla-and-store-distribution.md) | Contributor License Agreement, resolving App Store distribution | accepted |
 | [0013](0013-health-data-special-category.md) | Health-adjacent metrics are special-category data | accepted |
 | [0014](0014-sensor-integration-contract.md) | Sensor integration contract: standards first, vendor extensions native-only | accepted |
+| [0015](0015-local-activity-store.md) | Local activity store: append-only file, not a database | accepted |
 
 Open decisions still without an ADR are tracked in [product/roadmap.md](../product/roadmap.md#open-decisions).

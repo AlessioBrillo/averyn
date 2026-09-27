@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="averyn-fixtures" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>non-monotonic</name>
+    <trkseg>
+      <trkpt lat="0.0000000" lon="9.0000000"><time>2026-01-01T08:00:00Z</time></trkpt>
+      <trkpt lat="0.0008993" lon="9.0000000"><time>2026-01-01T08:00:10Z</time></trkpt>
+      <trkpt lat="0.0013490" lon="9.0000000"><time>2026-01-01T08:00:05Z</time></trkpt>
+      <trkpt lat="0.0017986" lon="9.0000000"><time>2026-01-01T08:00:20Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

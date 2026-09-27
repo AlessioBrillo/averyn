@@ -20,7 +20,10 @@ targets:
       properties:
         CFBundleDisplayName: Averyn
         UILaunchScreen: {}
-        # Location usage strings and background modes are added in MVP-0 with the tracking adapter.
+        # TDD-0001 §5.5: background location mode, required for recording with the screen locked.
+        UIBackgroundModes: [location]
+        NSLocationWhenInUseUsageDescription: "Averyn uses your location to record your activity's route, distance and pace."
+        NSLocationAlwaysAndWhenInUseUsageDescription: "Averyn uses your location to keep recording your activity while your phone is locked or the app is in the background."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.averyn.app
