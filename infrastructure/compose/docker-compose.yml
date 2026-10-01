@@ -12,7 +12,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-averyn}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
-      - db-data:/var/lib/postgresql/data
+      # postgres 18's images changed the expected mount point from .../data to a single mount at
+      # /var/lib/postgresql (pg_ctlcluster-style, major-version-subdirectories) — the old path makes the
+      # entrypoint refuse to start ("these Docker images are configured to store database data in a format
+      # which is compatible with pg_ctlcluster"). See https://github.com/docker-library/postgres/pull/1259.
+      - db-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
