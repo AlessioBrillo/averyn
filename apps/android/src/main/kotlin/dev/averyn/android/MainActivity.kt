@@ -35,13 +35,17 @@ import androidx.core.content.ContextCompat
 import dev.averyn.domain.ActivityState
 import dev.averyn.domain.Sport
 import dev.averyn.tracking.ActivityMetadata
+import dev.averyn.tracking.DeviceInfo
+import dev.averyn.tracking.DiagnosticsReport
 import dev.averyn.tracking.LiveSnapshot
 import dev.averyn.tracking.RecoveryResult
+import dev.averyn.tracking.toJson
 import dev.averyn.tracking.writeGpx
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.io.asSink
 import kotlinx.io.buffered
+import java.io.OutputStreamWriter
 import java.util.UUID
 
 class MainActivity : ComponentActivity() {
@@ -65,6 +69,7 @@ private fun RecordScreen(app: AverynApplication) {
     var snapshot by remember { mutableStateOf(recorder.snapshot()) }
     var pendingRecovery by remember { mutableStateOf<ActivityMetadata?>(null) }
     var exportActivityId by remember { mutableStateOf<String?>(null) }
+    var completedDiagnostics by remember { mutableStateOf<DiagnosticsReport?>(null) }
     var pendingSport by remember { mutableStateOf(Sport.RUN) }
     // F5: a recovery that lost store lines is surfaced, never silent — see RecoveryResult.droppedRecordCount.
     var recoveryWarning by remember { mutableStateOf<String?>(null) }
@@ -95,6 +100,16 @@ private fun RecordScreen(app: AverynApplication) {
             }
             exportActivityId = null
         }
+    val exportDiagnosticsLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+            val diagnostics = completedDiagnostics
+            if (uri != null && diagnostics != null) {
+                val json = diagnostics.toJson(deviceInfo(context))
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    OutputStreamWriter(out).use { it.write(json) }
+                }
+            }
+        }
 
     pendingRecovery?.let { metadata ->
         RecoveryDialog(
@@ -109,6 +124,7 @@ private fun RecordScreen(app: AverynApplication) {
                     }
                     is RecoveryResult.Completed -> {
                         exportActivityId = result.activity.activityId
+                        completedDiagnostics = result.activity.diagnostics
                         recoveryWarning = droppedRecordWarning(result.droppedRecordCount)
                     }
                 }
@@ -122,10 +138,12 @@ private fun RecordScreen(app: AverynApplication) {
                         // kill, and stopping at wall-clock now would count that whole gap as moving time.
                         val completed = recorder.stop(recorder.lastKnownElapsedRealtimeMs, recorder.lastKnownTimeMs)
                         exportActivityId = completed.activityId
+                        completedDiagnostics = completed.diagnostics
                         recoveryWarning = droppedRecordWarning(result.droppedRecordCount)
                     }
                     is RecoveryResult.Completed -> {
                         exportActivityId = metadata.activityId
+                        completedDiagnostics = result.activity.diagnostics
                         recoveryWarning = droppedRecordWarning(result.droppedRecordCount)
                     }
                 }
@@ -161,10 +179,17 @@ private fun RecordScreen(app: AverynApplication) {
                     val completed = recorder.stop(e, t)
                     context.stopService(Intent(context, TrackingService::class.java))
                     exportActivityId = completed.activityId
+                    completedDiagnostics = completed.diagnostics
                 },
             )
             if (exportActivityId != null) {
                 Button(onClick = { exportLauncher.launch("activity.gpx") }) { Text("Export GPX") }
+            }
+            completedDiagnostics?.let { diagnostics ->
+                DiagnosticsSummary(diagnostics)
+                Button(onClick = { exportDiagnosticsLauncher.launch("${diagnostics.activityId}-diagnostics.json") }) {
+                    Text("Export diagnostics")
+                }
             }
         }
     }
@@ -207,6 +232,20 @@ private fun Controls(
     }
 }
 
+/** TDD-0001 F8: the aggregate report, for filing a docs/testing/device-matrix.md row after a test run. */
+@Composable
+private fun DiagnosticsSummary(diagnostics: DiagnosticsReport) {
+    Text("Quality: ${diagnostics.quality.grade} (${diagnostics.quality.algorithmVersion})")
+    Text("Samples: ${diagnostics.recordingSamples}/${diagnostics.totalSamples}, losses: ${diagnostics.recordLosses}")
+    Text("Longest gap: ${diagnostics.quality.longestGapMs / 1000} s")
+    Text("Accuracy ≤ 20 m: %.0f%%".format(diagnostics.quality.accuracyWithin20mPercent))
+    val drain = diagnostics.batteryDrainPercentPerHour
+    Text(
+        "Battery: ${diagnostics.batteryStartPercent ?: "—"}% → ${diagnostics.batteryEndPercent ?: "—"}%" +
+            (drain?.let { " (%.1f%%/h)".format(it) } ?: ""),
+    )
+}
+
 @Composable
 private fun RecoveryDialog(
     metadata: ActivityMetadata,
@@ -232,6 +271,17 @@ private fun droppedRecordWarning(droppedRecordCount: Int): String? =
 private fun hasLocationPermission(context: android.content.Context) =
     ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
         PackageManager.PERMISSION_GRANTED
+
+/** No device identifiers (docs/privacy/data-classification.md) — just what a device-matrix row needs. */
+private fun deviceInfo(context: android.content.Context): DeviceInfo {
+    val appVersion =
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "unknown"
+    return DeviceInfo(
+        model = android.os.Build.MODEL,
+        osVersion = "Android ${android.os.Build.VERSION.RELEASE}",
+        appVersion = appVersion,
+    )
+}
 
 private fun startRecording(
     context: android.content.Context,
