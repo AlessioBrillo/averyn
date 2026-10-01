@@ -1,5 +1,6 @@
 import Foundation
 import Shared
+import UIKit
 
 @MainActor
 final class RecorderViewModel: ObservableObject {
@@ -10,6 +11,8 @@ final class RecorderViewModel: ObservableObject {
     @Published var snapshot: LiveSnapshot
     @Published var pendingRecovery: ActivityMetadata?
     @Published var exportURL: URL?
+    @Published var diagnostics: DiagnosticsReport?
+    @Published var diagnosticsURL: URL?
     /// F5: a recovery that lost store lines is surfaced, never silent — see RecoveryResult.droppedRecordCount.
     @Published var recoveryWarning: String?
 
@@ -25,6 +28,12 @@ final class RecorderViewModel: ObservableObject {
         self.snapshot = recorder.snapshot()
         // TDD-0001 F4: an interrupted activity is offered for resume/finish once, right at launch.
         self.pendingRecovery = store.interrupted().first
+
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        recorder.batteryPercent = {
+            let level = UIDevice.current.batteryLevel
+            return level >= 0 ? KotlinInt(int: Int32(level * 100)) : nil
+        }
 
         recorder.listener = { [weak self] newSnapshot in
             DispatchQueue.main.async { self?.snapshot = newSnapshot }
@@ -48,7 +57,7 @@ final class RecorderViewModel: ObservableObject {
     func stop() {
         let completed = recorder.stop(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs())
         tracker.stop()
-        export(activityId: completed.activityId)
+        export(activityId: completed.activityId, diagnostics: completed.diagnostics)
     }
 
     func resolveRecoveryResume() {
@@ -60,7 +69,7 @@ final class RecorderViewModel: ObservableObject {
             tracker.start()
         } else if let completed = result as? RecoveryResult.Completed {
             recoveryWarning = droppedRecordWarning(completed.droppedRecordCount)
-            export(activityId: completed.activity.activityId)
+            export(activityId: completed.activity.activityId, diagnostics: completed.activity.diagnostics)
         }
         pendingRecovery = nil
     }
@@ -78,15 +87,15 @@ final class RecorderViewModel: ObservableObject {
             if let resumed = result as? RecoveryResult.Resumed {
                 recoveryWarning = droppedRecordWarning(resumed.droppedRecordCount)
             }
-            export(activityId: completed.activityId)
+            export(activityId: completed.activityId, diagnostics: completed.diagnostics)
         } else if let completed = result as? RecoveryResult.Completed {
             recoveryWarning = droppedRecordWarning(completed.droppedRecordCount)
-            export(activityId: completed.activity.activityId)
+            export(activityId: completed.activity.activityId, diagnostics: completed.activity.diagnostics)
         }
         pendingRecovery = nil
     }
 
-    private func export(activityId: String) {
+    private func export(activityId: String, diagnostics: DiagnosticsReport) {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(activityId).gpx")
         let store = self.store
         // Streams and re-serializes every stored sample: real I/O, kept off the main thread.
@@ -96,6 +105,20 @@ final class RecorderViewModel: ObservableObject {
                 self?.exportURL = url
             }
         }
+        self.diagnostics = diagnostics
+        writeDiagnosticsJson(activityId: activityId, diagnostics: diagnostics)
+    }
+
+    private func writeDiagnosticsJson(activityId: String, diagnostics: DiagnosticsReport) {
+        let device = DeviceInfo(
+            model: UIDevice.current.model,
+            osVersion: "iOS \(UIDevice.current.systemVersion)",
+            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+        )
+        let json = diagnostics.toJson(device: device)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(activityId)-diagnostics.json")
+        try? json.write(to: url, atomically: true, encoding: .utf8)
+        diagnosticsURL = url
     }
 }
 
