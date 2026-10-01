@@ -1,14 +1,14 @@
-# Progetto: Piattaforma sportiva open-source alternativa a an existing platform
+# Progetto: Piattaforma sportiva open-source
 
 **Documento di riferimento tecnico e strategico — v0.1**
 
 - **Data:** 24 settembre 2026
-- **Obiettivo:** progettare una piattaforma sportiva open-source, multipiattaforma e self-hostable, con ampia parità funzionale rispetto a an existing platform senza imporre un abbonamento per ogni funzione.
+- **Obiettivo:** progettare una piattaforma sportiva open-source, multipiattaforma e self-hostable, con ampia parità funzionale rispetto alle piattaforme sportive esistenti senza imporre un abbonamento per ogni funzione.
 - **Target:** iOS, Android e Web.
 - **Modalità di distribuzione:** cloud gestito opzionale + installazione self-hosted.
 - **Priorità dichiarate:**
   1. GPS e tracking estremamente affidabili.
-  2. Ampia parità funzionale con an existing platform.
+  2. Ampia parità funzionale con le piattaforme sportive esistenti.
   3. Analisi sportiva avanzata.
   4. Mappe e navigazione offline.
   5. Social e community.
@@ -35,7 +35,7 @@ Il progetto dovrebbe essere una piattaforma sportiva completa e indipendente, ca
 - API pubbliche e integrazioni esterne;
 - privacy e controllo dei dati da parte dell’utente.
 
-L’obiettivo non dovrebbe essere una semplice copia dell’interfaccia di an existing platform, ma un sistema modulare che offra una funzionalità comparabile, lasciando agli utenti la possibilità di usare il servizio gestito oppure mantenere autonomamente i propri dati.
+L’obiettivo non dovrebbe essere una semplice copia dell’interfaccia di una piattaforma esistente, ma un sistema modulare che offra una funzionalità comparabile, lasciando agli utenti la possibilità di usare il servizio gestito oppure mantenere autonomamente i propri dati.
 
 ### Principi guida
 
@@ -52,9 +52,9 @@ L’obiettivo non dovrebbe essere una semplice copia dell’interfaccia di an ex
 
 ---
 
-## 2. Considerazioni su an existing platform e sulle integrazioni
+## 2. Considerazioni sulle piattaforme di terze parti e sulle integrazioni
 
-È consigliabile costruire il prodotto attorno a un proprio modello dati e a una propria pipeline di elaborazione, evitando di dipendere dall’API di an existing platform per le funzionalità principali.
+È consigliabile costruire il prodotto attorno a un proprio modello dati e a una propria pipeline di elaborazione, evitando di dipendere dall’API di piattaforme di terze parti per le funzionalità principali.
 
 Le API di piattaforme di terze parti possono avere:
 
@@ -393,7 +393,7 @@ Funzioni:
 - profili;
 - follower e following;
 - feed;
-- reactions/reazioni;
+- apprezzamenti/reazioni;
 - commenti;
 - condivisione delle attività;
 - privacy per singola attività;

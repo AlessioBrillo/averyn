@@ -2,7 +2,7 @@
 
 > **Codename.** The final project name is an open decision ([ADR-0008](docs/adr/0008-project-codename.md)).
 
-An open-source, self-hostable, cross-platform sports platform (iOS, Android, Web) with broad feature parity with an existing platform and no paywall on core functionality.
+An open-source, self-hostable, cross-platform sports platform (iOS, Android, Web) with a feature set comparable to established sports-tracking platforms and no paywall on core functionality.
 
 **Status:** pre-alpha, scaffold only. Current focus is **MVP-0: a reliable, verifiable GPS tracking engine** ([roadmap](docs/product/roadmap.md)).
 

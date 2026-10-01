@@ -84,7 +84,7 @@ SYNAPSE-24/                          # REPO PRINCIPALE: Device Software Platform
 
 ### Settimana 2: Firmware Features Critiche
 - `ble_gatt_server.c`: Standard services + Custom Synapse Service
-- `fit_writer.c`: FIT file writer su LittleFS (valido per Garmin/an existing platform/Averyn)
+- `fit_writer.c`: FIT file writer su LittleFS (valido per qualsiasi software compatibile FIT, incluso Averyn)
 - `provisioning.c`: BLE provisioning flow (WiFi + Cloud URL + Device Cert)
 - `ota_update.c`: Signed OTA con Ed25519, rollback automatico
 - `acquisition_fsm.c`: T0/T1/T2 state machine + Motion Gate
@@ -119,7 +119,7 @@ SYNAPSE-24/                          # REPO PRINCIPALE: Device Software Platform
 
 - [ ] `firmware/esp32_band/` compila con ESP-IDF 5.2+, gira su ESP32-S3 DevKit
 - [ ] BLE GATT Server espone tutti i servizi standard + custom Synapse
-- [ ] `synapse record` genera `.fit` valido (leggibile da Garmin Connect, an existing platform, Averyn)
+- [ ] `synapse record` genera `.fit` valido (leggibile da qualsiasi software compatibile FIT, incluso Averyn)
 - [ ] `synapse provision` configura WiFi + Cloud URL + Cert su device vergine
 - [ ] `synapse ota` aggiorna firmware signed con rollback
 - [ ] Python SDK installabile via `pip install -e sdk/python`
