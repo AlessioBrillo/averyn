@@ -1,0 +1,4 @@
+# Jetpack Compose functions are PascalCase by convention; ktlint's standard function-naming rule doesn't
+# recognize @Composable as an exemption in the ktlint version this project resolves.
+[*.kt]
+ktlint_standard_function-naming = disabled

@@ -1,5 +1,6 @@
 [versions]
 kotlin = "2.4.20"
+kotlinxIo = "0.9.1"
 agp = "9.4.1"
 ktor = "3.6.0"
 coroutines = "1.11.0"
@@ -17,6 +18,8 @@ coreKtx = "1.19.1"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlinx-io-core = { module = "org.jetbrains.kotlinx:kotlinx-io-core", version.ref = "kotlinxIo" }
+kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serialization-core", version.ref = "serialization" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 
 ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }

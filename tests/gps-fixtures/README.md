@@ -22,8 +22,14 @@ One directory per fixture:
 
 ## Status
 
+Generated fixtures (all but `straight-line-1km`) come from [`generate.py`](generate.py) — re-run it and commit the output whenever a fixture definition changes; it isn't run by CI. All fixtures are currently a single `<trkseg>` (one continuous RECORDING interval).
+
 | Fixture | Source | Wired into tests |
 |---|---|---|
-| `straight-line-1km` | synthetic | not yet (needs the GPX importer, MVP-0) |
+| `straight-line-1km` | synthetic (hand-written) | yes — `shared/tracking`'s `FixtureConformanceTest` |
+| `outliers-and-duplicates` | generated | yes |
+| `signal-gap` | generated | yes |
+| `noisy-altitude` | generated | yes |
+| `non-monotonic` | generated | yes |
 
-Missing (MVP-0): tight curves, full pause, resume, intermittent signal, outliers, variable rate, slow/fast movement, noisy altitude, long activity, duplicate and non-monotonic timestamps.
+Missing (MVP-0 follow-up): tight curves, full pause, resume (multi-segment fixtures — the loader only handles one segment so far), intermittent signal beyond one gap, variable rate, slow/fast movement, long activity, missing sensors.

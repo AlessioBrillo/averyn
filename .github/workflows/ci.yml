@@ -68,7 +68,7 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v6
-      - run: ./gradlew :shared:domain:iosSimulatorArm64Test :shared:metrics:iosSimulatorArm64Test --console=plain
+      - run: ./gradlew :shared:domain:iosSimulatorArm64Test :shared:metrics:iosSimulatorArm64Test :shared:tracking:iosSimulatorArm64Test --console=plain
       - run: brew install xcodegen
       - name: Build app for simulator
         working-directory: apps/ios

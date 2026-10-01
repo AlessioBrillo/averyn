@@ -31,9 +31,9 @@ From [report §22](reference-report-v0.1.md), steps 1–9: requirements → samp
 
 Tracked here until they become ADRs (report §24). ● = needed for MVP-0.
 
-- ● Raw sample internal format and storage; sampling frequency; GPS filtering strategy → TDD-0001
-- ● Mobile local database (candidates: SQLDelight, Room + GRDB) → TDD-0001
-- ● Sports supported in MVP (proposal: run, ride, walk, hike)
+- ~~Raw sample internal format and storage; sampling frequency; GPS filtering strategy~~ → resolved, [TDD-0001](../design/TDD-0001-tracking-engine.md), [ADR-0015](../adr/0015-local-activity-store.md)
+- ~~Mobile local database~~ → resolved, append-only file not a DB, [ADR-0015](../adr/0015-local-activity-store.md)
+- ~~Sports supported in MVP~~ → resolved: run, ride, walk, hike, [TDD-0001 §5.3](../design/TDD-0001-tracking-engine.md)
 - Final project name → [ADR-0008](../adr/0008-project-codename.md)
 - ~~CLA vs DCO~~ → resolved, [ADR-0012](../adr/0012-cla-and-store-distribution.md)
 - Default bundled IdP (Authentik vs. Zitadel vs. Keycloak) → spike at MVP-1 start, [ADR-0011](../adr/0011-identity-oidc.md); passkeys/MFA timing decided alongside it

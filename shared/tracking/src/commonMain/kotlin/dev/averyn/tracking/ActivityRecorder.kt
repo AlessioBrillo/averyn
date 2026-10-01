@@ -1,0 +1,263 @@
+package dev.averyn.tracking
+
+import dev.averyn.domain.ActivityState
+import dev.averyn.domain.LocationSample
+import dev.averyn.domain.Reason
+import dev.averyn.domain.Sport
+import dev.averyn.domain.StateEvent
+import dev.averyn.metrics.ActivityMetrics
+import dev.averyn.metrics.ActivitySnapshot
+
+data class LiveSnapshot(
+    val state: ActivityState,
+    val metrics: ActivitySnapshot,
+    val quality: QualityReport,
+)
+
+data class CompletedActivity(
+    val activityId: String,
+    val sport: Sport,
+    val metrics: ActivitySnapshot,
+    val quality: QualityReport,
+)
+
+/**
+ * What [ActivityRecorder.recover] found for one interrupted activity (TDD-0001 F4).
+ *
+ * A `sealed class`, not a `sealed interface`: Kotlin/Native's Objective-C/Swift export turns a sealed
+ * interface into a Swift `protocol`, whose nested implementations aren't reachable as `Foo.Bar` from Swift
+ * (a `sealed class` exports as a real base class with genuinely nested subclasses instead).
+ */
+sealed class RecoveryResult {
+    /** Was RECORDING or PAUSED: the recorder is live again, ready for the user to resume/pause/stop it. */
+    data class Resumed(
+        val activityId: String,
+        val sport: Sport,
+        val snapshot: LiveSnapshot,
+        /** Corrupt/truncated lines skipped during replay (F5: counted, never silently dropped). */
+        val droppedRecordCount: Int,
+    ) : RecoveryResult()
+
+    /** Was STOPPING (killed mid-finalize): finalizing is a pure computation, so it's just re-run now. */
+    data class Completed(
+        val activity: CompletedActivity,
+        /** Corrupt/truncated lines skipped during replay (F5: counted, never silently dropped). */
+        val droppedRecordCount: Int,
+    ) : RecoveryResult()
+}
+
+/**
+ * Owns the [ActivityState] machine (TDD-0001 §5.2) and the durable record of one activity at a time,
+ * combining [ActivityStore] (durability, F3), [QualityAssessor]/[QualityReportAccumulator] and
+ * [ActivityMetrics] (live numbers). Every method takes the caller's own `elapsedRealtimeMs`/`timeMs` —
+ * the recorder never reads a clock itself, so it stays pure Kotlin and deterministic for tests (TDD-0001 §4).
+ */
+class ActivityRecorder(
+    private val store: ActivityStore,
+) {
+    var listener: ((LiveSnapshot) -> Unit)? = null
+
+    private var state: ActivityState = ActivityState.IDLE
+    private var activityId: String? = null
+    private var sport: Sport? = null
+    private val qualityAssessor = QualityAssessor()
+    private val qualityAccumulator = QualityReportAccumulator()
+    private val metrics = ActivityMetrics()
+
+    val currentState: ActivityState get() = state
+
+    /**
+     * The elapsed/wall-clock time of the last thing that actually happened to this activity — a sample, a
+     * pause/resume, or (after [recover]) the last pre-crash record. Unlike "now", this never jumps forward
+     * across an app-relaunch gap: use it (not the caller's own clock) to finalize a recovered activity that
+     * the user chooses to finish without resuming live tracking.
+     */
+    var lastKnownElapsedRealtimeMs: Long = 0
+        private set
+    var lastKnownTimeMs: Long = 0
+        private set
+
+    private fun trackLastKnown(
+        elapsedRealtimeMs: Long,
+        timeMs: Long,
+    ) {
+        lastKnownElapsedRealtimeMs = elapsedRealtimeMs
+        lastKnownTimeMs = timeMs
+    }
+
+    /** Current numbers, callable anytime (not just from [listener]) — e.g. right after [start] or [recover]. */
+    fun snapshot(): LiveSnapshot = LiveSnapshot(state, metrics.snapshot(), qualityAccumulator.build())
+
+    fun start(
+        activityId: String,
+        sport: Sport,
+        elapsedRealtimeMs: Long,
+        timeMs: Long,
+    ) {
+        state = state.transitionTo(ActivityState.PREPARING)
+        this.activityId = activityId
+        this.sport = sport
+        trackLastKnown(elapsedRealtimeMs, timeMs)
+        store.create(ActivityMetadata(activityId, sport, timeMs))
+        logEvent(elapsedRealtimeMs, timeMs, ActivityState.PREPARING, Reason.USER)
+        emit()
+    }
+
+    /** The native adapter calls this on the first fix after [start], or [fail] if none arrives. */
+    fun gpsReady(
+        elapsedRealtimeMs: Long,
+        timeMs: Long,
+    ) {
+        state = state.transitionTo(ActivityState.RECORDING)
+        trackLastKnown(elapsedRealtimeMs, timeMs)
+        logEvent(elapsedRealtimeMs, timeMs, ActivityState.RECORDING, Reason.GPS_READY)
+        emit()
+    }
+
+    /**
+     * Every raw sample, in every non-terminal state (PREPARING/RECORDING/PAUSED/STOPPING) — stored durably
+     * before use (F3), never dropped (F5). The native adapter should call this unconditionally for every
+     * fix it receives; gating the call itself on `currentState == RECORDING` would silently lose samples
+     * that arrive while PAUSED instead of just excluding them from live metrics, which is what this does.
+     */
+    fun onSample(sample: LocationSample) {
+        val id = activityId ?: return
+        if (state.isTerminal) return // a stray late callback after stop()/fail(): nothing to append to anymore
+        store.appendSample(id, sample)
+        trackLastKnown(sample.elapsedRealtimeMs, sample.timeMs)
+        if (state == ActivityState.RECORDING) ingestSample(sample)
+        emit()
+    }
+
+    fun pause(
+        elapsedRealtimeMs: Long,
+        timeMs: Long,
+        reason: Reason = Reason.USER,
+    ) {
+        state = state.transitionTo(ActivityState.PAUSED)
+        metrics.onPause(elapsedRealtimeMs)
+        trackLastKnown(elapsedRealtimeMs, timeMs)
+        logEvent(elapsedRealtimeMs, timeMs, ActivityState.PAUSED, reason)
+        emit()
+    }
+
+    fun resume(
+        elapsedRealtimeMs: Long,
+        timeMs: Long,
+    ) {
+        state = state.transitionTo(ActivityState.RECORDING)
+        metrics.onResume(elapsedRealtimeMs)
+        trackLastKnown(elapsedRealtimeMs, timeMs)
+        logEvent(elapsedRealtimeMs, timeMs, ActivityState.RECORDING, Reason.USER)
+        emit()
+    }
+
+    /** Finalization (STOPPING → COMPLETED) is synchronous in MVP-0: no upload/processing step to wait for. */
+    fun stop(
+        elapsedRealtimeMs: Long,
+        timeMs: Long,
+    ): CompletedActivity {
+        state = state.transitionTo(ActivityState.STOPPING)
+        logEvent(elapsedRealtimeMs, timeMs, ActivityState.STOPPING, Reason.USER)
+        metrics.finish(elapsedRealtimeMs)
+        trackLastKnown(elapsedRealtimeMs, timeMs)
+        state = state.transitionTo(ActivityState.COMPLETED)
+        logEvent(elapsedRealtimeMs, timeMs, ActivityState.COMPLETED, Reason.USER)
+        val completed = CompletedActivity(activityId!!, sport!!, metrics.snapshot(), qualityAccumulator.build())
+        emit()
+        return completed
+    }
+
+    fun fail(
+        elapsedRealtimeMs: Long,
+        timeMs: Long,
+        reason: Reason,
+    ) {
+        state = state.transitionTo(ActivityState.FAILED)
+        trackLastKnown(elapsedRealtimeMs, timeMs)
+        logEvent(elapsedRealtimeMs, timeMs, ActivityState.FAILED, reason)
+        emit()
+    }
+
+    /** Shared by the live path ([onSample]) and crash replay ([recover]) so they can never silently diverge. */
+    private fun ingestSample(sample: LocationSample) {
+        val flags = qualityAssessor.assess(sample)
+        qualityAccumulator.add(sample, flags)
+        if (flags.none { it.excludesFromDistance }) metrics.onSample(sample)
+    }
+
+    private fun logEvent(
+        elapsedRealtimeMs: Long,
+        timeMs: Long,
+        newState: ActivityState,
+        reason: Reason,
+    ) {
+        val id = activityId ?: return
+        store.appendEvent(id, StateEvent(elapsedRealtimeMs, timeMs, newState, reason))
+    }
+
+    private fun emit() {
+        listener?.invoke(snapshot())
+    }
+
+    /**
+     * Replays a stored activity's records from disk (streaming, bounded memory) to rebuild this recorder's
+     * live state after a kill/crash/reboot (F4), and logs a RECOVERED event at [nowElapsedRealtimeMs]. Call
+     * on a fresh [ActivityRecorder]; [store]`.interrupted()` finds which activity ids need this.
+     */
+    fun recover(
+        activityId: String,
+        nowElapsedRealtimeMs: Long,
+        nowTimeMs: Long,
+    ): RecoveryResult {
+        val metadata =
+            store.metadataOf(activityId)
+                ?: error("recover() called for an activity with no stored metadata: $activityId")
+        this.activityId = activityId
+        this.sport = metadata.sport
+        var lastState = ActivityState.IDLE
+        var droppedRecordCount = 0
+        store.forEachRecord(activityId, onLoss = { droppedRecordCount++ }) { record ->
+            when (record) {
+                is ActivityRecord.Sample -> {
+                    trackLastKnown(record.sample.elapsedRealtimeMs, record.sample.timeMs)
+                    if (lastState == ActivityState.RECORDING) ingestSample(record.sample)
+                }
+                is ActivityRecord.Event -> {
+                    when (record.event.state) {
+                        ActivityState.PAUSED -> metrics.onPause(record.event.elapsedRealtimeMs)
+                        ActivityState.RECORDING ->
+                            if (lastState ==
+                                ActivityState.PAUSED
+                            ) {
+                                metrics.onResume(record.event.elapsedRealtimeMs)
+                            }
+                        else -> {}
+                    }
+                    lastState = record.event.state
+                    trackLastKnown(record.event.elapsedRealtimeMs, record.event.timeMs)
+                }
+            }
+        }
+        state = lastState
+        logEvent(nowElapsedRealtimeMs, nowTimeMs, lastState, Reason.RECOVERED)
+
+        return if (lastState == ActivityState.STOPPING) {
+            state = state.transitionTo(ActivityState.COMPLETED)
+            logEvent(nowElapsedRealtimeMs, nowTimeMs, ActivityState.COMPLETED, Reason.RECOVERED)
+            // Finalize at the last known activity time, not "now" (relaunch can happen long after the kill).
+            metrics.finish(lastKnownElapsedRealtimeMs)
+            RecoveryResult.Completed(
+                CompletedActivity(activityId, metadata.sport, metrics.snapshot(), qualityAccumulator.build()),
+                droppedRecordCount,
+            )
+        } else {
+            RecoveryResult.Resumed(
+                activityId,
+                metadata.sport,
+                LiveSnapshot(state, metrics.snapshot(), qualityAccumulator.build()),
+                droppedRecordCount,
+            )
+        }
+    }
+}

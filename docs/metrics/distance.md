@@ -45,4 +45,4 @@ Ignores altitude (3D distance); jitter at low speed inflates results; not compar
 
 ## Reference tests
 
-`shared/metrics` unit tests (hand-computed haversine values). `tests/gps-fixtures/straight-line-1km` (expects 1000 m ± 1 m) will be wired in once the GPX importer exists (MVP-0).
+`shared/metrics` unit tests (hand-computed haversine values). `tests/gps-fixtures/` (`straight-line-1km` expects 1000 m ± 1 m), run against `distance_m` by `shared/tracking`'s `FixtureConformanceTest`.
