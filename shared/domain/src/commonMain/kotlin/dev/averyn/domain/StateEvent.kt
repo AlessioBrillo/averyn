@@ -35,4 +35,6 @@ data class StateEvent(
     val timeMs: Long,
     val state: ActivityState,
     val reason: Reason,
+    /** Device battery level 0–100 at this transition, if the platform reported one. Used by diagnostics-v1. */
+    val batteryPercent: Int? = null,
 )

@@ -87,6 +87,24 @@ class ActivityStoreTest {
     }
 
     @Test
+    fun eventWithoutBatteryPercentDecodesFromAnOlderStoreFormat() {
+        store.create(ActivityMetadata("a1", Sport.RUN, 0))
+        // No "batteryPercent" key: what a pre-diagnostics-v1 app wrote. ignoreUnknownKeys handles new fields
+        // added later; the default value here must handle an *older* file missing a newer field.
+        val path = Path(dir.toString(), "a1.jsonl")
+        SystemFileSystem.sink(path, append = true).buffered().use {
+            it.writeString(
+                "EVENT {\"elapsedRealtimeMs\":0,\"timeMs\":0,\"state\":\"RECORDING\",\"reason\":\"GPS_READY\"}\n",
+            )
+        }
+
+        val records = mutableListOf<ActivityRecord>()
+        store.forEachRecord("a1") { records += it }
+
+        assertEquals(null, (records.single() as ActivityRecord.Event).event.batteryPercent)
+    }
+
+    @Test
     fun listReturnsEveryStoredActivity() {
         store.create(ActivityMetadata("a1", Sport.WALK, 0))
         store.create(ActivityMetadata("a2", Sport.HIKE, 0))
