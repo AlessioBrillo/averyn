@@ -2,6 +2,7 @@ package dev.averyn.tracking
 
 import dev.averyn.domain.LocationSample
 import dev.averyn.metrics.haversineMeters
+import kotlinx.serialization.Serializable
 import kotlin.math.abs
 
 /** Algorithm version stamped on every [QualityReport]. Spec: docs/metrics/gps-quality.md. */
@@ -87,6 +88,7 @@ private fun bucketFor(intervalMs: Long): IntervalBucket =
 
 enum class QualityGrade { GOOD, FAIR, POOR }
 
+@Serializable
 data class QualityReport(
     val algorithmVersion: String,
     val flagCounts: Map<QualityFlag, Int>,
