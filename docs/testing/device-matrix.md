@@ -22,6 +22,14 @@ OS version · device model/vendor · battery state · signal quality · app stat
 | S10 | App update during an activity |
 | S11 | Long activity (≥ 3 h) |
 
+## Filling a row
+
+After each run, use the "Export diagnostics" action in the app (Android: share-sheet JSON; iOS: `ShareLink`)
+to get the activity's `diagnostics-v1` report ([TDD-0001 §5.4](../design/TDD-0001-tracking-engine.md)). It
+has everything **Samples lost** and **Battery Δ/h** below need directly: `recordLosses`,
+`batteryDrainPercentPerHour`, and the quality grade/accuracy for **Notes**. Keep the exported JSON files
+with the run (not committed to this repo — they're test artifacts, not fixtures).
+
 ## Results
 
 | Date | Device | OS | Scenario | Duration | Battery Δ/h | Samples lost | Result | Notes |

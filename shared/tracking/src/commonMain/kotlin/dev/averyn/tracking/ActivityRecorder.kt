@@ -215,6 +215,9 @@ class ActivityRecorder(
         trackLastKnown(elapsedRealtimeMs, timeMs)
         logEvent(elapsedRealtimeMs, timeMs, ActivityState.FAILED, reason)
         emit()
+        // ponytail: no DiagnosticsReport for a FAILED activity (there's no CompletedActivity to attach it to)
+        // even though all its counters exist here. A fail-time report is only needed once the history/detail
+        // view (post-MVP-0) wants to show diagnostics for a failed run; add a buildDiagnostics() call here then.
     }
 
     /** Shared by the live path ([onSample]) and crash replay ([recover]) so they can never silently diverge. */
