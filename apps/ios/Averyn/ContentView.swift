@@ -14,6 +14,12 @@ struct ContentView: View {
             if let url = viewModel.exportURL {
                 ShareLink(item: url) { Text("Share GPX") }
             }
+            if let diagnostics = viewModel.diagnostics {
+                diagnosticsSummary(diagnostics)
+                if let url = viewModel.diagnosticsURL {
+                    ShareLink(item: url) { Text("Share diagnostics") }
+                }
+            }
         }
         .padding()
         .alert(
@@ -34,6 +40,20 @@ struct ContentView: View {
             Text("Distance: \(Int(viewModel.snapshot.metrics.distanceM)) m")
             Text("Elapsed: \(Int(viewModel.snapshot.metrics.elapsedMs / 1000)) s")
             Text("GPS quality: \(viewModel.snapshot.quality.grade)")
+        }
+    }
+
+    /// TDD-0001 F8: the aggregate report, for filing a docs/testing/device-matrix.md row after a test run.
+    private func diagnosticsSummary(_ diagnostics: DiagnosticsReport) -> some View {
+        VStack {
+            Text("Quality: \(diagnostics.quality.grade) (\(diagnostics.quality.algorithmVersion))")
+            Text("Samples: \(diagnostics.recordingSamples)/\(diagnostics.totalSamples)")
+            Text("Longest gap: \(diagnostics.quality.longestGapMs / 1000) s")
+            Text(String(format: "Accuracy ≤ 20 m: %.0f%%", diagnostics.quality.accuracyWithin20mPercent))
+            if let start = diagnostics.batteryStartPercent, let end = diagnostics.batteryEndPercent {
+                let drainText = diagnostics.batteryDrainPercentPerHour.map { String(format: " (%.1f%%/h)", $0.doubleValue) } ?? ""
+                Text("Battery: \(start.intValue)% → \(end.intValue)%\(drainText)")
+            }
         }
     }
 

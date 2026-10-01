@@ -19,6 +19,7 @@ data class CompletedActivity(
     val sport: Sport,
     val metrics: ActivitySnapshot,
     val quality: QualityReport,
+    val diagnostics: DiagnosticsReport,
 )
 
 /**
@@ -57,12 +58,43 @@ class ActivityRecorder(
 ) {
     var listener: ((LiveSnapshot) -> Unit)? = null
 
+    /** Native adapter hook: returns the device's current battery percent (0–100), or null if unknown. */
+    var batteryPercent: (() -> Int?)? = null
+
     private var state: ActivityState = ActivityState.IDLE
     private var activityId: String? = null
     private var sport: Sport? = null
+    private var startedAtMs: Long = 0
     private val qualityAssessor = QualityAssessor()
     private val qualityAccumulator = QualityReportAccumulator()
     private val metrics = ActivityMetrics()
+
+    // Diagnostics counters (F8/diagnostics-v1): reset per activity in start()/recover() so a reused recorder
+    // doesn't carry a previous activity's numbers into the next one's report.
+    private var totalSamples = 0
+    private var recordingSamples = 0
+    private val recordLosses = mutableMapOf<RecordLossReason, Int>()
+    private var recoveries = 0
+    private var batteryStartPercent: Int? = null
+    private var batteryEndPercent: Int? = null
+    private var batteryReadingCount = 0
+
+    private fun resetDiagnosticsCounters() {
+        totalSamples = 0
+        recordingSamples = 0
+        recordLosses.clear()
+        recoveries = 0
+        batteryStartPercent = null
+        batteryEndPercent = null
+        batteryReadingCount = 0
+    }
+
+    private fun trackBattery(percent: Int?) {
+        if (percent == null) return
+        if (batteryStartPercent == null) batteryStartPercent = percent
+        batteryEndPercent = percent
+        batteryReadingCount++
+    }
 
     val currentState: ActivityState get() = state
 
@@ -97,6 +129,8 @@ class ActivityRecorder(
         state = state.transitionTo(ActivityState.PREPARING)
         this.activityId = activityId
         this.sport = sport
+        this.startedAtMs = timeMs
+        resetDiagnosticsCounters()
         trackLastKnown(elapsedRealtimeMs, timeMs)
         store.create(ActivityMetadata(activityId, sport, timeMs))
         logEvent(elapsedRealtimeMs, timeMs, ActivityState.PREPARING, Reason.USER)
@@ -124,8 +158,12 @@ class ActivityRecorder(
         val id = activityId ?: return
         if (state.isTerminal) return // a stray late callback after stop()/fail(): nothing to append to anymore
         store.appendSample(id, sample)
+        totalSamples++
         trackLastKnown(sample.elapsedRealtimeMs, sample.timeMs)
-        if (state == ActivityState.RECORDING) ingestSample(sample)
+        if (state == ActivityState.RECORDING) {
+            recordingSamples++
+            ingestSample(sample)
+        }
         emit()
     }
 
@@ -163,7 +201,7 @@ class ActivityRecorder(
         trackLastKnown(elapsedRealtimeMs, timeMs)
         state = state.transitionTo(ActivityState.COMPLETED)
         logEvent(elapsedRealtimeMs, timeMs, ActivityState.COMPLETED, Reason.USER)
-        val completed = CompletedActivity(activityId!!, sport!!, metrics.snapshot(), qualityAccumulator.build())
+        val completed = buildCompletedActivity()
         emit()
         return completed
     }
@@ -177,6 +215,9 @@ class ActivityRecorder(
         trackLastKnown(elapsedRealtimeMs, timeMs)
         logEvent(elapsedRealtimeMs, timeMs, ActivityState.FAILED, reason)
         emit()
+        // ponytail: no DiagnosticsReport for a FAILED activity (there's no CompletedActivity to attach it to)
+        // even though all its counters exist here. A fail-time report is only needed once the history/detail
+        // view (post-MVP-0) wants to show diagnostics for a failed run; add a buildDiagnostics() call here then.
     }
 
     /** Shared by the live path ([onSample]) and crash replay ([recover]) so they can never silently diverge. */
@@ -193,11 +234,45 @@ class ActivityRecorder(
         reason: Reason,
     ) {
         val id = activityId ?: return
-        store.appendEvent(id, StateEvent(elapsedRealtimeMs, timeMs, newState, reason))
+        val battery = batteryPercent?.invoke()
+        trackBattery(battery)
+        store.appendEvent(id, StateEvent(elapsedRealtimeMs, timeMs, newState, reason, battery))
     }
 
     private fun emit() {
         listener?.invoke(snapshot())
+    }
+
+    private fun buildCompletedActivity(): CompletedActivity =
+        CompletedActivity(activityId!!, sport!!, metrics.snapshot(), qualityAccumulator.build(), buildDiagnostics())
+
+    private fun buildDiagnostics(): DiagnosticsReport {
+        val snap = metrics.snapshot()
+        val hours = snap.elapsedMs / 3_600_000.0
+        val drainPerHour =
+            if (batteryReadingCount < 2 || hours <= 0.0) {
+                null
+            } else {
+                (batteryStartPercent!! - batteryEndPercent!!) / hours
+            }
+        return DiagnosticsReport(
+            formatVersion = DIAGNOSTICS_FORMAT_VERSION,
+            activityId = activityId!!,
+            sport = sport!!,
+            startedAtMs = startedAtMs,
+            totalSamples = totalSamples,
+            recordingSamples = recordingSamples,
+            recordLosses = recordLosses.toMap(),
+            recoveries = recoveries,
+            distanceM = snap.distanceM,
+            elapsedMs = snap.elapsedMs,
+            movingMs = snap.movingMs,
+            pausedMs = snap.pausedMs,
+            quality = qualityAccumulator.build(),
+            batteryStartPercent = batteryStartPercent,
+            batteryEndPercent = batteryEndPercent,
+            batteryDrainPercentPerHour = drainPerHour,
+        )
     }
 
     /**
@@ -215,15 +290,29 @@ class ActivityRecorder(
                 ?: error("recover() called for an activity with no stored metadata: $activityId")
         this.activityId = activityId
         this.sport = metadata.sport
+        this.startedAtMs = metadata.startedAtMs
+        resetDiagnosticsCounters()
         var lastState = ActivityState.IDLE
         var droppedRecordCount = 0
-        store.forEachRecord(activityId, onLoss = { droppedRecordCount++ }) { record ->
+        store.forEachRecord(
+            activityId,
+            onLoss = { reason ->
+                droppedRecordCount++
+                recordLosses[reason] = (recordLosses[reason] ?: 0) + 1
+            },
+        ) { record ->
             when (record) {
                 is ActivityRecord.Sample -> {
+                    totalSamples++
                     trackLastKnown(record.sample.elapsedRealtimeMs, record.sample.timeMs)
-                    if (lastState == ActivityState.RECORDING) ingestSample(record.sample)
+                    if (lastState == ActivityState.RECORDING) {
+                        recordingSamples++
+                        ingestSample(record.sample)
+                    }
                 }
                 is ActivityRecord.Event -> {
+                    if (record.event.reason == Reason.RECOVERED) recoveries++
+                    trackBattery(record.event.batteryPercent)
                     when (record.event.state) {
                         ActivityState.PAUSED -> metrics.onPause(record.event.elapsedRealtimeMs)
                         ActivityState.RECORDING ->
@@ -240,6 +329,7 @@ class ActivityRecorder(
             }
         }
         state = lastState
+        recoveries++ // this recovery itself; past ones were counted above from replayed RECOVERED events
         logEvent(nowElapsedRealtimeMs, nowTimeMs, lastState, Reason.RECOVERED)
 
         return if (lastState == ActivityState.STOPPING) {
@@ -248,7 +338,7 @@ class ActivityRecorder(
             // Finalize at the last known activity time, not "now" (relaunch can happen long after the kill).
             metrics.finish(lastKnownElapsedRealtimeMs)
             RecoveryResult.Completed(
-                CompletedActivity(activityId, metadata.sport, metrics.snapshot(), qualityAccumulator.build()),
+                buildCompletedActivity(),
                 droppedRecordCount,
             )
         } else {
