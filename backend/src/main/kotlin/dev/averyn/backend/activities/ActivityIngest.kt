@@ -6,7 +6,9 @@ import dev.averyn.domain.LocationSample
 import dev.averyn.metrics.DISTANCE_ALGORITHM_VERSION
 import dev.averyn.metrics.SPEED_ALGORITHM_VERSION
 import dev.averyn.metrics.TIME_ALGORITHM_VERSION
+import dev.averyn.tracking.ActivityMetadata
 import dev.averyn.tracking.ActivityStore
+import dev.averyn.tracking.ReplayResult
 import dev.averyn.tracking.replay
 import kotlinx.io.files.Path
 import kotlinx.serialization.Serializable
@@ -82,34 +84,23 @@ class ActivityIngest(
 
         val store = ActivityStore(Path(file.parent.toString()))
         val activityId = file.name.removeSuffix(".jsonl")
-        val metadata = store.metadataOf(activityId) ?: return IngestResult.Invalid("no activity metadata line")
-        if (!metadata.activityId.equals(clientActivityId.toString(), ignoreCase = true)) {
-            return IngestResult.Invalid("activity id does not match the file's metadata")
-        }
-
-        val track = StringBuilder()
-        var trackPoints = 0
-        val replayed =
-            try {
-                replay(store, activityId) { sample: LocationSample ->
-                    track
-                        .append(
-                            if (trackPoints ==
-                                0
-                            ) {
-                                ""
-                            } else {
-                                ","
-                            },
-                        ).append(sample.longitude)
-                        .append(' ')
-                        .append(sample.latitude)
-                    trackPoints++
-                }
-            } catch (e: RuntimeException) {
-                // A line that parses but violates the model (e.g. latitude out of range) is an invalid upload.
-                return IngestResult.Invalid("unreadable activity records")
+        val track = ArrayList<String>() // "lon lat" of every sample that counted towards the distance
+        val metadata: ActivityMetadata
+        val replayed: ReplayResult
+        try {
+            metadata = store.metadataOf(activityId) ?: return IngestResult.Invalid("no activity metadata line")
+            if (!metadata.activityId.equals(clientActivityId.toString(), ignoreCase = true)) {
+                return IngestResult.Invalid("activity id does not match the file's metadata")
             }
+            replayed =
+                replay(
+                    store,
+                    activityId,
+                ) { sample: LocationSample -> track += "${sample.longitude} ${sample.latitude}" }
+        } catch (e: RuntimeException) {
+            // A line that parses but violates the model (e.g. latitude out of range) is an invalid upload.
+            return IngestResult.Invalid("unreadable activity file")
+        }
         if (replayed.lastState != ActivityState.COMPLETED && replayed.lastState != ActivityState.FAILED) {
             return IngestResult.Invalid("activity is not finished (state ${replayed.lastState})")
         }
@@ -121,7 +112,7 @@ class ActivityIngest(
 
         val snapshot = replayed.metrics.snapshot()
         val quality = replayed.quality.build()
-        val wkt = if (trackPoints >= 2) "LINESTRING($track)" else null
+        val wkt = if (track.size >= 2) "LINESTRING(${track.joinToString(",")})" else null
         val inserted =
             db.connection.use { conn ->
                 conn

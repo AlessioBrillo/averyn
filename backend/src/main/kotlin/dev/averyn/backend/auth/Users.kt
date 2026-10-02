@@ -6,14 +6,22 @@ import javax.sql.DataSource
 
 /**
  * The Averyn user for an authenticated token: created on first sight of (issuer, subject), then looked up.
+ * Known users are only read (no row rewrite per request); a concurrent first sight is settled by the unique key.
  * Blocking JDBC: call from `Dispatchers.IO`.
  *
  * ponytail: one round trip per request. Cache (issuer, subject) -> id if profiling ever shows it.
  */
-fun DataSource.userIdFor(principal: JWTPrincipal): UUID =
-    connection.use { conn ->
-        // DO UPDATE (a no-op assignment) so RETURNING yields the row on both insert and conflict.
-        conn
+fun DataSource.userIdFor(principal: JWTPrincipal): UUID {
+    val issuer = requireNotNull(principal.payload.issuer)
+    val subject = requireNotNull(principal.payload.subject)
+    return connection.use { conn ->
+        val known =
+            conn.prepareStatement("SELECT id FROM users WHERE oidc_issuer = ? AND oidc_subject = ?").use { stmt ->
+                stmt.setString(1, issuer)
+                stmt.setString(2, subject)
+                stmt.executeQuery().use { rs -> if (rs.next()) rs.getObject(1, UUID::class.java) else null }
+            }
+        known ?: conn
             .prepareStatement(
                 """
                 INSERT INTO users (oidc_issuer, oidc_subject) VALUES (?, ?)
@@ -21,11 +29,12 @@ fun DataSource.userIdFor(principal: JWTPrincipal): UUID =
                 RETURNING id
                 """.trimIndent(),
             ).use { stmt ->
-                stmt.setString(1, requireNotNull(principal.payload.issuer))
-                stmt.setString(2, requireNotNull(principal.payload.subject))
+                stmt.setString(1, issuer)
+                stmt.setString(2, subject)
                 stmt.executeQuery().use { rs ->
                     check(rs.next())
                     rs.getObject(1, UUID::class.java)
                 }
             }
     }
+}

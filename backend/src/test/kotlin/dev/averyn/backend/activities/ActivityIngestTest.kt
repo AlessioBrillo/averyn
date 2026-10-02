@@ -1,7 +1,9 @@
 package dev.averyn.backend.activities
 
+import com.auth0.jwt.JWT
 import dev.averyn.backend.auth.TestIssuer
 import dev.averyn.backend.auth.auth
+import dev.averyn.backend.auth.userIdFor
 import dev.averyn.backend.connectAndMigrate
 import dev.averyn.backend.content
 import dev.averyn.backend.storage.RawObjectStore
@@ -18,9 +20,12 @@ import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.testing.testApplication
 import io.ktor.utils.io.ByteReadChannel
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.io.files.Path
 import kotlinx.serialization.json.Json
 import org.testcontainers.containers.GenericContainer
@@ -28,15 +33,7 @@ import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.images.builder.Transferable
 import org.testcontainers.postgresql.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
-import software.amazon.awssdk.core.checksums.RequestChecksumCalculation
-import software.amazon.awssdk.core.checksums.ResponseChecksumValidation
-import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient
-import software.amazon.awssdk.regions.Region
-import software.amazon.awssdk.services.s3.S3Client
 import java.io.File
-import java.net.URI
 import java.nio.file.Files
 import java.security.MessageDigest
 import java.util.UUID
@@ -45,6 +42,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** Real PostgreSQL/PostGIS and a real S3 API (SeaweedFS, as in Compose) via Testcontainers: Docker is required. */
 class ActivityIngestTest {
@@ -70,17 +68,6 @@ class ActivityIngestTest {
         val bucket = "averyn-test"
         val db = connectAndMigrate(postgres.jdbcUrl, postgres.username, postgres.password)
         val raw = RawObjectStore(endpoint, bucket, "test", "test")
-        val s3: S3Client =
-            S3Client
-                .builder()
-                .endpointOverride(URI.create(endpoint))
-                .region(Region.US_EAST_1)
-                .forcePathStyle(true)
-                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create("test", "test")))
-                .httpClient(UrlConnectionHttpClient.create())
-                .requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)
-                .responseChecksumValidation(ResponseChecksumValidation.WHEN_REQUIRED)
-                .build()
 
         init {
             raw.ensureBucket() // retries while the object store comes up
@@ -141,12 +128,13 @@ class ActivityIngestTest {
 
     private fun app(
         maxBytes: Long = MAX_ACTIVITY_BYTES,
+        uploadSlots: Semaphore = Semaphore(MAX_CONCURRENT_UPLOADS),
         block: suspend HttpClient.() -> Unit,
     ) = testApplication {
         application {
             content()
             auth(idp.config, idp.jwks)
-            activities(db, raw, maxBytes)
+            activities(db, raw, maxBytes, uploadSlots)
         }
         client.block()
     }
@@ -167,8 +155,6 @@ class ActivityIngestTest {
         db.connection.use { conn ->
             conn.createStatement().executeQuery(sql).use { rs -> if (rs.next()) rs.getObject(1) else null }
         }
-
-    private fun storedBytes(key: String): ByteArray = s3.getObjectAsBytes { it.bucket(bucket).key(key) }.asByteArray()
 
     @Test
     fun uploadStoresTheRawFileAndRecomputesTheSameNumbersAsTheDevice() =
@@ -191,7 +177,7 @@ class ActivityIngestTest {
             assertEquals(rec.id.toString(), summary.clientActivityId)
 
             val key = scalar("SELECT raw_object_key FROM activities") as String
-            assertContentEquals(rec.bytes, storedBytes(key)) // byte for byte (ADR-0016)
+            assertContentEquals(rec.bytes, raw.get(key)) // byte for byte (ADR-0016)
             assertEquals(sha256(rec.bytes), scalar("SELECT raw_sha256 FROM activities"))
             assertEquals(6, scalar("SELECT ST_NPoints(track) FROM activities"))
         }
@@ -251,6 +237,11 @@ class ActivityIngestTest {
             // A line that parses but breaks the model (latitude 123) is an invalid upload, not a server error.
             val badLatitude = String(rec.bytes).replace("\"latitude\":0.0", "\"latitude\":123.0").toByteArray()
             assertEquals(HttpStatusCode.UnprocessableEntity, upload(rec.id, badLatitude).status)
+            // A metadata line that is not a valid activity header.
+            assertEquals(
+                HttpStatusCode.UnprocessableEntity,
+                upload(rec.id, "META {\"activityId\":12}\n".toByteArray()).status,
+            )
             // The file's own activity id must match the one in the URL.
             assertEquals(HttpStatusCode.UnprocessableEntity, upload(UUID.randomUUID(), rec.bytes).status)
             assertEquals(0L, scalar("SELECT count(*) FROM activities"))
@@ -286,6 +277,36 @@ class ActivityIngestTest {
             assertEquals(HttpStatusCode.PayloadTooLarge, response.status)
             assertEquals(0L, scalar("SELECT count(*) FROM activities"))
         }
+
+    @Test
+    fun whenAllUploadSlotsAreTakenTheServerAsksToRetryLater() {
+        val slots = Semaphore(1)
+        assertTrue(slots.tryAcquire()) // the only slot is busy with another upload
+        app(uploadSlots = slots) {
+            val rec = record()
+            val response = upload(rec.id, rec.bytes)
+            assertEquals(HttpStatusCode.ServiceUnavailable, response.status)
+            assertEquals("5", response.headers[HttpHeaders.RetryAfter])
+            assertEquals(0L, scalar("SELECT count(*) FROM activities"))
+
+            slots.release()
+            // The slot is given back after every upload, so the next one fits again.
+            assertEquals(HttpStatusCode.Created, upload(rec.id, rec.bytes).status)
+            assertEquals(HttpStatusCode.OK, upload(rec.id, rec.bytes).status)
+            assertTrue(slots.tryAcquire())
+        }
+    }
+
+    @Test
+    fun aKnownUserIsOnlyReadNeverRewritten() {
+        val principal = JWTPrincipal(JWT.decode(alice))
+        val first = db.userIdFor(principal)
+        val rowVersion = scalar("SELECT xmin::text FROM users")
+
+        assertEquals(first, db.userIdFor(principal))
+        assertEquals(rowVersion, scalar("SELECT xmin::text FROM users")) // an UPDATE would have given a new version
+        assertEquals(1L, scalar("SELECT count(*) FROM users"))
+    }
 
     @Test
     fun requestsNeedAValidToken() =

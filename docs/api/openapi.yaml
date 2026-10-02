@@ -79,6 +79,7 @@ paths:
         "409": { description: Same id already uploaded with different bytes }
         "413": { description: Body over the size limit }
         "422": { description: Unparseable file, no metadata, or activity not in a terminal state }
+        "503": { description: Too many uploads in progress, retry after the Retry-After seconds }
   /v1/activities/{id}:
     get:
       summary: Read one activity summary (owner only; 404 for anyone else)

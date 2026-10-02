@@ -63,6 +63,24 @@ class AuthTest {
     }
 
     @Test
+    fun anUnreachableIdentityProviderMeansUnauthorizedNeverAServerError() {
+        // Nothing listens on port 1: discovery fails. Requests must get 401 (not 500), and after the first
+        // failure they fail fast instead of repeating the lookup.
+        val down = discoveredJwks("http://127.0.0.1:1")
+        val token = idp.token()
+        testApplication {
+            application {
+                content()
+                auth(idp.config, down)
+                routing { authenticate(OIDC_AUTH) { get("/whoami") { call.respondText("ok") } } }
+            }
+            repeat(3) {
+                assertEquals(HttpStatusCode.Unauthorized, client.get("/whoami") { bearerAuth(token) }.status)
+            }
+        }
+    }
+
+    @Test
     fun clientConfigIsPublic() =
         testApplication {
             application { protectedApp() }

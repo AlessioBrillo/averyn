@@ -53,6 +53,7 @@ A completed activity recorded offline on a device is uploaded to the backend as 
 | Missing or invalid token | `401` |
 | Body over the limit (checked while streaming, also without a `Content-Length`) | `413` |
 | Malformed id in the URL | `400` |
+| All upload slots busy (at most 8 uploads are processed at once) | `503` + `Retry-After` (retryable) |
 
 Also: `GET /v1/activities/{id}` (owner only, `404` otherwise) and `GET /v1/client-config` (public: `{issuer, clientId}`, so a mobile app needs only the server URL).
 
@@ -65,7 +66,7 @@ Also: `GET /v1/activities/{id}` (owner only, `404` otherwise) and `GET /v1/clien
 
 If step 4 fails, an orphan object remains; the retry writes the same key with identical bytes. A database row never exists without its raw object. The hash is in the key so that two concurrent uploads of one id with different bytes can never overwrite each other's object.
 
-A line that parses but violates the sample model (e.g. latitude 123) makes the whole upload `422`: the server never stores a file it cannot replay.
+A line that parses but violates the sample model (e.g. latitude 123) makes the whole upload `422`: the server never stores a file it cannot replay. Metrics of a `FAILED` activity are finished at its last event (an open pause is closed there), like a `COMPLETED` one.
 
 ### 5.3 Client state machine
 

@@ -4,6 +4,8 @@ ktor:
       - dev.averyn.backend.ApplicationKt.module
   deployment:
     port: "$PORT:8080"
+    # Idle read timeout: a stalled upload does not hold a connection (and a thread) forever.
+    requestReadTimeoutSeconds: 60
 
 averyn:
   database:

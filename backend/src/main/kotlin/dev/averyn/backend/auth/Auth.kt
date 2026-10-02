@@ -1,5 +1,7 @@
 package dev.averyn.backend.auth
 
+import com.auth0.jwk.Jwk
+import com.auth0.jwk.JwkException
 import com.auth0.jwk.JwkProvider
 import com.auth0.jwk.JwkProviderBuilder
 import io.ktor.server.application.Application
@@ -15,6 +17,7 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
+import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 /** The OIDC provider Averyn trusts (ADR-0011). [audience] must appear in a token's `aud`; [clientId] is for apps. */
@@ -50,28 +53,49 @@ fun Application.auth(
 
 /**
  * Keys are looked up through the issuer's `/.well-known/openid-configuration` the first time a token needs
- * verifying, not at start-up: the identity provider may still be coming up. A failed lookup is retried on the
- * next request (a `lazy` that threw is not cached) and meanwhile requests get 401.
+ * verifying, not at start-up: the identity provider may still be coming up. While it is unreachable, token
+ * checks fail fast (the lookup is not repeated for [retryAfter]), so a down IdP cannot tie up request threads;
+ * requests meanwhile get 401. Lookups are serialized: at most one blocks while the IdP is slow.
  */
-fun discoveredJwks(issuer: String): JwkProvider =
+fun discoveredJwks(
+    issuer: String,
+    retryAfter: Duration = Duration.ofSeconds(15),
+): JwkProvider =
     object : JwkProvider {
-        private val delegate by lazy {
-            JwkProviderBuilder(URI(jwksUri(issuer)).toURL())
-                .cached(10, 24, TimeUnit.HOURS)
-                .rateLimited(10, 1, TimeUnit.MINUTES)
-                .build()
-        }
+        private var delegate: JwkProvider? = null
+        private var failedAt: Instant? = null
 
-        override fun get(keyId: String?) = delegate.get(keyId)
+        @Synchronized
+        override fun get(keyId: String?): Jwk = (delegate ?: resolve()).get(keyId)
+
+        private fun resolve(): JwkProvider {
+            val failure = failedAt
+            if (failure != null && Duration.between(failure, Instant.now()) < retryAfter) {
+                throw JwkException("identity provider keys unavailable")
+            }
+            return try {
+                JwkProviderBuilder(URI(jwksUri(issuer)).toURL())
+                    .cached(10, 24, TimeUnit.HOURS)
+                    .rateLimited(10, 1, TimeUnit.MINUTES)
+                    .build()
+                    .also {
+                        delegate = it
+                        failedAt = null
+                    }
+            } catch (e: Exception) {
+                failedAt = Instant.now()
+                throw JwkException("identity provider keys unavailable", e)
+            }
+        }
     }
 
-private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()
+private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build()
 
 private fun jwksUri(issuer: String): String {
     val request =
         HttpRequest
             .newBuilder(URI("${issuer.trimEnd('/')}/.well-known/openid-configuration"))
-            .timeout(Duration.ofSeconds(5))
+            .timeout(Duration.ofSeconds(3))
             .build()
     val response = http.send(request, HttpResponse.BodyHandlers.ofString())
     check(response.statusCode() == 200) { "OIDC discovery failed: HTTP ${response.statusCode()}" }

@@ -3,6 +3,7 @@ package dev.averyn.backend.activities
 import dev.averyn.backend.auth.OIDC_AUTH
 import dev.averyn.backend.auth.userIdFor
 import dev.averyn.backend.storage.RawObjectStore
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
@@ -11,12 +12,14 @@ import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
 import io.ktor.server.request.contentLength
 import io.ktor.server.request.receiveChannel
+import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.get
 import io.ktor.server.routing.put
 import io.ktor.server.routing.routing
 import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
 import java.nio.file.Files
 import java.nio.file.Path
@@ -27,11 +30,21 @@ import javax.sql.DataSource
 /** Upload limit (TDD-0002 §4): 3 h at 1 Hz is about 2 MB, 10 h about 7 MB. */
 const val MAX_ACTIVITY_BYTES = 32L * 1024 * 1024
 
-/** `PUT /v1/activities/{clientActivityId}` and `GET /v1/activities/{id}`, owner-only (TDD-0002 §5.1). */
+/** Uploads handled at once: each holds an IO thread and up to [MAX_ACTIVITY_BYTES] of spooled disk. */
+const val MAX_CONCURRENT_UPLOADS = 8
+
+/**
+ * `PUT /v1/activities/{clientActivityId}` and `GET /v1/activities/{id}`, owner-only (TDD-0002 §5.1). When all
+ * [uploadSlots] are taken a further upload gets `503` + `Retry-After`, which the apps treat as retryable.
+ *
+ * ponytail: the bound is global, not per user. Add per-user quotas / rate limits before any public instance
+ * (docs/privacy/threat-model.md).
+ */
 fun Application.activities(
     db: DataSource,
     raw: RawObjectStore,
     maxBytes: Long = MAX_ACTIVITY_BYTES,
+    uploadSlots: Semaphore = Semaphore(MAX_CONCURRENT_UPLOADS),
 ) {
     val ingest = ActivityIngest(db, raw)
 
@@ -46,21 +59,32 @@ fun Application.activities(
                     return@put call.respond(HttpStatusCode.PayloadTooLarge, errorBody("activity file too large"))
                 }
                 val principal = checkNotNull(call.principal<JWTPrincipal>())
+                if (!uploadSlots.tryAcquire()) {
+                    call.response.header(HttpHeaders.RetryAfter, "5")
+                    return@put call.respond(
+                        HttpStatusCode.ServiceUnavailable,
+                        errorBody("too many uploads, retry later"),
+                    )
+                }
 
                 val result =
-                    withContext(Dispatchers.IO) {
-                        val dir = Files.createTempDirectory("averyn-ingest-")
-                        try {
-                            val file = dir.resolve("$clientId.jsonl")
-                            val sha256 = call.receiveToFile(file, maxBytes)
-                            if (sha256 == null) {
-                                IngestResult.TooLarge
-                            } else {
-                                ingest.ingest(db.userIdFor(principal), clientId, file, sha256)
+                    try {
+                        withContext(Dispatchers.IO) {
+                            val dir = Files.createTempDirectory("averyn-ingest-")
+                            try {
+                                val file = dir.resolve("$clientId.jsonl")
+                                val sha256 = call.receiveToFile(file, maxBytes)
+                                if (sha256 == null) {
+                                    IngestResult.TooLarge
+                                } else {
+                                    ingest.ingest(db.userIdFor(principal), clientId, file, sha256)
+                                }
+                            } finally {
+                                dir.toFile().deleteRecursively()
                             }
-                        } finally {
-                            dir.toFile().deleteRecursively()
                         }
+                    } finally {
+                        uploadSlots.release()
                     }
                 when (result) {
                     is IngestResult.Created -> call.respond(HttpStatusCode.Created, result.summary)
@@ -88,15 +112,11 @@ fun Application.activities(
                     call.parameters["id"]?.toUuidOrNull()
                         ?: return@get call.respond(HttpStatusCode.BadRequest, errorBody("malformed activity id"))
                 val principal = checkNotNull(call.principal<JWTPrincipal>())
-                val summary = withContext(Dispatchers.IO) { ingest.find(db.userIdFor(principal), id) }
-                // Not yours and not existing look identical (S5): never reveal that someone else's id is real.
-                if (summary ==
-                    null
-                ) {
-                    call.respond(HttpStatusCode.NotFound, errorBody("not found"))
-                } else {
-                    call.respond(summary)
-                }
+                val summary =
+                    withContext(Dispatchers.IO) { ingest.find(db.userIdFor(principal), id) }
+                        // Not yours and not existing look identical (S5): never reveal that someone else's id is real.
+                        ?: return@get call.respond(HttpStatusCode.NotFound, errorBody("not found"))
+                call.respond(summary)
             }
         }
     }
