@@ -65,9 +65,9 @@ class ActivityRecorder(
     private var activityId: String? = null
     private var sport: Sport? = null
     private var startedAtMs: Long = 0
-    private val qualityAssessor = QualityAssessor()
-    private val qualityAccumulator = QualityReportAccumulator()
-    private val metrics = ActivityMetrics()
+    private var qualityAssessor = QualityAssessor()
+    private var qualityAccumulator = QualityReportAccumulator()
+    private var metrics = ActivityMetrics()
 
     // Diagnostics counters (F8/diagnostics-v1): reset per activity in start()/recover() so a reused recorder
     // doesn't carry a previous activity's numbers into the next one's report.
@@ -126,10 +126,16 @@ class ActivityRecorder(
         elapsedRealtimeMs: Long,
         timeMs: Long,
     ) {
+        // One recorder serves many activities (the apps keep one for the process lifetime): a finished one
+        // starts over, and each activity gets its own quality/metrics accumulators.
+        if (state.isTerminal) state = ActivityState.IDLE
         state = state.transitionTo(ActivityState.PREPARING)
         this.activityId = activityId
         this.sport = sport
         this.startedAtMs = timeMs
+        qualityAssessor = QualityAssessor()
+        qualityAccumulator = QualityReportAccumulator()
+        metrics = ActivityMetrics()
         resetDiagnosticsCounters()
         trackLastKnown(elapsedRealtimeMs, timeMs)
         store.create(ActivityMetadata(activityId, sport, timeMs))
@@ -162,7 +168,7 @@ class ActivityRecorder(
         trackLastKnown(sample.elapsedRealtimeMs, sample.timeMs)
         if (state == ActivityState.RECORDING) {
             recordingSamples++
-            ingestSample(sample)
+            ingestSample(sample, qualityAssessor, qualityAccumulator, metrics)
         }
         emit()
     }
@@ -220,13 +226,6 @@ class ActivityRecorder(
         // view (post-MVP-0) wants to show diagnostics for a failed run; add a buildDiagnostics() call here then.
     }
 
-    /** Shared by the live path ([onSample]) and crash replay ([recover]) so they can never silently diverge. */
-    private fun ingestSample(sample: LocationSample) {
-        val flags = qualityAssessor.assess(sample)
-        qualityAccumulator.add(sample, flags)
-        if (flags.none { it.excludesFromDistance }) metrics.onSample(sample)
-    }
-
     private fun logEvent(
         elapsedRealtimeMs: Long,
         timeMs: Long,
@@ -276,60 +275,36 @@ class ActivityRecorder(
     }
 
     /**
-     * Replays a stored activity's records from disk (streaming, bounded memory) to rebuild this recorder's
-     * live state after a kill/crash/reboot (F4), and logs a RECOVERED event at [nowElapsedRealtimeMs]. Call
-     * on a fresh [ActivityRecorder]; [store]`.interrupted()` finds which activity ids need this.
+     * Rebuilds this recorder from a stored activity (F4) with [replay] (streaming, bounded memory), after a
+     * kill/crash/reboot, and logs a RECOVERED event at [nowElapsedRealtimeMs]. Call on a fresh
+     * [ActivityRecorder]; [store]`.interrupted()` finds which activity ids need this.
      */
     fun recover(
         activityId: String,
         nowElapsedRealtimeMs: Long,
         nowTimeMs: Long,
     ): RecoveryResult {
-        val metadata =
-            store.metadataOf(activityId)
-                ?: error("recover() called for an activity with no stored metadata: $activityId")
+        val replayed = replay(store, activityId)
+        val metadata = replayed.metadata
         this.activityId = activityId
         this.sport = metadata.sport
         this.startedAtMs = metadata.startedAtMs
+        metrics = replayed.metrics
+        qualityAssessor = replayed.assessor
+        qualityAccumulator = replayed.quality
         resetDiagnosticsCounters()
-        var lastState = ActivityState.IDLE
-        var droppedRecordCount = 0
-        store.forEachRecord(
-            activityId,
-            onLoss = { reason ->
-                droppedRecordCount++
-                recordLosses[reason] = (recordLosses[reason] ?: 0) + 1
-            },
-        ) { record ->
-            when (record) {
-                is ActivityRecord.Sample -> {
-                    totalSamples++
-                    trackLastKnown(record.sample.elapsedRealtimeMs, record.sample.timeMs)
-                    if (lastState == ActivityState.RECORDING) {
-                        recordingSamples++
-                        ingestSample(record.sample)
-                    }
-                }
-                is ActivityRecord.Event -> {
-                    if (record.event.reason == Reason.RECOVERED) recoveries++
-                    trackBattery(record.event.batteryPercent)
-                    when (record.event.state) {
-                        ActivityState.PAUSED -> metrics.onPause(record.event.elapsedRealtimeMs)
-                        ActivityState.RECORDING ->
-                            if (lastState ==
-                                ActivityState.PAUSED
-                            ) {
-                                metrics.onResume(record.event.elapsedRealtimeMs)
-                            }
-                        else -> {}
-                    }
-                    lastState = record.event.state
-                    trackLastKnown(record.event.elapsedRealtimeMs, record.event.timeMs)
-                }
-            }
-        }
+        totalSamples = replayed.totalSamples
+        recordingSamples = replayed.recordingSamples
+        recordLosses.putAll(replayed.recordLosses)
+        recoveries = replayed.recoveries
+        batteryStartPercent = replayed.batteryStartPercent
+        batteryEndPercent = replayed.batteryEndPercent
+        batteryReadingCount = replayed.batteryReadingCount
+        trackLastKnown(replayed.lastKnownElapsedRealtimeMs, replayed.lastKnownTimeMs)
+        val lastState = replayed.lastState
+        val droppedRecordCount = replayed.recordLosses.values.sum()
         state = lastState
-        recoveries++ // this recovery itself; past ones were counted above from replayed RECOVERED events
+        recoveries++ // this recovery itself; past ones were counted from the replayed RECOVERED events
         logEvent(nowElapsedRealtimeMs, nowTimeMs, lastState, Reason.RECOVERED)
 
         return if (lastState == ActivityState.STOPPING) {

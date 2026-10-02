@@ -178,16 +178,19 @@ class ActivityStore(
             .filter { it.name.endsWith(".jsonl") }
             .mapNotNull { metadataOf(it.name.removeSuffix(".jsonl")) }
 
+    /** The state after [activityId]'s last EVENT, or null if it has none (or no file). */
+    fun lastStateOf(activityId: String): ActivityState? {
+        var lastState: ActivityState? = null
+        forEachRecord(activityId) { record ->
+            if (record is ActivityRecord.Event) lastState = record.event.state
+        }
+        return lastState
+    }
+
     /** Activities whose last EVENT left them RECORDING/PAUSED/STOPPING without a clean end (TDD-0001 F4). */
     fun interrupted(): List<ActivityMetadata> =
         list().filter { metadata ->
-            var lastState: ActivityState? = null
-            forEachRecord(metadata.activityId) { record ->
-                if (record is ActivityRecord.Event) {
-                    lastState =
-                        record.event.state
-                }
-            }
+            val lastState = lastStateOf(metadata.activityId)
             lastState == ActivityState.RECORDING ||
                 lastState == ActivityState.PAUSED ||
                 lastState == ActivityState.STOPPING
