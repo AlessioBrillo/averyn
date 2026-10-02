@@ -4,8 +4,6 @@ plugins {
 }
 
 kotlin {
-    android { namespace = "dev.averyn.shared.tracking" }
-
     sourceSets {
         commonMain.dependencies {
             api(project(":shared:domain"))

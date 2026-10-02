@@ -12,6 +12,8 @@ application {
 }
 
 dependencies {
+    implementation(project(":shared:tracking")) // the same replay/metrics code as the devices (TDD-0002 §5.4)
+
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.netty)
     implementation(libs.ktor.server.config.yaml)
