@@ -23,6 +23,10 @@ Optional third-party sensor integration, see [ADR-0010](../adr/0010-ecosystem-bo
 | After MVP-1 (accounts/sync) and alongside MVP-2 | Synapse-specific native adapter (compressed-feature characteristic) and FIT import fields, gated by per-scope consent ([ADR-0013](../adr/0013-health-data-special-category.md)). |
 | After that | Inference worker job/result plumbing (ADR-0010), only once there's a real, contract-conformant firmware to integrate against — `SYNAPSE-24` does not have one yet (see the review). |
 
+## MVP-1 work order
+
+Critical path: identity spike → build so the backend can use `shared/` → read-only replay → OIDC auth → activity ingest → `shared/sync` → app login and sync trigger. Spec: [TDD-0002](../design/TDD-0002-activity-sync.md). Web detail page, self-host hardening and data deletion/export follow.
+
 ## MVP-0 work order
 
 From [report §22](reference-report-v0.1.md), steps 1–9: requirements → sample model → iOS adapter → Android adapter → local storage → pause/resume/recovery → base metrics → fixtures and tests → real-device validation. Spec: [TDD-0001](../design/TDD-0001-tracking-engine.md).
@@ -36,7 +40,7 @@ Tracked here until they become ADRs (report §24). ● = needed for MVP-0.
 - ~~Sports supported in MVP~~ → resolved: run, ride, walk, hike, [TDD-0001 §5.3](../design/TDD-0001-tracking-engine.md)
 - Final project name → [ADR-0008](../adr/0008-project-codename.md)
 - ~~CLA vs DCO~~ → resolved, [ADR-0012](../adr/0012-cla-and-store-distribution.md)
-- Default bundled IdP (Authentik vs. Zitadel vs. Keycloak) → spike at MVP-1 start, [ADR-0011](../adr/0011-identity-oidc.md); passkeys/MFA timing decided alongside it
+- Default bundled IdP (Authentik vs. Zitadel vs. Keycloak) → spike in progress as the first step of [TDD-0002](../design/TDD-0002-activity-sync.md), [ADR-0011](../adr/0011-identity-oidc.md); passkeys/MFA timing decided alongside it
 - Map data source, routing engine (Valhalla vs. GraphHopper), DEM source, pilot region
 - Cloud provider; notification strategy; retention policy; moderation policy
 - Fair-use quota thresholds and club/team plan pricing → [business-model.md](business-model.md)

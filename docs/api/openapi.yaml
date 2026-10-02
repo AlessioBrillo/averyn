@@ -5,7 +5,8 @@ info:
   description: |
     Contract-first: change this file in the same PR as the code.
     Versioning: breaking changes go to a new URL prefix (/v2); additive changes stay in /v1.
-    Only operational endpoints exist so far; /v1 resources arrive with MVP-1 (sync design doc first).
+    Operational endpoints plus the MVP-1 sync surface (TDD-0002). Everything under /v1 except /v1/client-config
+    requires a bearer token from the configured OIDC issuer (ADR-0011).
 paths:
   /health:
     get:
@@ -38,8 +39,93 @@ paths:
           description: Prometheus text format
           content:
             text/plain: { schema: { type: string } }
+  /v1/client-config:
+    get:
+      summary: OIDC settings a client needs to sign in (public)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClientConfig" }
+  /v1/activities/{clientActivityId}:
+    put:
+      summary: Upload a completed activity (idempotent, TDD-0002)
+      security: [{ oidc: [] }]
+      parameters:
+        - name: clientActivityId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        description: The activity's JSON Lines file exactly as stored on the device (ADR-0015), max 32 MB.
+        content:
+          application/x-ndjson:
+            schema: { type: string, format: binary }
+      responses:
+        "200":
+          description: Already uploaded with identical bytes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ActivitySummary" }
+        "201":
+          description: Stored and summarised
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ActivitySummary" }
+        "401": { description: Missing or invalid token }
+        "409": { description: Same id already uploaded with different bytes }
+        "413": { description: Body over the size limit }
+        "422": { description: Unparseable file, no metadata, or activity not in a terminal state }
+  /v1/activities/{id}:
+    get:
+      summary: Read one activity summary (owner only; 404 for anyone else)
+      security: [{ oidc: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ActivitySummary" }
+        "401": { description: Missing or invalid token }
+        "404": { description: Not found, or not owned by the caller }
 components:
+  securitySchemes:
+    oidc:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token issued by the OIDC provider named in /v1/client-config.
   schemas:
+    ClientConfig:
+      type: object
+      required: [issuer, clientId]
+      properties:
+        issuer: { type: string, format: uri }
+        clientId: { type: string }
+    ActivitySummary:
+      type: object
+      required: [id, clientActivityId, sport, startedAt, finalState, distanceM, elapsedMs, movingMs, pausedMs, qualityGrade, metricsAlgorithmVersion, qualityAlgorithmVersion, visibility]
+      properties:
+        id: { type: string, format: uuid }
+        clientActivityId: { type: string, format: uuid }
+        sport: { type: string, enum: [RUN, RIDE, WALK, HIKE] }
+        startedAt: { type: string, format: date-time }
+        finalState: { type: string, enum: [COMPLETED, FAILED] }
+        distanceM: { type: number }
+        elapsedMs: { type: integer, format: int64 }
+        movingMs: { type: integer, format: int64 }
+        pausedMs: { type: integer, format: int64 }
+        qualityGrade: { type: string, enum: [GOOD, FAIR, POOR] }
+        metricsAlgorithmVersion: { type: string }
+        qualityAlgorithmVersion: { type: string }
+        visibility: { type: string, enum: [private, followers, public, link] }
     Status:
       type: object
       required: [status]

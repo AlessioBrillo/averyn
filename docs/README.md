@@ -11,7 +11,7 @@ Docs live in the repo, are reviewed like code, and are checked in CI (markdownli
 | **Design doc** (TDD) | [`design/`](design/template.md) | How a non-trivial feature/system will work, before it is built | `draft` → `in-review` → `approved` → `implemented`. Updated to reflect reality after shipping |
 | **Metric spec** | [`metrics/`](metrics/template.md) | The 11-field definition of one metric, versioned | New version = new section; old versions are never edited |
 | **Architecture** | [`architecture/`](architecture/overview.md) | C4 diagrams and system overview | Kept current with `main` |
-| **Privacy** | [`privacy/`](privacy/data-classification.md) | Data classification, retention, threat model | Reviewed on any change to collected data |
+| **Privacy** | [`privacy/`](privacy/data-classification.md) | Data classification, [threat model](privacy/threat-model.md), retention | Reviewed on any change to collected data |
 | **Testing** | [`testing/`](testing/device-matrix.md) | Device matrix, test strategy | Updated as devices are tested |
 | **API** | [`api/`](api/openapi.yaml) | OpenAPI contract and versioning policy | Contract-first: change the spec in the same PR as the code |
 | **Deployment** | [`deployment/`](deployment/self-hosting.md) | Self-hosting guide, upgrade notes | Must be valid for every release |
