@@ -58,6 +58,9 @@ class ActivitySync internal constructor(
             )
     }
 
+    /** Releases the HTTP client; the apps create an [ActivitySync] per run (the server URL can change between runs). */
+    fun close() = http.close()
+
     /** What to show for [activityId]: the stored status, with unfinished and interrupted uploads made explicit. */
     fun statusOf(activityId: String): SyncStatus {
         val stored = statuses.read(activityId)
