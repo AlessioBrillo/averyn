@@ -17,11 +17,7 @@ final class RecorderViewModel: ObservableObject {
     @Published var recoveryWarning: String?
 
     init() {
-        let dir = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("activities", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let store = ActivityStore.companion.open(directoryPath: dir.path)
+        let store = AppModel.shared.store
         self.store = store
         let recorder = ActivityRecorder(store: store)
         self.recorder = recorder
@@ -95,7 +91,9 @@ final class RecorderViewModel: ObservableObject {
         pendingRecovery = nil
     }
 
+    /// Called whenever an activity ends (stop, or finishing a recovered one): export it and queue its upload.
     private func export(activityId: String, diagnostics: DiagnosticsReport) {
+        Task { await AppModel.shared.sync.syncNow() }
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(activityId).gpx")
         let store = self.store
         // Streams and re-serializes every stored sample: real I/O, kept off the main thread.
