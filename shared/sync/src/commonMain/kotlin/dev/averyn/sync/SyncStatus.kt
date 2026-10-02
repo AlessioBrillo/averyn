@@ -1,5 +1,7 @@
 package dev.averyn.sync
 
+import dev.averyn.domain.ActivityState
+import dev.averyn.tracking.ActivityStore
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
@@ -41,9 +43,10 @@ data class SyncStatus(
  * ADR-0015 store itself is never touched. Written to a temp file and renamed, so a kill leaves the old status.
  */
 class SyncStatusStore(
-    private val directory: Path,
+    private val store: ActivityStore,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
+    private val directory: Path = store.directory
 
     private fun pathFor(activityId: String) = Path(directory, "$activityId.sync.json")
 
@@ -59,6 +62,23 @@ class SyncStatusStore(
         } catch (e: SerializationException) {
             null
         }
+    }
+
+    /**
+     * What to show for [activityId]: the stored status, with unfinished and interrupted uploads made explicit.
+     * Cheap (no network): the apps call it to render the sync state.
+     */
+    fun statusOf(activityId: String): SyncStatus {
+        val stored = read(activityId)
+        if (stored != null && stored.state != SyncState.UPLOADING) return stored
+        // UPLOADING on disk with no upload running means the app died mid-upload: it is queued again.
+        val state = if (isFinished(activityId)) SyncState.QUEUED else SyncState.LOCAL_ONLY
+        return SyncStatus(state, attempts = stored?.attempts ?: 0, lastError = stored?.lastError)
+    }
+
+    internal fun isFinished(activityId: String): Boolean {
+        val last = store.lastStateOf(activityId)
+        return last == ActivityState.COMPLETED || last == ActivityState.FAILED
     }
 
     fun write(

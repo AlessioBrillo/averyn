@@ -1,6 +1,5 @@
 package dev.averyn.sync
 
-import dev.averyn.domain.ActivityState
 import dev.averyn.tracking.ActivityStore
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpTimeout
@@ -47,7 +46,7 @@ class ActivitySync internal constructor(
         ): ActivitySync =
             ActivitySync(
                 store,
-                SyncStatusStore(store.directory),
+                SyncStatusStore(store),
                 HttpClient {
                     install(HttpTimeout) {
                         connectTimeoutMillis = 15_000
@@ -61,20 +60,6 @@ class ActivitySync internal constructor(
     /** Releases the HTTP client; the apps create an [ActivitySync] per run (the server URL can change between runs). */
     fun close() = http.close()
 
-    /** What to show for [activityId]: the stored status, with unfinished and interrupted uploads made explicit. */
-    fun statusOf(activityId: String): SyncStatus {
-        val stored = statuses.read(activityId)
-        if (stored != null && stored.state != SyncState.UPLOADING) return stored
-        // UPLOADING on disk with no upload running means the app died mid-upload: it is queued again.
-        val state = if (isFinished(activityId)) SyncState.QUEUED else SyncState.LOCAL_ONLY
-        return SyncStatus(state, attempts = stored?.attempts ?: 0, lastError = stored?.lastError)
-    }
-
-    private fun isFinished(activityId: String): Boolean {
-        val last = store.lastStateOf(activityId)
-        return last == ActivityState.COMPLETED || last == ActivityState.FAILED
-    }
-
     suspend fun syncPending(accessToken: String?): SyncRunResult {
         var uploaded = 0
         var retryable = 0
@@ -85,7 +70,7 @@ class ActivitySync internal constructor(
             val id = metadata.activityId
             val previous = statuses.read(id)
             if (previous?.state == SyncState.READY || previous?.state == SyncState.FAILED_PERMANENT) continue
-            if (!isFinished(id)) continue
+            if (!statuses.isFinished(id)) continue
             if (accessToken == null) {
                 needsLogin = true
                 break

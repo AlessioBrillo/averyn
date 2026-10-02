@@ -39,7 +39,7 @@ class ActivitySyncTest {
     fun setUp() {
         dir = createTempDirectory("averyn-sync-test")
         store = ActivityStore(Path(dir.toString()))
-        statuses = SyncStatusStore(Path(dir.toString()))
+        statuses = SyncStatusStore(store)
     }
 
     @AfterTest
@@ -110,7 +110,7 @@ class ActivitySyncTest {
             assertContentEquals(File(dir.toFile(), "a1.jsonl").readBytes(), request.body.toByteArray())
             assertEquals(
                 SyncStatus(SyncState.READY, attempts = 1, serverActivityId = "srv-1"),
-                sync(created).statusOf("a1"),
+                statuses.statusOf("a1"),
             )
         }
 
@@ -133,17 +133,17 @@ class ActivitySyncTest {
             finishedActivity("a1")
 
             assertEquals(1, sync(failing(HttpStatusCode.InternalServerError)).syncPending("tok").retryable)
-            assertEquals(SyncStatus(SyncState.FAILED_RETRYABLE, 1, "HTTP_500"), sync(created).statusOf("a1"))
+            assertEquals(SyncStatus(SyncState.FAILED_RETRYABLE, 1, "HTTP_500"), statuses.statusOf("a1"))
 
             assertEquals(1, sync(failing(HttpStatusCode.TooManyRequests)).syncPending("tok").retryable)
-            assertEquals("HTTP_429", sync(created).statusOf("a1").lastError)
+            assertEquals("HTTP_429", statuses.statusOf("a1").lastError)
 
             assertEquals(1, sync { throw IOException("no route to host") }.syncPending("tok").retryable)
-            assertEquals(SyncStatus(SyncState.FAILED_RETRYABLE, 3, "NETWORK"), sync(created).statusOf("a1"))
+            assertEquals(SyncStatus(SyncState.FAILED_RETRYABLE, 3, "NETWORK"), statuses.statusOf("a1"))
 
             assertEquals(1, sync(created).syncPending("tok").uploaded)
-            assertEquals(SyncState.READY, sync(created).statusOf("a1").state)
-            assertEquals(4, sync(created).statusOf("a1").attempts)
+            assertEquals(SyncState.READY, statuses.statusOf("a1").state)
+            assertEquals(4, statuses.statusOf("a1").attempts)
         }
 
     @Test
@@ -155,7 +155,7 @@ class ActivitySyncTest {
             val result = sync(failing(HttpStatusCode.UnprocessableEntity)).syncPending("tok")
 
             assertEquals(SyncRunResult(uploaded = 0, retryable = 0, permanent = 2, needsLogin = false), result)
-            assertEquals(SyncStatus(SyncState.FAILED_PERMANENT, 1, "HTTP_422"), sync(created).statusOf("a1"))
+            assertEquals(SyncStatus(SyncState.FAILED_PERMANENT, 1, "HTTP_422"), statuses.statusOf("a1"))
             requests.clear()
             sync(created).syncPending("tok")
             assertTrue(requests.isEmpty())
@@ -171,8 +171,8 @@ class ActivitySyncTest {
 
             assertEquals(SyncRunResult(uploaded = 0, retryable = 1, permanent = 0, needsLogin = true), result)
             assertEquals(1, requests.size) // the second activity was not even tried
-            assertEquals(SyncStatus(SyncState.FAILED_RETRYABLE, 1, "AUTH"), sync(created).statusOf("a1"))
-            assertEquals(SyncState.QUEUED, sync(created).statusOf("a2").state)
+            assertEquals(SyncStatus(SyncState.FAILED_RETRYABLE, 1, "AUTH"), statuses.statusOf("a1"))
+            assertEquals(SyncState.QUEUED, statuses.statusOf("a2").state)
         }
 
     @Test
@@ -184,7 +184,7 @@ class ActivitySyncTest {
 
             assertEquals(SyncRunResult(0, 0, 0, needsLogin = true), result)
             assertTrue(requests.isEmpty())
-            assertEquals(SyncState.QUEUED, sync(created).statusOf("a1").state)
+            assertEquals(SyncState.QUEUED, statuses.statusOf("a1").state)
         }
 
     @Test
@@ -197,7 +197,7 @@ class ActivitySyncTest {
 
             assertEquals(1, result.uploaded)
             assertEquals(listOf("https://server.test/v1/activities/failed"), requests.map { it.url.toString() })
-            assertEquals(SyncState.LOCAL_ONLY, sync(created).statusOf("running").state)
+            assertEquals(SyncState.LOCAL_ONLY, statuses.statusOf("running").state)
         }
 
     @Test
@@ -216,10 +216,10 @@ class ActivitySyncTest {
         runBlocking {
             finishedActivity("a1")
             statuses.write("a1", SyncStatus(SyncState.UPLOADING, attempts = 1))
-            assertEquals(SyncState.QUEUED, sync(created).statusOf("a1").state)
+            assertEquals(SyncState.QUEUED, statuses.statusOf("a1").state)
 
             assertEquals(1, sync(created).syncPending("tok").uploaded)
-            assertEquals(2, sync(created).statusOf("a1").attempts)
+            assertEquals(2, statuses.statusOf("a1").attempts)
         }
 
     @Test
