@@ -2,8 +2,9 @@
 import Foundation
 import Security
 
-/// The OIDC session (refresh token included) as one Keychain item. `AfterFirstUnlock` so the background sync
-/// task can still read it while the phone is locked; the item never leaves this device (no iCloud sync).
+/// The OIDC session (refresh token included) as one Keychain item. `AfterFirstUnlockThisDeviceOnly`: the
+/// background sync task can still read it while the phone is locked, and it is never synced to iCloud or
+/// restored from a backup onto another device.
 enum KeychainStore {
     private static let service = "dev.averyn.app.auth"
     private static let account = "oidc-session"
@@ -21,7 +22,7 @@ enum KeychainStore {
         SecItemDelete(query as CFDictionary)
         var item = query
         item[kSecValueData as String] = data
-        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         SecItemAdd(item as CFDictionary, nil)
     }
 
