@@ -8,24 +8,46 @@ set -eu
 issuer="http://${IDP_HOST}:${IDP_PORT}"
 base="http://idp:${IDP_PORT}"
 curl() { command curl -H "Host: ${IDP_HOST}:${IDP_PORT}" "$@"; }
-api() { curl -fsS -H "Authorization: Bearer ${pat}" -H 'Content-Type: application/json' "$@"; }
+
+# One management API call; prints the response body. Right after start the IdP can answer "ready" before its
+# projections have caught up with the bootstrap user (so the first calls are refused), hence the retries.
+api() {
+  attempt=0
+  while :; do
+    out=$(curl -sS -w '\n%{http_code}' -H "Authorization: Bearer ${pat}" -H 'Content-Type: application/json' "$@" 2>&1) || true
+    code=$(printf '%s' "${out}" | tail -n 1)
+    case "${code}" in
+      2??) printf '%s' "${out}" | sed '$d'; return 0 ;;
+    esac
+    attempt=$((attempt + 1))
+    if [ "${attempt}" -ge 30 ]; then
+      echo "identity provider API call failed (HTTP ${code}): $(printf '%s' "${out}" | sed '$d')" >&2
+      return 1
+    fi
+    sleep 2
+  done
+}
 first() { sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p" | head -n 1; }
 
 echo "waiting for the identity provider at ${issuer}"
 until curl -fsS "${base}/debug/ready" >/dev/null 2>&1 && [ -s /bootstrap/admin.pat ]; do sleep 2; done
 pat=$(cat /bootstrap/admin.pat)
 
-project_id=$(api -X POST "${base}/management/v1/projects/_search" \
-  -d '{"queries":[{"nameQuery":{"name":"averyn","method":"TEXT_QUERY_METHOD_EQUALS"}}]}' | first id)
+# Each call is assigned to a variable first: with `set -e` a failed call stops the script (a pipeline would not).
+found=$(api -X POST "${base}/management/v1/projects/_search" \
+  -d '{"queries":[{"nameQuery":{"name":"averyn","method":"TEXT_QUERY_METHOD_EQUALS"}}]}')
+project_id=$(printf '%s' "${found}" | first id)
 if [ -z "${project_id}" ]; then
-  project_id=$(api -X POST "${base}/management/v1/projects" -d '{"name":"averyn"}' | first id)
+  created=$(api -X POST "${base}/management/v1/projects" -d '{"name":"averyn"}')
+  project_id=$(printf '%s' "${created}" | first id)
 fi
 
-client_id=$(api -X POST "${base}/management/v1/projects/${project_id}/apps/_search" \
-  -d '{"queries":[{"nameQuery":{"name":"averyn-app","method":"TEXT_QUERY_METHOD_EQUALS"}}]}' | first clientId)
+found=$(api -X POST "${base}/management/v1/projects/${project_id}/apps/_search" \
+  -d '{"queries":[{"nameQuery":{"name":"averyn-app","method":"TEXT_QUERY_METHOD_EQUALS"}}]}')
+client_id=$(printf '%s' "${found}" | first clientId)
 if [ -z "${client_id}" ]; then
   # Native public client: authorization code + PKCE, no secret. The redirect scheme must match the apps' AppAuth config.
-  client_id=$(api -X POST "${base}/management/v1/projects/${project_id}/apps/oidc" -d '{
+  created=$(api -X POST "${base}/management/v1/projects/${project_id}/apps/oidc" -d '{
     "name": "averyn-app",
     "redirectUris": ["dev.averyn.app:/oauth2redirect"],
     "postLogoutRedirectUris": ["dev.averyn.app:/oauth2redirect"],
@@ -35,15 +57,17 @@ if [ -z "${client_id}" ]; then
     "authMethodType": "OIDC_AUTH_METHOD_TYPE_NONE",
     "accessTokenType": "OIDC_TOKEN_TYPE_JWT",
     "devMode": true
-  }' | first clientId)
+  }')
+  client_id=$(printf '%s' "${created}" | first clientId)
 fi
 
-[ -n "${project_id}" ] && [ -n "${client_id}" ] || { echo "could not determine project/client id" >&2; exit 1; }
+if [ -z "${project_id}" ] || [ -z "${client_id}" ]; then
+  echo "could not determine project/client id" >&2
+  exit 1
+fi
 
 # The project id is in every access token's `aud`, so it is the audience the backend checks.
-printf 'AVERYN_OIDC_ISSUER=%s
-AVERYN_OIDC_AUDIENCE=%s
-AVERYN_OIDC_CLIENT_ID=%s
-'   "${issuer}" "${project_id}" "${client_id}" > /oidc/oidc.env.tmp
+printf 'AVERYN_OIDC_ISSUER=%s\nAVERYN_OIDC_AUDIENCE=%s\nAVERYN_OIDC_CLIENT_ID=%s\n' \
+  "${issuer}" "${project_id}" "${client_id}" > /oidc/oidc.env.tmp
 mv /oidc/oidc.env.tmp /oidc/oidc.env
 echo "identity provider ready: project ${project_id}, client ${client_id}"
