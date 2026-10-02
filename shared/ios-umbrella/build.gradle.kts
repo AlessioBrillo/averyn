@@ -12,6 +12,7 @@ kotlin {
             export(project(":shared:domain"))
             export(project(":shared:tracking"))
             export(project(":shared:metrics"))
+            export(project(":shared:sync"))
             // shared:tracking's public API (ActivityStore's constructor, writeGpx) exposes kotlinx-io
             // types (Path, Sink): exporting a module that exposes a dependency's types requires exporting
             // that dependency too, or Kotlin/Native's framework build fails ("exposes non-exported type").
@@ -24,6 +25,7 @@ kotlin {
             api(project(":shared:domain"))
             api(project(":shared:tracking"))
             api(project(":shared:metrics"))
+            api(project(":shared:sync"))
             api(libs.kotlinx.io.core)
         }
     }

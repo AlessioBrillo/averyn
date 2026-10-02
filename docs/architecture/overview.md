@@ -34,7 +34,7 @@ flowchart LR
 ```mermaid
 flowchart TB
   subgraph device["Device"]
-    ui[Native UI<br/>SwiftUI · Compose] --> sh[shared/ KMP ✅<br/>domain · tracking · metrics]
+    ui[Native UI<br/>SwiftUI · Compose] --> sh[shared/ KMP ✅<br/>domain · tracking · metrics · sync]
     nat[Native adapters<br/>location · background · BLE] --> sh
     sh --> local[(Local store)]
   end

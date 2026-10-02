@@ -24,6 +24,7 @@ if (System.getenv("AVERYN_BACKEND_ONLY") != null) {
         ":shared:domain",
         ":shared:tracking",
         ":shared:metrics",
+        ":shared:sync",
         ":shared:ios-umbrella",
         ":backend",
         ":apps:android",
