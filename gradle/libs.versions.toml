@@ -17,6 +17,8 @@ testcontainers = "2.0.5"
 composeBom = "2026.09.00"
 activityCompose = "1.13.0"
 coreKtx = "1.19.1"
+appauth = "0.11.1"
+workManager = "2.12.0"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -57,6 +59,8 @@ androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = 
 androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
 androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
+androidx-work-runtime = { module = "androidx.work:work-runtime", version.ref = "workManager" }
+appauth = { module = "net.openid:appauth", version.ref = "appauth" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
 
 # Used by build-logic to put plugins on the convention plugins' classpath
