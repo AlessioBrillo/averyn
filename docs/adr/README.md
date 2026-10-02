@@ -14,7 +14,7 @@ Format: [MADR](https://adr.github.io/madr/)-style, see [template](template.md). 
 | [0008](0008-project-codename.md) | Project name: "Averyn" is a codename | proposed |
 | [0009](0009-observability-baseline.md) | Observability baseline | accepted |
 | [0010](0010-ecosystem-boundary.md) | Ecosystem boundary: Averyn is the platform, Synapse is an optional integration | accepted |
-| [0011](0011-identity-oidc.md) | Identity: Averyn as an OIDC relying party, no shared service-account tokens | proposed |
+| [0011](0011-identity-oidc.md) | Identity: Averyn as an OIDC relying party, no shared service-account tokens | accepted |
 | [0012](0012-cla-and-store-distribution.md) | Contributor License Agreement, resolving App Store distribution | accepted |
 | [0013](0013-health-data-special-category.md) | Health-adjacent metrics are special-category data | accepted |
 | [0014](0014-sensor-integration-contract.md) | Sensor integration contract: standards first, vendor extensions native-only | accepted |

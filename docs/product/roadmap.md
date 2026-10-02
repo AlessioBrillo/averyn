@@ -40,7 +40,7 @@ Tracked here until they become ADRs (report §24). ● = needed for MVP-0.
 - ~~Sports supported in MVP~~ → resolved: run, ride, walk, hike, [TDD-0001 §5.3](../design/TDD-0001-tracking-engine.md)
 - Final project name → [ADR-0008](../adr/0008-project-codename.md)
 - ~~CLA vs DCO~~ → resolved, [ADR-0012](../adr/0012-cla-and-store-distribution.md)
-- Default bundled IdP (Authentik vs. Zitadel vs. Keycloak) → spike in progress as the first step of [TDD-0002](../design/TDD-0002-activity-sync.md), [ADR-0011](../adr/0011-identity-oidc.md); passkeys/MFA timing decided alongside it
+- ~~Default bundled IdP~~ → resolved: Zitadel, [ADR-0011](../adr/0011-identity-oidc.md); passkeys/MFA timing still open
 - Map data source, routing engine (Valhalla vs. GraphHopper), DEM source, pilot region
 - Cloud provider; notification strategy; retention policy; moderation policy
 - Fair-use quota thresholds and club/team plan pricing → [business-model.md](business-model.md)

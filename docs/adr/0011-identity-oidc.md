@@ -1,6 +1,6 @@
 # ADR-0011: Identity — Averyn as an OIDC relying party, no shared service-account tokens
 
-- **Status:** proposed (IdP product choice is a spike at MVP-1 start; the boundary rule below is decided now because it gates ADR-0010)
+- **Status:** accepted (boundary rule 2026-09-27; bundled IdP chosen by the MVP-1 spike on 2026-10-02, see below)
 - **Date:** 2026-09-27
 - **Deciders:** @AlessioBrillo
 
@@ -18,15 +18,33 @@
 
 **Option 2** for the boundary: Averyn's backend is an OIDC **relying party**, never an identity provider of its own and never the holder of a single shared secret that stands in for all users. Every call that reads or writes user data — including a job dispatched to the Synapse inference worker — carries a token scoped to one user's consent grant, not a service account with blanket access. The worker validates job authenticity against Averyn (e.g. a short-lived, job-scoped credential Averyn mints per dispatch), never a user token.
 
-The specific bundled default IdP for Compose (Authentik vs. Zitadel vs. Keycloak) is **left open**, decided by a short spike at the start of MVP-1 once Averyn's actual auth requirements (roles, session lifetime, self-host resource budget) are concrete — this status stays `proposed` until then. Whatever is picked must be self-host-friendly (modest RAM, one container, boring upgrade path) and must not require the specific config shape the strategy input assumed.
+### Bundled IdP: Zitadel (spike, 2026-10-02)
+
+Each candidate was run in Docker Compose on a 12-CPU / 8 GB Windows machine against PostgreSQL 17, idle after start-up, with the criteria this ADR set: modest RAM, one container, a declarative setup a CI job can run without clicks, and a boring upgrade path.
+
+| | Zitadel v4.19.4 | Authentik 2026.8.3 | Keycloak 26.8.0 (`start-dev`) |
+|---|---|---|---|
+| Memory at idle (IdP only) | ~80 MiB | ~750 MiB (server 450 + worker 300) | ~745 MiB |
+| IdP containers | 1 | 2 (server + worker) | 1 |
+| Ready after start | ~10 s | ~195 s | ~100 s |
+| Unattended OIDC client setup | management API with a machine-user PAT (two calls); the **client id is generated**, not chosen | blueprint YAML, fixed client id | realm JSON import, fixed client id |
+| Licence | AGPL-3.0 | MIT (core) | Apache-2.0 |
+| Own database | creates its own database on an existing PostgreSQL server | needs PostgreSQL | needs PostgreSQL |
+
+**Decision: Zitadel.** It is roughly an order of magnitude lighter than the other two, which is what decides a "self-host in 30 minutes on a small server" promise (vision principle 7), and it covers PKCE, refresh tokens and passkeys. Its cost is the generated client id: a one-shot `idp-init` job in the Compose stack creates the project and the public native app idempotently and writes the ids to a volume the backend reads. A self-hoster who brings their own IdP skips that job and sets `AVERYN_OIDC_ISSUER`, `AVERYN_OIDC_AUDIENCE` and `AVERYN_OIDC_CLIENT_ID` directly; Averyn depends only on standard OIDC, never on Zitadel specifics.
+
+Operational constraint found by the spike: the `iss` claim is the exact external URL, and Zitadel selects its instance from the request `Host` header. The backend and the phone must therefore reach the IdP under the same host and port; in Compose a network alias gives the backend that name (see [self-hosting](../deployment/self-hosting.md)).
+
+Alternatives stay valid for deployments with an existing IdP (Keycloak, Authentik, a club's own): Averyn is a relying party.
 
 ## Consequences
 
 - Good: closes the IDOR-shaped hole in the original design before any code depending on it exists.
 - Good: self-hosters keep the option to federate into an existing IdP (e.g. a club's own OIDC), satisfying vision principle 7 (self-hosting as a real mode).
-- Cost: one more container in the default Compose stack for people who don't want to bring their own IdP; mitigated by picking something with a genuinely light footprint at the MVP-1 spike, not defaulting to Keycloak's ~2 GB baseline.
-- Follow-up: the MVP-1 spike also decides passkey/MFA timing (tracked as an open decision in [`docs/product/roadmap.md`](../product/roadmap.md)).
+- Cost: one more container in the default Compose stack for people who don't want to bring their own IdP, about 80 MiB at idle with Zitadel.
+- Cost: the generated client id needs the `idp-init` job; the issuer host must be identical for phone and backend.
+- Follow-up: passkey/MFA timing is still open (tracked in [`docs/product/roadmap.md`](../product/roadmap.md)); Zitadel supports both.
 
 ## Revisit when
 
-The MVP-1 auth spike completes (promote to `accepted` with the chosen IdP named), or a self-hoster's federation need doesn't fit the relying-party model above.
+A self-hoster's federation need doesn't fit the relying-party model above, or the bundled IdP's licence, footprint or upgrade path stops meeting the criteria above (then a new ADR supersedes the product choice, not the boundary rule).
