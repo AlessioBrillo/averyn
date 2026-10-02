@@ -14,7 +14,7 @@ curl http://localhost:8080/health   # {"status":"ok"}
 curl http://localhost:8080/ready    # {"status":"ready"} once the DB is migrated
 ```
 
-Services: `db` (PostgreSQL 18 + PostGIS), `storage` (SeaweedFS, S3 API), `idp` (Zitadel, [ADR-0011](../adr/0011-identity-oidc.md)), `backend` (Ktor). Flyway migrations run on backend startup. Two one-shot jobs run on every start: `idp-perms` (volume ownership) and `idp-init` (creates the Averyn project and its public OIDC app in the IdP, idempotently).
+Services: `db` (PostgreSQL 18 + PostGIS), `storage` (SeaweedFS, S3 API), `idp` (Zitadel, [ADR-0011](../adr/0011-identity-oidc.md)), `backend` (Ktor). Flyway migrations run on backend startup. The backend stores each uploaded activity's raw file in `storage` (bucket `averyn`, created on first start) and a summary in PostgreSQL ([TDD-0002](../design/TDD-0002-activity-sync.md)); the S3 credentials are `S3_ACCESS_KEY` / `S3_SECRET_KEY` and must match `seaweedfs-s3.json`. Two one-shot jobs run on every start: `idp-perms` (volume ownership) and `idp-init` (creates the Averyn project and its public OIDC app in the IdP, idempotently).
 
 ## Identity provider
 

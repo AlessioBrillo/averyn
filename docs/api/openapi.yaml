@@ -74,6 +74,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ActivitySummary" }
+        "400": { description: Malformed activity id }
         "401": { description: Missing or invalid token }
         "409": { description: Same id already uploaded with different bytes }
         "413": { description: Body over the size limit }
@@ -93,6 +94,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ActivitySummary" }
+        "400": { description: Malformed activity id }
         "401": { description: Missing or invalid token }
         "404": { description: Not found, or not owned by the caller }
 components:
@@ -111,7 +113,7 @@ components:
         clientId: { type: string }
     ActivitySummary:
       type: object
-      required: [id, clientActivityId, sport, startedAt, finalState, distanceM, elapsedMs, movingMs, pausedMs, qualityGrade, metricsAlgorithmVersion, qualityAlgorithmVersion, visibility]
+      required: [id, clientActivityId, sport, startedAt, finalState, distanceM, elapsedMs, movingMs, pausedMs, qualityGrade, droppedRecords, metricsAlgorithmVersion, qualityAlgorithmVersion, visibility]
       properties:
         id: { type: string, format: uuid }
         clientActivityId: { type: string, format: uuid }
@@ -123,7 +125,8 @@ components:
         movingMs: { type: integer, format: int64 }
         pausedMs: { type: integer, format: int64 }
         qualityGrade: { type: string, enum: [GOOD, FAIR, POOR] }
-        metricsAlgorithmVersion: { type: string }
+        droppedRecords: { type: integer, description: Stored lines that could not be read (counted, never silently dropped) }
+        metricsAlgorithmVersion: { type: string, description: "Comma-separated, e.g. distance-v1,time-v1,speed-v1" }
         qualityAlgorithmVersion: { type: string }
         visibility: { type: string, enum: [private, followers, public, link] }
     Status:
