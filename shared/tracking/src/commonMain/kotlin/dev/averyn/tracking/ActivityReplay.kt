@@ -53,8 +53,10 @@ internal fun ingestSample(
  * Rebuilds an activity's state by streaming its stored records (bounded memory). **Read-only**: it never
  * writes to [store], unlike `ActivityRecorder.recover`, which logs a RECOVERED event on top of this.
  *
- * A COMPLETED activity's metrics come back finished, exactly as `ActivityRecorder.stop` left them. An
- * unfinished one (RECORDING/PAUSED/STOPPING/FAILED) is returned as it stood; finishing it is the caller's call.
+ * The metrics of an activity that ended (COMPLETED, or FAILED, which keeps its data) come back finished at its
+ * last event: an open pause is closed there, so the paused/moving split adds up. COMPLETED matches exactly what
+ * `ActivityRecorder.stop` left. An unfinished one (RECORDING/PAUSED/STOPPING) is returned as it stood;
+ * finishing it is the caller's call.
  * [onMeteredSample] sees every RECORDING-state sample that counted towards the metrics, in order.
  *
  * @throws IllegalStateException if [activityId] has no readable metadata line.
@@ -115,7 +117,7 @@ fun replay(
             }
         }
     }
-    if (lastState == ActivityState.COMPLETED) metrics.finish(lastElapsedMs)
+    if (lastState == ActivityState.COMPLETED || lastState == ActivityState.FAILED) metrics.finish(lastElapsedMs)
 
     return ReplayResult(
         metadata = metadata,

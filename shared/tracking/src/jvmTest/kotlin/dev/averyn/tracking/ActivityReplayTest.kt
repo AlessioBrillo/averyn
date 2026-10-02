@@ -132,6 +132,23 @@ class ActivityReplayTest {
     }
 
     @Test
+    fun anActivityThatFailedWhilePausedHasItsPauseClosedAtTheFailure() {
+        val recorder = ActivityRecorder(store)
+        recorder.start("a1", Sport.RUN, 0, 0)
+        recorder.gpsReady(0, 0)
+        recorder.onSample(sample(0, 0.0))
+        recorder.onSample(sample(10_000, step))
+        recorder.pause(10_000, 10_000)
+        recorder.fail(70_000, 70_000, Reason.PERMISSION_REVOKED)
+
+        val snapshot = replay(store, "a1").metrics.snapshot()
+
+        assertEquals(ActivityState.FAILED, replay(store, "a1").lastState)
+        assertEquals(60_000L, snapshot.pausedMs) // 10 s -> 70 s, not left open
+        assertEquals(70_000L, snapshot.elapsedMs)
+    }
+
+    @Test
     fun oneRecorderCanRecordSeveralActivitiesInARow() {
         val recorder = ActivityRecorder(store)
         val first = recordFinishedActivity(recorder, "a1")
