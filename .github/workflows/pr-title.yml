@@ -23,6 +23,7 @@ jobs:
             android
             ios
             web
+            sync
             infra
             docs
             deps
