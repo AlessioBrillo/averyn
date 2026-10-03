@@ -127,7 +127,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: cp infrastructure/compose/.env.example infrastructure/compose/.env
-      - run: $COMPOSE up -d --build
+      - name: Start the stack
+        run: $COMPOSE up -d --build || { $COMPOSE logs --no-color; exit 1; }
       - name: Wait for /ready (DB migrated with PostGIS)
         run: |
           for i in $(seq 1 30); do
@@ -137,5 +138,17 @@ jobs:
           $COMPOSE logs
           exit 1
       - run: $COMPOSE exec -T db psql -U averyn -d averyn -tAc "select postgis_version()"
+      - name: Identity provider is up and idp-init created the OIDC app
+        run: |
+          for i in $(seq 1 30); do
+            curl -fsS http://idp.localhost:8081/.well-known/openid-configuration | grep -q '"issuer":"http://idp.localhost:8081"' && break
+            sleep 5
+          done
+          for i in $(seq 1 30); do
+            [ "$($COMPOSE ps -a --format '{{.State}}' idp-init)" = exited ] && break
+            sleep 2
+          done
+          [ "$($COMPOSE ps -a --format '{{.ExitCode}}' idp-init)" = 0 ] || { $COMPOSE logs idp idp-init; exit 1; }
+          $COMPOSE logs idp-init | grep -q 'identity provider ready: project [0-9]*, client [0-9]*'
       - if: always()
         run: $COMPOSE down -v

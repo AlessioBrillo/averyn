@@ -32,6 +32,79 @@ services:
       - storage-data:/data
       - ./seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
 
+  # Identity provider (ADR-0011): Zitadel, one container on the shared PostgreSQL server (it creates and owns
+  # its own `zitadel` database). The issuer URL is http://${IDP_HOST}:${IDP_PORT}. The `aliases` entry makes that
+  # same hostname resolve to this container inside the Compose network, so the backend and the phone / browser
+  # see one identical issuer (the `iss` claim must match exactly). Zitadel also listens on IDP_PORT.
+  idp:
+    image: ghcr.io/zitadel/zitadel:v4.19.4
+    restart: unless-stopped
+    command: start-from-init --masterkey "${ZITADEL_MASTERKEY:?set ZITADEL_MASTERKEY in .env (32 characters)}" --tlsMode disabled
+    depends_on:
+      db:
+        condition: service_healthy
+      idp-perms:
+        condition: service_completed_successfully
+    environment:
+      ZITADEL_PORT: ${IDP_PORT:-8081}
+      ZITADEL_EXTERNALDOMAIN: ${IDP_HOST:-idp.localhost}
+      ZITADEL_EXTERNALPORT: ${IDP_PORT:-8081}
+      ZITADEL_EXTERNALSECURE: "false"
+      ZITADEL_DATABASE_POSTGRES_HOST: db
+      ZITADEL_DATABASE_POSTGRES_PORT: 5432
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${ZITADEL_DB_PASSWORD:?set ZITADEL_DB_PASSWORD in .env}
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: ${POSTGRES_USER:-averyn}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+      # Console admin: login name admin@zitadel.${IDP_HOST}. A machine user's PAT lets idp-init create the OIDC app.
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: admin
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ZITADEL_ADMIN_PASSWORD:?set ZITADEL_ADMIN_PASSWORD in .env}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "false"
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: bootstrap
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: bootstrap
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2099-01-01T00:00:00Z"
+      ZITADEL_FIRSTINSTANCE_PATPATH: /bootstrap/admin.pat
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "false"
+    volumes:
+      - idp-bootstrap:/bootstrap
+    networks:
+      default:
+        aliases:
+          - ${IDP_HOST:-idp.localhost}
+    ports:
+      # Bound to localhost by default; set AVERYN_BIND=0.0.0.0 to sign in from a phone on the LAN.
+      - "${AVERYN_BIND:-127.0.0.1}:${IDP_PORT:-8081}:${IDP_PORT:-8081}"
+
+  # One-shot: Zitadel (uid 1000) and idp-init (curl_user, uid 100) run as non-root, a fresh named volume is root-owned.
+  idp-perms:
+    image: curlimages/curl:8.22.0
+    user: root
+    entrypoint: ["/bin/sh", "-c", "chown 1000:1000 /bootstrap && chown 100:101 /oidc"]
+    volumes:
+      - idp-bootstrap:/bootstrap
+      - oidc-config:/oidc
+
+  # One-shot, idempotent: creates the Averyn project and its public (PKCE) OIDC app in Zitadel, then writes
+  # the generated ids to oidc.env for the backend. The PAT volume is not mounted anywhere else.
+  idp-init:
+    image: curlimages/curl:8.22.0
+    depends_on:
+      idp:
+        condition: service_started
+      idp-perms:
+        condition: service_completed_successfully
+    environment:
+      IDP_HOST: ${IDP_HOST:-idp.localhost}
+      IDP_PORT: ${IDP_PORT:-8081}
+    entrypoint: ["/bin/sh", "/idp-init.sh"]
+    volumes:
+      - idp-bootstrap:/bootstrap:ro
+      - oidc-config:/oidc
+      - ./idp-init.sh:/idp-init.sh:ro
+
   backend:
     build:
       context: ../..
@@ -47,8 +120,10 @@ services:
     ports:
       # Bound to localhost; put a reverse proxy (Caddy/nginx) in front for public access.
       # /metrics is unauthenticated: never expose it publicly (ADR-0009).
-      - "127.0.0.1:8080:8080"
+      - "${AVERYN_BIND:-127.0.0.1}:${BACKEND_PORT:-8080}:8080"
 
 volumes:
   db-data:
   storage-data:
+  idp-bootstrap:
+  oidc-config:
