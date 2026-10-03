@@ -28,6 +28,14 @@ The issuer is `http://IDP_HOST:IDP_PORT` (`.env`). The `iss` claim of every toke
 
 The console is at `http://IDP_HOST:IDP_PORT/ui/console`, login name `admin@zitadel.<IDP_HOST>` with the password from `.env`. Users are created there (self-registration is off). Changing `IDP_HOST` after the first start requires `docker compose down -v`, because the IdP stores its external domain at first start. To use your own OIDC provider instead, drop `idp`/`idp-init` and set `AVERYN_OIDC_ISSUER`, `AVERYN_OIDC_AUDIENCE` and `AVERYN_OIDC_CLIENT_ID` on the backend.
 
+## Syncing from a phone
+
+1. In `.env` set `IDP_HOST=<host-lan-ip>.nip.io` (Android emulator: `10.0.2.2.nip.io`) and `AVERYN_BIND=0.0.0.0`, then `docker compose down -v && docker compose up -d --build` (the IdP stores its host at first start).
+2. In the console (`http://<IDP_HOST>:8081/ui/console`, see above) create a user.
+3. In the app enter the server URL `http://<host-lan-ip>:8080` (the `BACKEND_PORT`), tap **Sign in**, log in as that user in the browser sheet, and finish an activity (or tap **Sync now**): the status line shows `READY` once the server has it.
+
+Debug Android builds and the current iOS builds allow plain HTTP for this; put the stack behind HTTPS before using it beyond a trusted network.
+
 ## Security notes
 
 - The IdP is bound to `127.0.0.1` unless you set `AVERYN_BIND`, and speaks plain HTTP in this dev stack: do not expose it publicly without a TLS-terminating reverse proxy (a TLS example is still to be written).

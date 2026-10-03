@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -34,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import dev.averyn.domain.ActivityState
 import dev.averyn.domain.Sport
+import dev.averyn.sync.SyncStatusStore
 import dev.averyn.tracking.ActivityMetadata
 import dev.averyn.tracking.DeviceInfo
 import dev.averyn.tracking.DiagnosticsReport
@@ -42,7 +44,9 @@ import dev.averyn.tracking.RecoveryResult
 import dev.averyn.tracking.toJson
 import dev.averyn.tracking.writeGpx
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.io.asSink
 import kotlinx.io.buffered
 import java.io.OutputStreamWriter
@@ -140,11 +144,13 @@ private fun RecordScreen(app: AverynApplication) {
                         exportActivityId = completed.activityId
                         completedDiagnostics = completed.diagnostics
                         recoveryWarning = droppedRecordWarning(result.droppedRecordCount)
+                        enqueueSync(context)
                     }
                     is RecoveryResult.Completed -> {
                         exportActivityId = metadata.activityId
                         completedDiagnostics = result.activity.diagnostics
                         recoveryWarning = droppedRecordWarning(result.droppedRecordCount)
+                        enqueueSync(context)
                     }
                 }
                 pendingRecovery = null
@@ -180,6 +186,7 @@ private fun RecordScreen(app: AverynApplication) {
                     context.stopService(Intent(context, TrackingService::class.java))
                     exportActivityId = completed.activityId
                     completedDiagnostics = completed.diagnostics
+                    enqueueSync(context)
                 },
             )
             if (exportActivityId != null) {
@@ -191,8 +198,83 @@ private fun RecordScreen(app: AverynApplication) {
                     Text("Export diagnostics")
                 }
             }
+            AccountSection(app)
         }
     }
+}
+
+/** TDD-0002: which server to sync to, sign-in with its identity provider, and where the latest activity stands. */
+@Composable
+private fun AccountSection(app: AverynApplication) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var serverUrl by remember { mutableStateOf(app.auth.serverUrl.orEmpty()) }
+    var signedIn by remember { mutableStateOf(app.auth.isSignedIn) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var syncText by remember { mutableStateOf("") }
+
+    val signInLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val data = result.data ?: return@rememberLauncherForActivityResult
+            scope.launch {
+                try {
+                    app.auth.completeSignIn(data)
+                    signedIn = true
+                    message = null
+                    enqueueSync(context)
+                } catch (e: Exception) {
+                    message = "Sign-in failed"
+                }
+            }
+        }
+    // Cheap to poll: a finished, uploaded activity answers from its small status file.
+    LaunchedEffect(Unit) {
+        while (true) {
+            syncText = withContext(Dispatchers.IO) { latestSyncText(app) }
+            delay(3_000)
+        }
+    }
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        OutlinedTextField(
+            value = serverUrl,
+            onValueChange = { serverUrl = it },
+            label = { Text("Server URL") },
+            singleLine = true,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (signedIn) {
+                Button(onClick = {
+                    app.auth.signOut()
+                    signedIn = false
+                }) { Text("Sign out") }
+            } else {
+                Button(onClick = {
+                    app.auth.serverUrl = serverUrl
+                    scope.launch {
+                        try {
+                            signInLauncher.launch(app.auth.signInIntent())
+                            message = null
+                        } catch (e: Exception) {
+                            message = "Could not reach the server"
+                        }
+                    }
+                }) { Text("Sign in") }
+            }
+            Button(onClick = {
+                app.auth.serverUrl = serverUrl
+                enqueueSync(context)
+            }) { Text("Sync now") }
+        }
+        message?.let { Text(it) }
+        Text(syncText)
+    }
+}
+
+private fun latestSyncText(app: AverynApplication): String {
+    val latest = app.store.list().maxByOrNull { it.startedAtMs } ?: return "Sync: no activities yet"
+    val status = SyncStatusStore(app.store).statusOf(latest.activityId)
+    return "Sync: ${status.state}" + (status.lastError?.let { " ($it)" } ?: "")
 }
 
 @Composable

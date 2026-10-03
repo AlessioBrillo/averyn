@@ -20,6 +20,7 @@ struct ContentView: View {
                     ShareLink(item: url) { Text("Share diagnostics") }
                 }
             }
+            AccountSection(auth: AppModel.shared.auth, sync: AppModel.shared.sync)
         }
         .padding()
         .alert(
@@ -82,6 +83,49 @@ struct ContentView: View {
             Text("Finishing…")
         default:
             EmptyView()
+        }
+    }
+}
+
+/// TDD-0002: which server to sync to, sign-in with its identity provider, and where the latest activity stands.
+private struct AccountSection: View {
+    @ObservedObject var auth: AuthManager
+    @ObservedObject var sync: SyncService
+    @State private var message: String?
+
+    var body: some View {
+        VStack(spacing: 8) {
+            TextField("Server URL", text: $auth.serverURL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.URL)
+                .textFieldStyle(.roundedBorder)
+            HStack {
+                if auth.isSignedIn {
+                    Button("Sign out") { auth.signOut() }
+                } else {
+                    Button("Sign in") {
+                        Task {
+                            do {
+                                try await auth.signIn()
+                                message = nil
+                                await sync.syncNow()
+                            } catch {
+                                message = "Sign-in failed"
+                            }
+                        }
+                    }
+                }
+                Button("Sync now") { Task { await sync.syncNow() } }
+            }
+            if let message { Text(message) }
+            Text(sync.statusText)
+        }
+        .task {
+            while !Task.isCancelled {
+                sync.refreshStatus()
+                try? await Task.sleep(for: .seconds(3))
+            }
         }
     }
 }

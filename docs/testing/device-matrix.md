@@ -21,6 +21,9 @@ OS version · device model/vendor · battery state · signal quality · app stat
 | S9 | Network lost / airplane mode |
 | S10 | App update during an activity |
 | S11 | Long activity (≥ 3 h) |
+| S12 | Sync ([TDD-0002](../design/TDD-0002-activity-sync.md)): finish an activity offline, reconnect, it reaches `READY` and one row exists server-side |
+| S13 | Sync: kill the app mid-upload, relaunch: it retries and no duplicate is created |
+| S14 | Sync: expired / revoked sign-in shows `FAILED_RETRYABLE (AUTH)`, signing in again uploads it |
 
 ## Filling a row
 
