@@ -1,6 +1,6 @@
 # ADR-0016: Server raw activity storage — the JSONL file is the system of record
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-10-02
 - **Deciders:** @AlessioBrillo
 
