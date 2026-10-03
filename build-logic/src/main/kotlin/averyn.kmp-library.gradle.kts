@@ -1,20 +1,17 @@
 // Convention for every shared/ module: pure Kotlin, targets jvm (backend + fast tests), android, iOS.
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
-    id("com.android.kotlin.multiplatform.library")
     id("averyn.ktlint")
 }
+
+// The backend Docker image has no Android SDK (AVERYN_BACKEND_ONLY, see settings.gradle.kts): the backend only
+// consumes the jvm target, so the Android library plugin is applied everywhere else.
+if (System.getenv("AVERYN_BACKEND_ONLY") == null) apply(plugin = "averyn.kmp-android")
 
 kotlin {
     jvm()
     iosArm64()
     iosSimulatorArm64()
-
-    // namespace is set per module.
-    android {
-        compileSdk = 37
-        minSdk = 26
-    }
 
     sourceSets {
         commonTest.dependencies { implementation(kotlin("test")) }
