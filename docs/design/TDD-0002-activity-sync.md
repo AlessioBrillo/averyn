@@ -51,7 +51,9 @@ A completed activity recorded offline on a device is uploaded to the backend as 
 | Exists, different SHA-256 | `409` |
 | Not parseable, no `META` line, or last state not terminal | `422` |
 | Missing or invalid token | `401` |
-| Body over the limit | `413` |
+| Body over the limit (checked while streaming, also without a `Content-Length`) | `413` |
+| Malformed id in the URL | `400` |
+| All upload slots busy (at most 8 uploads are processed at once) | `503` + `Retry-After` (retryable) |
 
 Also: `GET /v1/activities/{id}` (owner only, `404` otherwise) and `GET /v1/client-config` (public: `{issuer, clientId}`, so a mobile app needs only the server URL).
 
@@ -59,10 +61,12 @@ Also: `GET /v1/activities/{id}` (owner only, `404` otherwise) and `GET /v1/clien
 
 1. Receive, hash, check idempotency.
 2. Replay the file with `shared/tracking` (read-only, see §5.4) to get state, metrics, quality and loss counts.
-3. `PUT` the raw object to S3 at the deterministic key `raw/{ownerId}/{clientActivityId}.jsonl`.
-4. `INSERT` the `activities` row in a transaction.
+3. `PUT` the raw object to S3 at the key `raw/{ownerId}/{clientActivityId}/{sha256}.jsonl`.
+4. `INSERT` the `activities` row (`ON CONFLICT (owner, client id) DO NOTHING`); if another upload won the race, answer as in step 1.
 
-If step 4 fails, an orphan object remains; the retry overwrites it with identical bytes. A database row therefore never exists without its raw object.
+If step 4 fails, an orphan object remains; the retry writes the same key with identical bytes. A database row never exists without its raw object. The hash is in the key so that two concurrent uploads of one id with different bytes can never overwrite each other's object.
+
+A line that parses but violates the sample model (e.g. latitude 123) makes the whole upload `422`: the server never stores a file it cannot replay. Metrics of a `FAILED` activity are finished at its last event (an open pause is closed there), like a `COMPLETED` one.
 
 ### 5.3 Client state machine
 
@@ -86,7 +90,7 @@ The recovery loop in `ActivityRecorder.recover()` is extracted into a read-only 
 
 ### 5.5 Data model
 
-`activities` (Flyway `V3`): owner, `client_activity_id` (unique per owner), sport, `started_at`, `final_state`, raw object key / SHA-256 / size, `distance_m`, `elapsed_ms`, `moving_ms`, `paused_ms`, quality grade, `metrics_algorithm_version`, `quality_algorithm_version`, `track geometry(LineString, 4326)` (non-flagged samples recorded while `RECORDING`; `NULL` if fewer than 2), `visibility` default `private`. `users` (`V2`) is keyed by `(oidc_issuer, oidc_subject)`.
+`activities` (Flyway `V3`): owner, `client_activity_id` (unique per owner), sport, `started_at`, `final_state`, raw object key / SHA-256 / size, `distance_m`, `elapsed_ms`, `moving_ms`, `paused_ms`, quality grade, `dropped_records` (lines the store could not read, F5), `metrics_algorithm_version` (`distance-v1,time-v1,speed-v1`), `quality_algorithm_version`, `track geometry(LineString, 4326)` (the samples that counted towards the distance, in order, i.e. recorded while `RECORDING` and not duplicate / out of order / a jump; `NULL` if fewer than 2), `visibility` default `private`. `users` (`V2`) is keyed by `(oidc_issuer, oidc_subject)`.
 
 ### 5.6 Conflicts ([report §9.1](../product/reference-report-v0.1.md))
 

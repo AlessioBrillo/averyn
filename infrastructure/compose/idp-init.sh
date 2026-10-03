@@ -67,7 +67,8 @@ if [ -z "${project_id}" ] || [ -z "${client_id}" ]; then
 fi
 
 # The project id is in every access token's `aud`, so it is the audience the backend checks.
-printf 'AVERYN_OIDC_ISSUER=%s\nAVERYN_OIDC_AUDIENCE=%s\nAVERYN_OIDC_CLIENT_ID=%s\n' \
+# Single-quoted: the backend entrypoint sources this file with a shell.
+printf "AVERYN_OIDC_ISSUER='%s'\nAVERYN_OIDC_AUDIENCE='%s'\nAVERYN_OIDC_CLIENT_ID='%s'\n" \
   "${issuer}" "${project_id}" "${client_id}" > /oidc/oidc.env.tmp
 mv /oidc/oidc.env.tmp /oidc/oidc.env
 echo "identity provider ready: project ${project_id}, client ${client_id}"

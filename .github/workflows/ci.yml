@@ -150,5 +150,9 @@ jobs:
           done
           [ "$($COMPOSE ps -a --format '{{.ExitCode}}' idp-init)" = 0 ] || { $COMPOSE logs idp idp-init; exit 1; }
           $COMPOSE logs idp-init | grep -q 'identity provider ready: project [0-9]*, client [0-9]*'
+      - name: Backend serves the OIDC client config and protects activities
+        run: |
+          curl -fsS http://127.0.0.1:8080/v1/client-config | grep -q '"issuer":"http://idp.localhost:8081","clientId":"[0-9]*"'
+          [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/v1/activities/00000000-0000-0000-0000-000000000000)" = 401 ]
       - if: always()
         run: $COMPOSE down -v
