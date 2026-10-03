@@ -7,6 +7,7 @@ import dev.averyn.domain.StateEvent
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
+import kotlinx.io.readByteArray
 import kotlinx.io.readLine
 import kotlinx.io.writeString
 import kotlinx.serialization.Serializable
@@ -55,7 +56,7 @@ private const val EVENT_PREFIX = "EVENT "
  * a ~1/s sample rate; revisit only if profiling on a real device shows this file-open overhead matters.
  */
 class ActivityStore(
-    private val directory: Path,
+    val directory: Path,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -120,6 +121,14 @@ class ActivityStore(
             }
         }
     }
+
+    /**
+     * The whole file of [activityId], exactly as stored: what sync uploads (TDD-0002).
+     *
+     * ponytail: read into memory (10 h of 1 Hz samples is about 7 MB). Stream it if activities ever get much larger.
+     */
+    fun readRaw(activityId: String): ByteArray =
+        SystemFileSystem.source(pathFor(activityId)).buffered().use { it.readByteArray() }
 
     /** Streams every record of [activityId] after the META line, in file order; bounded memory. */
     fun forEachRecord(
