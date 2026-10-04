@@ -25,7 +25,7 @@ services:
 
   storage:
     # S3-compatible object storage (ADR-0006). Any S3 API implementation can replace it.
-    image: chrislusf/seaweedfs:4.47
+    image: chrislusf/seaweedfs:4.48
     restart: unless-stopped
     command: ["server", "-dir=/data", "-s3", "-s3.config=/etc/seaweedfs/s3.json"]
     volumes:
