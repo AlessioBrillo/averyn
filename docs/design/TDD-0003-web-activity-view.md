@@ -81,7 +81,7 @@ Plain `history` navigation, three states: `/` (list, or a sign-in button), `/cal
 |---|---|
 | A token in `sessionStorage` is readable by injected script | No user-generated HTML is rendered; the app has few dependencies; a CSP lands with the hardening slice; revisit a backend-for-frontend session if the threat model requires it |
 | The IdP's token endpoint may reject browser calls (CORS) | Checked first in the real-stack run; the IdP's app settings allow the web origin through the registered redirect URI |
-| The default tile service disappears or changes terms | The URL is configuration; documented alternatives in the self-hosting guide |
+| The default tile service disappears, changes terms or fails (a CORS failure of the demo host was seen in testing) | The URL is configuration, with alternatives in the self-hosting guide; a basemap that cannot be fetched falls back to an empty style, so the track is always drawn |
 | `WEB_ORIGIN` differs from the URL users type | Sign-in fails with a redirect mismatch; documented in the self-hosting guide |
 | Very long activities make a heavy track response | Measured first; `ST_Simplify` when needed |
 
