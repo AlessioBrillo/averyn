@@ -154,5 +154,14 @@ jobs:
         run: |
           curl -fsS http://127.0.0.1:8080/v1/client-config | grep -q '"issuer":"http://idp.localhost:8081","clientId":"[0-9]*"'
           [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/v1/activities/00000000-0000-0000-0000-000000000000)" = 401 ]
+      - name: Web app is served and proxies the API (same origin)
+        run: |
+          curl -fsS http://127.0.0.1:8082/ | grep -q '<div id="root">'
+          curl -fsS http://127.0.0.1:8082/activities/00000000-0000-0000-0000-000000000000 | grep -q '<div id="root">'
+          curl -fsS http://127.0.0.1:8082/v1/client-config | grep -q '"webClientId":"[0-9]*","mapStyleUrl":"https'
+          [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8082/v1/activities)" = 401 ]
+          # /metrics is not proxied (it falls through to the SPA page), and the web container logs no request paths
+          ! curl -fsS http://127.0.0.1:8082/metrics | grep -q '^# HELP'
+          ! $COMPOSE logs --no-color web | grep -q 'activities'
       - if: always()
         run: $COMPOSE down -v
