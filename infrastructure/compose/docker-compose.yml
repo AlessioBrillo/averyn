@@ -140,6 +140,19 @@ services:
       # /metrics is unauthenticated: never expose it publicly (ADR-0009).
       - "${AVERYN_BIND:-127.0.0.1}:${BACKEND_PORT:-8080}:8080"
 
+  # Web app (TDD-0003): static SPA + reverse proxy for /v1. Browse to WEB_ORIGIN (default http://localhost:8082).
+  web:
+    build:
+      context: ../../apps/web
+      dockerfile: ../../infrastructure/docker/web.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - "${AVERYN_BIND:-127.0.0.1}:${WEB_PORT:-8082}:80"
+
 volumes:
   db-data:
   storage-data:

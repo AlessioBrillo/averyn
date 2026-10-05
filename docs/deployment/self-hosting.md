@@ -14,7 +14,7 @@ curl http://localhost:8080/health   # {"status":"ok"}
 curl http://localhost:8080/ready    # {"status":"ready"} once the DB is migrated
 ```
 
-Services: `db` (PostgreSQL 18 + PostGIS), `storage` (SeaweedFS, S3 API), `idp` (Zitadel, [ADR-0011](../adr/0011-identity-oidc.md)), `backend` (Ktor). Flyway migrations run on backend startup. The backend stores each uploaded activity's raw file in `storage` (bucket `averyn`, created on first start) and a summary in PostgreSQL ([TDD-0002](../design/TDD-0002-activity-sync.md)); the S3 credentials are `S3_ACCESS_KEY` / `S3_SECRET_KEY` and must match `seaweedfs-s3.json`. Two one-shot jobs run on every start: `idp-perms` (volume ownership) and `idp-init` (creates the Averyn project and its public OIDC app in the IdP, idempotently).
+Services: `db` (PostgreSQL 18 + PostGIS), `storage` (SeaweedFS, S3 API), `idp` (Zitadel, [ADR-0011](../adr/0011-identity-oidc.md)), `backend` (Ktor), `web` (Caddy, see below). Flyway migrations run on backend startup. The backend stores each uploaded activity's raw file in `storage` (bucket `averyn`, created on first start) and a summary in PostgreSQL ([TDD-0002](../design/TDD-0002-activity-sync.md)); the S3 credentials are `S3_ACCESS_KEY` / `S3_SECRET_KEY` and must match `seaweedfs-s3.json`. Two one-shot jobs run on every start: `idp-perms` (volume ownership) and `idp-init` (creates the Averyn project and its two public OIDC apps, mobile and web, in the IdP, idempotently).
 
 ## Identity provider
 
@@ -26,7 +26,15 @@ The issuer is `http://IDP_HOST:IDP_PORT` (`.env`). The `iss` claim of every toke
 | Physical phone on the LAN | `<host-lan-ip>.nip.io` | `AVERYN_BIND=0.0.0.0` |
 | Android emulator | `10.0.2.2.nip.io` | `AVERYN_BIND=0.0.0.0` |
 
-The console is at `http://IDP_HOST:IDP_PORT/ui/console`, login name `admin@zitadel.<IDP_HOST>` with the password from `.env`. Users are created there (self-registration is off). Changing `IDP_HOST` after the first start requires `docker compose down -v`, because the IdP stores its external domain at first start. To use your own OIDC provider instead, drop `idp`/`idp-init` and set `AVERYN_OIDC_ISSUER`, `AVERYN_OIDC_AUDIENCE` and `AVERYN_OIDC_CLIENT_ID` on the backend.
+The console is at `http://IDP_HOST:IDP_PORT/ui/console`, login name `admin@zitadel.<IDP_HOST>` with the password from `.env`. Users are created there (self-registration is off). Changing `IDP_HOST` after the first start requires `docker compose down -v`, because the IdP stores its external domain at first start. To use your own OIDC provider instead, drop `idp`/`idp-init` and set `AVERYN_OIDC_ISSUER`, `AVERYN_OIDC_AUDIENCE`, `AVERYN_OIDC_CLIENT_ID` and `AVERYN_OIDC_WEB_CLIENT_ID` on the backend.
+
+## Web app
+
+The `web` service serves the web app at `http://localhost:8082` (`WEB_PORT`) and forwards `/v1/*` to the backend, so the browser talks to one origin. Sign in with a user created in the IdP console; the list shows synced activities and each opens with its track and basic metrics ([TDD-0003](../design/TDD-0003-web-activity-view.md)).
+
+- **`WEB_ORIGIN`** is the exact URL you open the web app at (default `http://localhost:${WEB_PORT}`). `idp-init` registers the browser app's redirect with it **the first time the stack starts**; if you later change it, sign-in fails with a redirect mismatch. Fix it in the console (Averyn project, app `averyn-web`) or recreate the IdP volume.
+- **Basemap:** `AVERYN_MAP_STYLE_URL` is a MapLibre style URL. Unset, the app uses a demo world style that is fine to try things out. Whoever serves the tiles learns which areas your users look at (the track itself is drawn in the browser and is never sent to them), so a real instance should point this at a tile service it trusts, or its own.
+- The container writes no access log, because request paths contain activity ids.
 
 ## Syncing from a phone
 
@@ -45,4 +53,4 @@ Debug Android builds and the current iOS builds allow plain HTTP for this; put t
 
 ## Not yet available (tracked)
 
-Backup/restore scripts and runbooks · upgrade guide · reverse-proxy/TLS example · troubleshooting · web app serving.
+Backup/restore scripts and runbooks · upgrade guide · reverse-proxy/TLS example · troubleshooting.
