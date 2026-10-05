@@ -13,7 +13,8 @@ import java.util.Base64
 
 /** A stand-in identity provider for tests: its own RSA key, a matching [jwks], and a token minter. */
 class TestIssuer(
-    val config: OidcConfig = OidcConfig(issuer = "https://idp.test", audience = "project-1", clientId = "app-1"),
+    val config: OidcConfig =
+        OidcConfig(issuer = "https://idp.test", audience = "project-1", clientId = "app-1", webClientId = "web-1"),
 ) {
     private val keys = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
 

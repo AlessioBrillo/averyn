@@ -20,11 +20,15 @@ import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 
-/** The OIDC provider Averyn trusts (ADR-0011). [audience] must appear in a token's `aud`; [clientId] is for apps. */
+/**
+ * The OIDC provider Averyn trusts (ADR-0011). [audience] must appear in a token's `aud`; [clientId] (mobile) and
+ * [webClientId] (browser) are the public apps in the same project, so both get tokens with that audience.
+ */
 data class OidcConfig(
     val issuer: String,
     val audience: String,
     val clientId: String,
+    val webClientId: String,
 )
 
 /** Name of the authentication provider that protects every `/v1` route except `/v1/client-config`. */

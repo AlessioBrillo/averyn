@@ -25,7 +25,7 @@ class AuthTest {
     private fun Application.protectedApp() {
         content()
         auth(idp.config, idp.jwks)
-        clientConfig(idp.config)
+        clientConfig(idp.config, "https://tiles.test/style.json")
         routing {
             authenticate(OIDC_AUTH) {
                 get("/whoami") { call.respondText(checkNotNull(call.principal<JWTPrincipal>()).payload.subject) }
@@ -86,6 +86,9 @@ class AuthTest {
             application { protectedApp() }
             val response = client.get("/v1/client-config")
             assertEquals(HttpStatusCode.OK, response.status)
-            assertTrue(response.bodyAsText().contains("\"clientId\":\"app-1\""))
+            val body = response.bodyAsText()
+            assertTrue(body.contains("\"clientId\":\"app-1\""))
+            assertTrue(body.contains("\"webClientId\":\"web-1\""))
+            assertTrue(body.contains("\"mapStyleUrl\":\"https://tiles.test/style.json\""))
         }
 }

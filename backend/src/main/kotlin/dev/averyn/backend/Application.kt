@@ -23,7 +23,10 @@ fun Application.module() {
             issuer = cfg.property("averyn.oidc.issuer").getString(),
             audience = cfg.property("averyn.oidc.audience").getString(),
             clientId = cfg.property("averyn.oidc.clientId").getString(),
+            webClientId = cfg.property("averyn.oidc.webClientId").getString(),
         )
+    val mapStyleUrl =
+        cfg.propertyOrNull("averyn.web.mapStyleUrl")?.getString()?.ifBlank { null } ?: DEFAULT_MAP_STYLE_URL
     val raw =
         RawObjectStore(
             endpoint = cfg.property("averyn.s3.endpoint").getString(),
@@ -34,9 +37,15 @@ fun Application.module() {
     content()
     observability(isReady = db::isReachable)
     auth(oidc)
-    clientConfig(oidc)
+    clientConfig(oidc, mapStyleUrl)
     activities(db, raw)
 }
+
+/**
+ * Demo-grade world style, fine to try the web app out. Whoever serves the tiles sees the area a user views, so a
+ * real instance sets AVERYN_MAP_STYLE_URL (docs/deployment/self-hosting.md).
+ */
+const val DEFAULT_MAP_STYLE_URL = "https://demotiles.maplibre.org/style.json"
 
 fun Application.content() {
     install(ContentNegotiation) { json() }

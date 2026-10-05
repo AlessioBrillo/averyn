@@ -61,14 +61,34 @@ if [ -z "${client_id}" ]; then
   client_id=$(printf '%s' "${created}" | first clientId)
 fi
 
-if [ -z "${project_id}" ] || [ -z "${client_id}" ]; then
+# The web app (TDD-0003): a public browser client in the same project, so its tokens carry the same audience.
+# WEB_ORIGIN is the public URL of the web app; the redirect must match what the SPA sends, character for character.
+found=$(api -X POST "${base}/management/v1/projects/${project_id}/apps/_search" \
+  -d '{"queries":[{"nameQuery":{"name":"averyn-web","method":"TEXT_QUERY_METHOD_EQUALS"}}]}')
+web_client_id=$(printf '%s' "${found}" | first clientId)
+if [ -z "${web_client_id}" ]; then
+  created=$(api -X POST "${base}/management/v1/projects/${project_id}/apps/oidc" -d '{
+    "name": "averyn-web",
+    "redirectUris": ["'"${WEB_ORIGIN}"'/callback"],
+    "postLogoutRedirectUris": ["'"${WEB_ORIGIN}"'/"],
+    "responseTypes": ["OIDC_RESPONSE_TYPE_CODE"],
+    "grantTypes": ["OIDC_GRANT_TYPE_AUTHORIZATION_CODE", "OIDC_GRANT_TYPE_REFRESH_TOKEN"],
+    "appType": "OIDC_APP_TYPE_USER_AGENT",
+    "authMethodType": "OIDC_AUTH_METHOD_TYPE_NONE",
+    "accessTokenType": "OIDC_TOKEN_TYPE_JWT",
+    "devMode": true
+  }')
+  web_client_id=$(printf '%s' "${created}" | first clientId)
+fi
+
+if [ -z "${project_id}" ] || [ -z "${client_id}" ] || [ -z "${web_client_id}" ]; then
   echo "could not determine project/client id" >&2
   exit 1
 fi
 
 # The project id is in every access token's `aud`, so it is the audience the backend checks.
 # Single-quoted: the backend entrypoint sources this file with a shell.
-printf "AVERYN_OIDC_ISSUER='%s'\nAVERYN_OIDC_AUDIENCE='%s'\nAVERYN_OIDC_CLIENT_ID='%s'\n" \
-  "${issuer}" "${project_id}" "${client_id}" > /oidc/oidc.env.tmp
+printf "AVERYN_OIDC_ISSUER='%s'\nAVERYN_OIDC_AUDIENCE='%s'\nAVERYN_OIDC_CLIENT_ID='%s'\nAVERYN_OIDC_WEB_CLIENT_ID='%s'\n" \
+  "${issuer}" "${project_id}" "${client_id}" "${web_client_id}" > /oidc/oidc.env.tmp
 mv /oidc/oidc.env.tmp /oidc/oidc.env
-echo "identity provider ready: project ${project_id}, client ${client_id}"
+echo "identity provider ready: project ${project_id}, client ${client_id}, web client ${web_client_id}"
