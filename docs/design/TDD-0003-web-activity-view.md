@@ -29,7 +29,7 @@ A signed-in user sees their uploaded activities in the web app: a list, and a de
 
 ## 4. Non-functional requirements
 
-- **Privacy:** the default basemap is a public tile service, so its operator sees which area a user views (not the track itself: the track is drawn client-side). This is stated in the self-hosting guide; a self-hoster can point `AVERYN_MAP_STYLE_URL` at their own tile server.
+- **Privacy:** the default basemap is a public demo style (MapLibre's), so its operator sees which area a user views (not the track itself: the track is drawn client-side). This is stated in the self-hosting guide; a self-hoster can point `AVERYN_MAP_STYLE_URL` at their own tile server.
 - **Security:** the web app is a public OIDC client (code + PKCE, no secret). A script injected into the page could read the token: accepted for now, see §8.
 - **Self-hosting:** one more container (static files + reverse proxy), no new stateful service.
 - **Size:** a list page is at most 100 summaries; a track is returned whole (a 10 h activity at 1 Hz is about 36 000 vertices, well under 2 MB as GeoJSON).
@@ -54,7 +54,7 @@ Display: pace (min/km) for run, walk and hike; speed (km/h) for ride.
 
 ### 5.3 Authentication
 
-The IdP gets a second app, `averyn-web` (user-agent type, authorization code + PKCE, refresh tokens), created by the idempotent `idp-init` in the same project as the mobile app. Both therefore share the access-token audience and the backend's validation is unchanged. Its redirect URI is `${WEB_ORIGIN}/callback`, where `WEB_ORIGIN` is the public URL of the web app and must match exactly. The SPA uses `oidc-client-ts` with scope `openid`, a `sessionStorage` user store and silent renew.
+The IdP gets a second app, `averyn-web` (user-agent type, authorization code + PKCE, refresh tokens), created by the idempotent `idp-init` in the same project as the mobile app. Both therefore share the access-token audience and the backend's validation is unchanged. Its redirect URI is `${WEB_ORIGIN}/callback`, where `WEB_ORIGIN` is the public URL of the web app and must match exactly. The SPA uses `oidc-client-ts` with scope `openid` and `sessionStorage` for both the user and the sign-in state. There is no silent renew: an expired token (or a `401`) shows the sign-in button again; refresh tokens (`offline_access`) can be added if that proves annoying.
 
 ### 5.4 Serving
 
