@@ -95,6 +95,9 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run build
+      # The map's worker is a separate module a bundler does not emit unless asked (ActivityDetail.tsx): a missing
+      # file only shows up in a browser as a blank map.
+      - run: ls dist/assets | grep -q '^maplibre-gl-worker-.*\.js$'
 
   docs:
     name: Docs (markdown, links)

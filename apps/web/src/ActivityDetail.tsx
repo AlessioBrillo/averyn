@@ -42,7 +42,10 @@ export function ActivityDetail({
     const lons = line.coordinates.map((c) => c[0])
     const lats = line.coordinates.map((c) => c[1])
     // maplibre-gl needs a browser (WebGL): load it on demand, which also keeps it out of the first bundle.
-    void import('maplibre-gl').then((maplibregl) => {
+    // Its worker is a separate module that a bundler does not emit by itself: ship it as one file and point at it.
+    void Promise.all([import('maplibre-gl'), import('maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url')]).then(
+      ([maplibregl, worker]) => {
+      maplibregl.setWorkerUrl(worker.default)
       if (disposed || !mapElement.current) return
       const created = new maplibregl.Map({
         container: mapElement.current,
@@ -64,7 +67,8 @@ export function ActivityDetail({
           paint: { 'line-color': '#e4572e', 'line-width': 4 },
         })
       })
-    })
+      },
+    )
     return () => {
       disposed = true
       map?.remove()
