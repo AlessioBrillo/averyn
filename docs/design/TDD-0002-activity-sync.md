@@ -14,7 +14,7 @@ A completed activity recorded offline on a device is uploaded to the backend as 
 
 **Goals:** offline-first, idempotent, resumable-by-retry upload of completed activities; per-user ownership; device and server computing identical metrics from identical bytes.
 
-**Non-goals (v1):** gzip and chunked upload; activity list and web UI; account deletion and export; editing metadata or visibility after upload; a `jobs` table or background worker; upload via a background `URLSession`; passkey/MFA (decided with the IdP, [ADR-0011](../adr/0011-identity-oidc.md)).
+**Non-goals (v1):** gzip and chunked upload; activity list and web UI ([TDD-0003](TDD-0003-web-activity-view.md)); account deletion and export; editing metadata or visibility after upload; a `jobs` table or background worker; upload via a background `URLSession`; passkey/MFA (decided with the IdP, [ADR-0011](../adr/0011-identity-oidc.md)).
 
 ## 3. Functional requirements
 

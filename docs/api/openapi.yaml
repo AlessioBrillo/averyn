@@ -48,6 +48,26 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ClientConfig" }
+  /v1/activities:
+    get:
+      summary: List the caller's activities, newest first (keyset pagination, TDD-0003)
+      security: [{ oidc: [] }]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: cursor
+          in: query
+          description: Opaque; the nextCursor of the previous page.
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ActivityPage" }
+        "400": { description: limit out of range or malformed cursor }
+        "401": { description: Missing or invalid token }
   /v1/activities/{clientActivityId}:
     put:
       summary: Upload a completed activity (idempotent, TDD-0002)
@@ -98,6 +118,24 @@ paths:
         "400": { description: Malformed activity id }
         "401": { description: Missing or invalid token }
         "404": { description: Not found, or not owned by the caller }
+  /v1/activities/{id}/track:
+    get:
+      summary: The activity's track as GeoJSON (owner only; 404 for anyone else, TDD-0003)
+      security: [{ oidc: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: A GeoJSON Feature; geometry is null when fewer than two samples counted towards the distance
+          content:
+            application/geo+json:
+              schema: { type: object }
+        "400": { description: Malformed activity id }
+        "401": { description: Missing or invalid token }
+        "404": { description: Not found, or not owned by the caller }
 components:
   securitySchemes:
     oidc:
@@ -108,13 +146,15 @@ components:
   schemas:
     ClientConfig:
       type: object
-      required: [issuer, clientId]
+      required: [issuer, clientId, webClientId, mapStyleUrl]
       properties:
         issuer: { type: string, format: uri }
-        clientId: { type: string }
+        clientId: { type: string, description: The native (mobile) OIDC app }
+        webClientId: { type: string, description: The browser OIDC app (same project and audience) }
+        mapStyleUrl: { type: string, format: uri, description: MapLibre style for the web basemap (deployment configuration) }
     ActivitySummary:
       type: object
-      required: [id, clientActivityId, sport, startedAt, finalState, distanceM, elapsedMs, movingMs, pausedMs, qualityGrade, droppedRecords, metricsAlgorithmVersion, qualityAlgorithmVersion, visibility]
+      required: [id, clientActivityId, sport, startedAt, finalState, distanceM, elapsedMs, movingMs, pausedMs, averageSpeedMps, qualityGrade, droppedRecords, metricsAlgorithmVersion, qualityAlgorithmVersion, visibility]
       properties:
         id: { type: string, format: uuid }
         clientActivityId: { type: string, format: uuid }
@@ -125,11 +165,21 @@ components:
         elapsedMs: { type: integer, format: int64 }
         movingMs: { type: integer, format: int64 }
         pausedMs: { type: integer, format: int64 }
+        averageSpeedMps: { type: number, description: "speed-v1: distance over moving time; 0 while nothing moved" }
+        paceSecPerKm: { type: [number, "null"], description: "speed-v1: 1000 / averageSpeedMps; null when the average speed is 0" }
         qualityGrade: { type: string, enum: [GOOD, FAIR, POOR] }
         droppedRecords: { type: integer, description: Stored lines that could not be read (counted, never silently dropped) }
         metricsAlgorithmVersion: { type: string, description: "Comma-separated, e.g. distance-v1,time-v1,speed-v1" }
         qualityAlgorithmVersion: { type: string }
         visibility: { type: string, enum: [private, followers, public, link] }
+    ActivityPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ActivitySummary" }
+        nextCursor: { type: [string, "null"], description: Null on the last page }
     Status:
       type: object
       required: [status]

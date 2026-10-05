@@ -25,7 +25,7 @@ Optional third-party sensor integration, see [ADR-0010](../adr/0010-ecosystem-bo
 
 ## MVP-1 work order
 
-Critical path: identity spike → build so the backend can use `shared/` → read-only replay → OIDC auth → activity ingest → `shared/sync` → app login and sync trigger. Spec: [TDD-0002](../design/TDD-0002-activity-sync.md). Web detail page, self-host hardening and data deletion/export follow.
+Critical path: identity spike → build so the backend can use `shared/` → read-only replay → OIDC auth → activity ingest → `shared/sync` → app login and sync trigger. Spec: [TDD-0002](../design/TDD-0002-activity-sync.md). Next: web activity list and detail page, [TDD-0003](../design/TDD-0003-web-activity-view.md). Self-host hardening and data deletion/export follow.
 
 ## MVP-0 work order
 
