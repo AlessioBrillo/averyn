@@ -57,7 +57,10 @@ export function ActivityDetail({
         fitBoundsOptions: { padding: 40 },
       })
       map = created
-      created.on('load', () => {
+      // As soon as the style is in, not on `load`: that waits for every tile and can come late (or never) on a slow
+      // or failing tile host, and the track must not depend on the basemap.
+      const addTrack = () => {
+        if (created.getSource('track') || !created.isStyleLoaded()) return
         created.addSource('track', { type: 'geojson', data: loaded.track as GeoJSONSourceSpecification['data'] })
         created.addLayer({
           id: 'track',
@@ -66,6 +69,15 @@ export function ActivityDetail({
           layout: { 'line-join': 'round', 'line-cap': 'round' },
           paint: { 'line-color': '#e4572e', 'line-width': 4 },
         })
+      }
+      created.on('styledata', addTrack)
+      // A basemap that cannot be fetched (tile host down, blocked, offline) must not take the track with it:
+      // fall back to an empty style once.
+      let fellBack = false
+      created.on('error', () => {
+        if (fellBack || created.isStyleLoaded()) return
+        fellBack = true
+        created.setStyle({ version: 8, sources: {}, layers: [] })
       })
       },
     )
