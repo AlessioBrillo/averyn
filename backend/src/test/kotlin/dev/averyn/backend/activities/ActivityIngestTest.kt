@@ -22,12 +22,17 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.testing.testApplication
 import io.ktor.utils.io.ByteReadChannel
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.io.files.Path
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.testcontainers.containers.GenericContainer
 import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.images.builder.Transferable
@@ -169,6 +174,8 @@ class ActivityIngestTest {
             assertEquals(live.metrics.elapsedMs, summary.elapsedMs)
             assertEquals(live.metrics.movingMs, summary.movingMs)
             assertEquals(live.metrics.pausedMs, summary.pausedMs)
+            assertEquals(live.metrics.averageSpeedMps, summary.averageSpeedMps)
+            assertEquals(live.metrics.paceSecPerKm, summary.paceSecPerKm)
             assertEquals(live.quality.grade.name, summary.qualityGrade)
             assertEquals("COMPLETED", summary.finalState)
             assertEquals("RUN", summary.sport)
@@ -316,6 +323,91 @@ class ActivityIngestTest {
             assertEquals(HttpStatusCode.Unauthorized, upload(rec.id, rec.bytes, token = idp.forgedToken()).status)
             assertEquals(HttpStatusCode.Unauthorized, get("/v1/activities/${rec.id}").status)
             assertEquals(HttpStatusCode.BadRequest, put("/v1/activities/nope") { bearerAuth(alice) }.status)
+        }
+
+    private suspend fun HttpClient.page(
+        query: String,
+        token: String = alice,
+    ) = get("/v1/activities$query") { bearerAuth(token) }
+
+    @Test
+    fun theListIsPagedByKeysetAndOnlyHoldsTheCallersActivities() =
+        app {
+            // All three share one start time, so the (started_at, id) tie-break is what keeps the pages disjoint.
+            val ids =
+                List(3) {
+                    record().also { rec ->
+                        upload(rec.id, rec.bytes, token = alice)
+                    }
+                }.map { it.id.toString() }
+            val bobs = record().also { upload(it.id, it.bytes, token = bob) }
+
+            val first = page("?limit=2")
+            assertEquals(HttpStatusCode.OK, first.status)
+            val firstPage = json.decodeFromString(ActivityPage.serializer(), first.bodyAsText())
+            assertEquals(2, firstPage.items.size)
+            val cursor = checkNotNull(firstPage.nextCursor)
+
+            val second = json.decodeFromString(ActivityPage.serializer(), page("?limit=2&cursor=$cursor").bodyAsText())
+            assertEquals(1, second.items.size)
+            assertEquals(null, second.nextCursor)
+
+            val seen = (firstPage.items + second.items).map { it.clientActivityId }
+            assertEquals(ids.sorted(), seen.sorted()) // every activity exactly once, none of Bob's
+            assertTrue(bobs.id.toString() !in seen)
+
+            val bobList = json.decodeFromString(ActivityPage.serializer(), page("", token = bob).bodyAsText())
+            assertEquals(listOf(bobs.id.toString()), bobList.items.map { it.clientActivityId })
+            assertEquals(null, bobList.nextCursor)
+        }
+
+    @Test
+    fun listParametersAreValidatedAndTheListNeedsAToken() =
+        app {
+            assertEquals(HttpStatusCode.BadRequest, page("?limit=0").status)
+            assertEquals(HttpStatusCode.BadRequest, page("?limit=101").status)
+            assertEquals(HttpStatusCode.BadRequest, page("?limit=abc").status)
+            assertEquals(HttpStatusCode.BadRequest, page("?cursor=garbage").status)
+            assertEquals(HttpStatusCode.OK, page("?limit=100").status)
+            assertEquals(HttpStatusCode.Unauthorized, get("/v1/activities").status)
+        }
+
+    @Test
+    fun theTrackIsGeoJsonOfTheAcceptedSamplesAndOnlyForTheOwner() =
+        app {
+            val rec = record()
+            val created = upload(rec.id, rec.bytes, token = alice).summary()
+
+            val response = get("/v1/activities/${created.id}/track") { bearerAuth(alice) }
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertEquals("application/geo+json", response.contentType()?.withoutParameters()?.toString())
+            val geometry =
+                json
+                    .parseToJsonElement(response.bodyAsText())
+                    .jsonObject
+                    .getValue("geometry")
+                    .jsonObject
+            assertEquals("LineString", geometry.getValue("type").jsonPrimitive.content)
+            assertEquals(6, geometry.getValue("coordinates").jsonArray.size)
+
+            assertEquals(HttpStatusCode.NotFound, get("/v1/activities/${created.id}/track") { bearerAuth(bob) }.status)
+            assertEquals(
+                HttpStatusCode.NotFound,
+                get("/v1/activities/${UUID.randomUUID()}/track") { bearerAuth(alice) }.status,
+            )
+            assertEquals(HttpStatusCode.BadRequest, get("/v1/activities/nope/track") { bearerAuth(alice) }.status)
+            assertEquals(HttpStatusCode.Unauthorized, get("/v1/activities/${created.id}/track").status)
+        }
+
+    @Test
+    fun anActivityWithoutATrackYieldsANullGeometry() =
+        app {
+            val rec = record()
+            val created = upload(rec.id, rec.bytes).summary()
+            db.connection.use { it.createStatement().execute("UPDATE activities SET track = NULL") }
+
+            val body = get("/v1/activities/${created.id}/track") { bearerAuth(alice) }.bodyAsText()
+            assertTrue(json.parseToJsonElement(body).jsonObject.getValue("geometry") is JsonNull)
         }
 
     @Test

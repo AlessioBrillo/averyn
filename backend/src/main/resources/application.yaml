@@ -17,6 +17,10 @@ averyn:
     issuer: "$AVERYN_OIDC_ISSUER"
     audience: "$AVERYN_OIDC_AUDIENCE"
     clientId: "$AVERYN_OIDC_CLIENT_ID"
+    webClientId: "$AVERYN_OIDC_WEB_CLIENT_ID"
+  # Web basemap (TDD-0003): a MapLibre style URL; optional, a demo style is used when unset.
+  web:
+    mapStyleUrl: "$?AVERYN_MAP_STYLE_URL"
   # Raw activity files (ADR-0016): any S3-compatible store.
   s3:
     endpoint: "$AVERYN_S3_ENDPOINT"

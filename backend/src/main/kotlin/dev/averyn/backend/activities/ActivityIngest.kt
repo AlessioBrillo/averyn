@@ -34,12 +34,37 @@ data class ActivitySummary(
     val elapsedMs: Long,
     val movingMs: Long,
     val pausedMs: Long,
+    val averageSpeedMps: Double,
+    /** null when the average speed is 0 (speed-v1). */
+    val paceSecPerKm: Double?,
     val qualityGrade: String,
     val droppedRecords: Int,
     val metricsAlgorithmVersion: String,
     val qualityAlgorithmVersion: String,
     val visibility: String,
 )
+
+@Serializable
+data class ActivityPage(
+    val items: List<ActivitySummary>,
+    /** Opaque; null on the last page. */
+    val nextCursor: String?,
+)
+
+/** Keyset position `(started_at, id)` of the last activity of a page, as `"<instant>_<uuid>"`. */
+data class ActivityCursor(
+    val startedAt: Instant,
+    val id: UUID,
+) {
+    override fun toString() = "${startedAt}_$id"
+
+    companion object {
+        fun parseOrNull(text: String): ActivityCursor? =
+            runCatching {
+                ActivityCursor(Instant.parse(text.substringBefore('_')), UUID.fromString(text.substringAfter('_')))
+            }.getOrNull()
+    }
+}
 
 sealed interface IngestResult {
     data class Created(
@@ -120,8 +145,9 @@ class ActivityIngest(
                         """
                         INSERT INTO activities (owner_id, client_activity_id, sport, started_at, final_state,
                             raw_object_key, raw_sha256, raw_size_bytes, distance_m, elapsed_ms, moving_ms, paused_ms,
-                            quality_grade, dropped_records, metrics_algorithm_version, quality_algorithm_version, track)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ST_GeomFromText(?, 4326))
+                            average_speed_mps, pace_sec_per_km, quality_grade, dropped_records,
+                            metrics_algorithm_version, quality_algorithm_version, track)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ST_GeomFromText(?, 4326))
                         ON CONFLICT (owner_id, client_activity_id) DO NOTHING
                         RETURNING $SUMMARY_COLUMNS
                         """.trimIndent(),
@@ -139,6 +165,8 @@ class ActivityIngest(
                         stmt.setLong(++i, snapshot.elapsedMs)
                         stmt.setLong(++i, snapshot.movingMs)
                         stmt.setLong(++i, snapshot.pausedMs)
+                        stmt.setDouble(++i, snapshot.averageSpeedMps)
+                        stmt.setObject(++i, snapshot.paceSecPerKm, java.sql.Types.DOUBLE)
                         stmt.setString(++i, quality.grade.name)
                         stmt.setInt(++i, replayed.recordLosses.values.sum())
                         stmt.setString(++i, METRICS_ALGORITHM_VERSION)
@@ -162,6 +190,67 @@ class ActivityIngest(
                 stmt.setObject(1, id)
                 stmt.setObject(2, ownerId)
                 stmt.executeQuery().use { rs -> if (rs.next()) rs.toSummary() else null }
+            }
+        }
+
+    /** The caller's activities, newest first, one page after [after]; `limit + 1` rows tell whether there is more. */
+    fun list(
+        ownerId: UUID,
+        limit: Int,
+        after: ActivityCursor?,
+    ): ActivityPage {
+        val rows =
+            db.connection.use { conn ->
+                conn
+                    .prepareStatement(
+                        """
+                        SELECT $SUMMARY_COLUMNS FROM activities
+                        WHERE owner_id = ? AND (?::timestamptz IS NULL OR (started_at, id) < (?::timestamptz, ?::uuid))
+                        ORDER BY started_at DESC, id DESC LIMIT ?
+                        """.trimIndent(),
+                    ).use { stmt ->
+                        val cursorTime = after?.let { Timestamp.from(it.startedAt) }
+                        stmt.setObject(1, ownerId)
+                        stmt.setTimestamp(2, cursorTime)
+                        stmt.setTimestamp(3, cursorTime)
+                        stmt.setObject(4, after?.id)
+                        stmt.setInt(5, limit + 1)
+                        stmt.executeQuery().use { rs ->
+                            buildList { while (rs.next()) add(rs.toSummary()) }
+                        }
+                    }
+            }
+        val items = rows.take(limit)
+        val next =
+            if (rows.size > limit) {
+                items.last().let { ActivityCursor(Instant.parse(it.startedAt), UUID.fromString(it.id)).toString() }
+            } else {
+                null
+            }
+        return ActivityPage(items, next)
+    }
+
+    /**
+     * The activity's track as a GeoJSON Feature (geometry `null` without a track), or null when the activity does
+     * not exist or is not the caller's.
+     */
+    fun trackGeoJson(
+        ownerId: UUID,
+        id: UUID,
+    ): String? =
+        db.connection.use { conn ->
+            val sql = "SELECT ST_AsGeoJSON(track) FROM activities WHERE id = ? AND owner_id = ?"
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.setObject(1, id)
+                stmt.setObject(2, ownerId)
+                stmt.executeQuery().use { rs ->
+                    if (rs.next()) {
+                        val geometry = rs.getString(1) ?: "null"
+                        """{"type":"Feature","properties":{},"geometry":$geometry}"""
+                    } else {
+                        null
+                    }
+                }
             }
         }
 
@@ -195,7 +284,8 @@ class ActivityIngest(
 
 private const val SUMMARY_COLUMNS =
     "id, client_activity_id, sport, started_at, final_state, distance_m, elapsed_ms, moving_ms, paused_ms, " +
-        "quality_grade, dropped_records, metrics_algorithm_version, quality_algorithm_version, visibility"
+        "average_speed_mps, pace_sec_per_km, quality_grade, dropped_records, metrics_algorithm_version, " +
+        "quality_algorithm_version, visibility"
 
 private fun ResultSet.toSummary(columnOffset: Int = 0): ActivitySummary {
     var i = columnOffset
@@ -209,6 +299,8 @@ private fun ResultSet.toSummary(columnOffset: Int = 0): ActivitySummary {
         elapsedMs = getLong(++i),
         movingMs = getLong(++i),
         pausedMs = getLong(++i),
+        averageSpeedMps = getDouble(++i),
+        paceSecPerKm = getDouble(++i).takeUnless { wasNull() },
         qualityGrade = getString(++i),
         droppedRecords = getInt(++i),
         metricsAlgorithmVersion = getString(++i),
