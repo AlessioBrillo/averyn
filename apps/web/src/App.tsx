@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Account } from './Account'
 import { ActivityDetail } from './ActivityDetail'
 import { ActivityList } from './ActivityList'
 import { signIn, signOut, start } from './auth'
@@ -48,7 +49,20 @@ export function App() {
             Averyn
           </a>
         </h1>
-        {state.status === 'ready' && state.session.signedIn && <button onClick={() => void signOut()}>Sign out</button>}
+        {state.status === 'ready' && state.session.signedIn && (
+          <nav>
+            <a
+              href="/account"
+              onClick={(e) => {
+                e.preventDefault()
+                navigate('/account')
+              }}
+            >
+              Account
+            </a>{' '}
+            <button onClick={() => void signOut()}>Sign out</button>
+          </nav>
+        )}
       </header>
       {state.status === 'loading' && <p>Loading…</p>}
       {state.status === 'error' && <p role="alert">Could not reach the server or the identity provider.</p>}
@@ -57,8 +71,15 @@ export function App() {
           <p>
             <button onClick={() => void signIn()}>Sign in</button>
           </p>
+        ) : path === '/account' ? (
+          <Account onUnauthorized={expired} />
         ) : detail ? (
-          <ActivityDetail id={detail[1]} mapStyleUrl={state.session.config.mapStyleUrl} onUnauthorized={expired} />
+          <ActivityDetail
+            id={detail[1]}
+            mapStyleUrl={state.session.config.mapStyleUrl}
+            onUnauthorized={expired}
+            onDeleted={() => navigate('/')}
+          />
         ) : (
           <ActivityList open={(id) => navigate(`/activities/${id}`)} onUnauthorized={expired} />
         ))}

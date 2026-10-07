@@ -46,14 +46,31 @@ export class ApiError extends Error {
   }
 }
 
-/** An authenticated GET. A missing or expired token is a 401 like the server's: the UI offers sign-in again. */
-async function get<T>(path: string): Promise<T> {
+/** An authenticated request. A missing or expired token is a 401 like the server's: the UI offers sign-in again. */
+async function request(path: string, method = 'GET'): Promise<Response> {
   const token = await currentToken()
   if (!token) throw new ApiError(401)
-  const response = await fetch(path, { headers: { Authorization: `Bearer ${token}` } })
+  const response = await fetch(path, { method, headers: { Authorization: `Bearer ${token}` } })
   if (!response.ok) throw new ApiError(response.status)
-  return (await response.json()) as T
+  return response
 }
+
+async function get<T>(path: string): Promise<T> {
+  return (await (await request(path)).json()) as T
+}
+
+/** Removes the activity and its raw file for good (ADR-0017). */
+export const deleteActivity = async (id: string) => {
+  await request(`/v1/activities/${encodeURIComponent(id)}`, 'DELETE')
+}
+
+/** Removes everything Averyn holds for the user; the identity at the identity provider stays (ADR-0017). */
+export const deleteAccount = async () => {
+  await request('/v1/me', 'DELETE')
+}
+
+/** Everything the user has stored, as a ZIP (TDD-0004). A plain link cannot carry the bearer token, hence a fetch. */
+export const downloadExport = async () => (await request('/v1/me/export')).blob()
 
 export function listActivities(cursor?: string): Promise<ActivityPage> {
   const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''
