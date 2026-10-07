@@ -1,8 +1,10 @@
 package dev.averyn.backend.activities
 
+import dev.averyn.backend.auth.AccountDeletedException
 import dev.averyn.backend.auth.OIDC_AUTH
 import dev.averyn.backend.auth.userIdFor
 import dev.averyn.backend.storage.RawObjectStore
+import io.ktor.http.ContentDisposition
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -15,7 +17,9 @@ import io.ktor.server.request.contentLength
 import io.ktor.server.request.receiveChannel
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondOutputStream
 import io.ktor.server.response.respondText
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.put
 import io.ktor.server.routing.routing
@@ -40,10 +44,15 @@ private val GEO_JSON = ContentType("application", "geo+json")
 /** Uploads handled at once: each holds an IO thread and up to [MAX_ACTIVITY_BYTES] of spooled disk. */
 const val MAX_CONCURRENT_UPLOADS = 8
 
+/** Exports handled at once: each streams a whole archive. */
+const val MAX_CONCURRENT_EXPORTS = 2
+
 /**
  * `PUT /v1/activities/{clientActivityId}`, `GET /v1/activities` (list), `GET /v1/activities/{id}` and
- * `GET /v1/activities/{id}/track`, owner-only (TDD-0002 §5.1, TDD-0003 §5.1). When all
- * [uploadSlots] are taken a further upload gets `503` + `Retry-After`, which the apps treat as retryable.
+ * `GET /v1/activities/{id}/track`, owner-only (TDD-0002 §5.1, TDD-0003 §5.1); `DELETE /v1/activities/{id}`,
+ * `DELETE /v1/me` and `GET /v1/me/export` (TDD-0004). When all [uploadSlots] (or [exportSlots]) are taken a further
+ * upload (export) gets `503` + `Retry-After`, which the apps treat as retryable. A deleted account gets `403` on
+ * everything but repeating `DELETE /v1/me`.
  *
  * ponytail: the bound is global, not per user. Add per-user quotas / rate limits before any public instance
  * (docs/privacy/threat-model.md).
@@ -53,8 +62,10 @@ fun Application.activities(
     raw: RawObjectStore,
     maxBytes: Long = MAX_ACTIVITY_BYTES,
     uploadSlots: Semaphore = Semaphore(MAX_CONCURRENT_UPLOADS),
+    exportSlots: Semaphore = Semaphore(MAX_CONCURRENT_EXPORTS),
 ) {
     val ingest = ActivityIngest(db, raw)
+    val userData = UserData(db, raw)
 
     routing {
         authenticate(OIDC_AUTH) {
@@ -66,7 +77,7 @@ fun Application.activities(
                 if (declared != null && declared > maxBytes) {
                     return@put call.respond(HttpStatusCode.PayloadTooLarge, errorBody("activity file too large"))
                 }
-                val principal = checkNotNull(call.principal<JWTPrincipal>())
+                val owner = call.owner(db) ?: return@put
                 if (!uploadSlots.tryAcquire()) {
                     call.response.header(HttpHeaders.RetryAfter, "5")
                     return@put call.respond(
@@ -85,7 +96,7 @@ fun Application.activities(
                                 if (sha256 == null) {
                                     IngestResult.TooLarge
                                 } else {
-                                    ingest.ingest(db.userIdFor(principal), clientId, file, sha256)
+                                    ingest.ingest(owner, clientId, file, sha256)
                                 }
                             } finally {
                                 dir.toFile().deleteRecursively()
@@ -102,6 +113,8 @@ fun Application.activities(
                             HttpStatusCode.Conflict,
                             errorBody("activity id already uploaded with different content"),
                         )
+                    IngestResult.Gone ->
+                        call.respond(HttpStatusCode.Gone, errorBody("activity was deleted and is not accepted again"))
                     IngestResult.TooLarge ->
                         call.respond(
                             HttpStatusCode.PayloadTooLarge,
@@ -132,17 +145,17 @@ fun Application.activities(
                         ActivityCursor.parseOrNull(it)
                             ?: return@get call.respond(HttpStatusCode.BadRequest, errorBody("malformed cursor"))
                     }
-                val principal = checkNotNull(call.principal<JWTPrincipal>())
-                call.respond(withContext(Dispatchers.IO) { ingest.list(db.userIdFor(principal), limit, after) })
+                val owner = call.owner(db) ?: return@get
+                call.respond(withContext(Dispatchers.IO) { ingest.list(owner, limit, after) })
             }
 
             get("/v1/activities/{id}/track") {
                 val id =
                     call.parameters["id"]?.toUuidOrNull()
                         ?: return@get call.respond(HttpStatusCode.BadRequest, errorBody("malformed activity id"))
-                val principal = checkNotNull(call.principal<JWTPrincipal>())
+                val owner = call.owner(db) ?: return@get
                 val feature =
-                    withContext(Dispatchers.IO) { ingest.trackGeoJson(db.userIdFor(principal), id) }
+                    withContext(Dispatchers.IO) { ingest.trackGeoJson(owner, id) }
                         ?: return@get call.respond(HttpStatusCode.NotFound, errorBody("not found"))
                 call.respondText(feature, GEO_JSON)
             }
@@ -151,14 +164,73 @@ fun Application.activities(
                 val id =
                     call.parameters["id"]?.toUuidOrNull()
                         ?: return@get call.respond(HttpStatusCode.BadRequest, errorBody("malformed activity id"))
-                val principal = checkNotNull(call.principal<JWTPrincipal>())
+                val owner = call.owner(db) ?: return@get
                 val summary =
-                    withContext(Dispatchers.IO) { ingest.find(db.userIdFor(principal), id) }
+                    withContext(Dispatchers.IO) { ingest.find(owner, id) }
                         // Not yours and not existing look identical (S5): never reveal that someone else's id is real.
                         ?: return@get call.respond(HttpStatusCode.NotFound, errorBody("not found"))
                 call.respond(summary)
             }
+
+            delete("/v1/activities/{id}") {
+                val id =
+                    call.parameters["id"]?.toUuidOrNull()
+                        ?: return@delete call.respond(HttpStatusCode.BadRequest, errorBody("malformed activity id"))
+                val owner = call.owner(db) ?: return@delete
+                if (withContext(Dispatchers.IO) { userData.deleteActivity(owner, id) }) {
+                    call.respond(HttpStatusCode.NoContent)
+                } else {
+                    call.respond(HttpStatusCode.NotFound, errorBody("not found"))
+                }
+            }
+
+            // The one call a deleted account may repeat: it finishes a deletion that failed half-way.
+            delete("/v1/me") {
+                val owner = call.owner(db, allowDeleted = true) ?: return@delete
+                withContext(Dispatchers.IO) { userData.deleteAccount(owner) }
+                call.respond(HttpStatusCode.NoContent)
+            }
+
+            get("/v1/me/export") {
+                val owner = call.owner(db) ?: return@get
+                if (!exportSlots.tryAcquire()) {
+                    call.response.header(HttpHeaders.RetryAfter, "5")
+                    return@get call.respond(
+                        HttpStatusCode.ServiceUnavailable,
+                        errorBody("too many exports, retry later"),
+                    )
+                }
+                try {
+                    val disposition =
+                        ContentDisposition.Attachment.withParameter(
+                            ContentDisposition.Parameters.FileName,
+                            "averyn-export.zip",
+                        )
+                    call.response.header(HttpHeaders.ContentDisposition, disposition.toString())
+                    call.respondOutputStream(ContentType.Application.Zip) { userData.export(owner, this) }
+                } finally {
+                    exportSlots.release()
+                }
+            }
         }
+    }
+}
+
+/**
+ * The caller's Averyn user id, or null after answering `403` because the account was deleted (ADR-0017).
+ *
+ * ponytail: the export bound is global, not per user; per-user quotas come with the rate-limit slice.
+ */
+private suspend fun ApplicationCall.owner(
+    db: DataSource,
+    allowDeleted: Boolean = false,
+): UUID? {
+    val principal = checkNotNull(principal<JWTPrincipal>())
+    return try {
+        withContext(Dispatchers.IO) { db.userIdFor(principal, allowDeleted) }
+    } catch (e: AccountDeletedException) {
+        respond(HttpStatusCode.Forbidden, errorBody("account deleted"))
+        null
     }
 }
 

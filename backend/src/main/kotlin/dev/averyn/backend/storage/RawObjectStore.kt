@@ -10,7 +10,9 @@ import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.model.Delete
 import software.amazon.awssdk.services.s3.model.NoSuchBucketException
+import software.amazon.awssdk.services.s3.model.ObjectIdentifier
 import java.net.URI
 import java.nio.file.Path
 
@@ -71,5 +73,27 @@ class RawObjectStore(
         file: Path,
     ) {
         s3.putObject({ it.bucket(bucket).key(key).contentType("application/x-ndjson") }, RequestBody.fromFile(file))
+    }
+
+    /** Deleting a key that is not there succeeds (S3 semantics), so a retried deletion is harmless. */
+    fun delete(key: String) {
+        s3.deleteObject { it.bucket(bucket).key(key) }
+    }
+
+    /** Every object whose key starts with [prefix] (paged listing, deleted in batches of up to 1000). */
+    fun deletePrefix(prefix: String) {
+        s3.listObjectsV2Paginator { it.bucket(bucket).prefix(prefix) }.forEach { page ->
+            val ids = page.contents().map { ObjectIdentifier.builder().key(it.key()).build() }
+            if (ids.isNotEmpty()) {
+                val batch =
+                    Delete
+                        .builder()
+                        .objects(ids)
+                        .quiet(true)
+                        .build()
+                val result = s3.deleteObjects { it.bucket(bucket).delete(batch) }
+                check(result.errors().isEmpty()) { "object store refused to delete ${result.errors().size} objects" }
+            }
+        }
     }
 }
