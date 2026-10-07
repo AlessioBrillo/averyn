@@ -96,7 +96,9 @@ paths:
               schema: { $ref: "#/components/schemas/ActivitySummary" }
         "400": { description: Malformed activity id }
         "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted (ADR-0017) }
         "409": { description: Same id already uploaded with different bytes }
+        "410": { description: This activity id was deleted by its owner and is not accepted again (ADR-0017) }
         "413": { description: Body over the size limit }
         "422": { description: Unparseable file, no metadata, or activity not in a terminal state }
         "503": { description: Too many uploads in progress, retry after the Retry-After seconds }
@@ -118,6 +120,20 @@ paths:
         "400": { description: Malformed activity id }
         "401": { description: Missing or invalid token }
         "404": { description: Not found, or not owned by the caller }
+    delete:
+      summary: Delete one activity and its raw file (owner only; 404 for anyone else, ADR-0017)
+      security: [{ oidc: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Deleted; the same id can no longer be uploaded }
+        "400": { description: Malformed activity id }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "404": { description: Not found, or not owned by the caller }
   /v1/activities/{id}/track:
     get:
       summary: The activity's track as GeoJSON (owner only; 404 for anyone else, TDD-0003)
@@ -136,6 +152,29 @@ paths:
         "400": { description: Malformed activity id }
         "401": { description: Missing or invalid token }
         "404": { description: Not found, or not owned by the caller }
+  /v1/me:
+    delete:
+      summary: Delete all of the caller's data held by Averyn (idempotent; the identity at the IdP is not touched, ADR-0017)
+      security: [{ oidc: [] }]
+      responses:
+        "204": { description: Deleted; any further call except this one answers 403 }
+        "401": { description: Missing or invalid token }
+  /v1/me/export:
+    get:
+      summary: Download all of the caller's data as a ZIP (TDD-0004)
+      description: >
+        Entries: raw/{clientActivityId}.jsonl (byte-for-byte), gpx/{clientActivityId}.gpx, activities.json
+        (summaries and skipped-line counts, written last). Streamed.
+      security: [{ oidc: [] }]
+      responses:
+        "200":
+          description: The archive
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "503": { description: Too many exports in progress, retry after the Retry-After seconds }
 components:
   securitySchemes:
     oidc:

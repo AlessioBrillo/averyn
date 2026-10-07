@@ -51,6 +51,10 @@ Debug Android builds and the current iOS builds allow plain HTTP for this; put t
 - The backend is bound to `127.0.0.1` (host port `BACKEND_PORT`, default 8080; `AVERYN_BIND=0.0.0.0` also exposes the unauthenticated `/metrics`, so only use it on a trusted LAN). Put a TLS-terminating reverse proxy in front for public access, and do not proxy `/metrics`.
 - Keep `.env` out of version control.
 
+## Deleting data and backups
+
+Users can delete an activity, delete their account's data and download an export from the web app ([ADR-0017](../adr/0017-data-deletion-and-retention.md)). Deleting the account removes Averyn's data only: close the person's identity in your identity provider separately (in the bundled Zitadel: Users, select the user, Delete). Deletion is immediate in the database and object store, but **your backups still hold the data**: make them expire within a retention period you choose and state to your users (we suggest at most 35 days). After restoring a backup, delete again whatever users deleted since it was taken.
+
 ## Not yet available (tracked)
 
 Backup/restore scripts and runbooks · upgrade guide · reverse-proxy/TLS example · troubleshooting.
