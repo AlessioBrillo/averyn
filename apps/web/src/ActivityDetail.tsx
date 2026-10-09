@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GeoJSONSourceSpecification, Map as MapLibreMap } from 'maplibre-gl'
-import { ApiError, getActivity, getTrack } from './api'
+import { ApiError, deleteActivity, getActivity, getTrack } from './api'
 import type { ActivitySummary, Track } from './api'
 import { formatDistance, formatDuration, formatRate } from './format'
 
@@ -11,13 +11,16 @@ export function ActivityDetail({
   id,
   mapStyleUrl,
   onUnauthorized,
+  onDeleted,
 }: {
   id: string
   mapStyleUrl: string
   onUnauthorized: () => void
+  onDeleted: () => void
 }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [error, setError] = useState<'notFound' | 'failed' | null>(null)
+  const [deleteFailed, setDeleteFailed] = useState(false)
   const mapElement = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -87,6 +90,15 @@ export function ActivityDetail({
     }
   }, [loaded, line, mapStyleUrl])
 
+  function remove() {
+    if (!window.confirm('Delete this activity and its recorded data for good? This cannot be undone.')) return
+    setDeleteFailed(false)
+    deleteActivity(id).then(onDeleted, (e: unknown) => {
+      if (e instanceof ApiError && e.status === 401) onUnauthorized()
+      else setDeleteFailed(true)
+    })
+  }
+
   if (error === 'notFound') return <p role="alert">Activity not found.</p>
   if (error) return <p role="alert">Could not load this activity.</p>
   if (!loaded) return <p>Loading…</p>
@@ -122,6 +134,10 @@ export function ActivityDetail({
       </dl>
       <p className="small">
         Algorithms: {activity.metricsAlgorithmVersion}, {activity.qualityAlgorithmVersion}
+      </p>
+      {deleteFailed && <p role="alert">Could not delete this activity. Try again.</p>}
+      <p>
+        <button onClick={remove}>Delete activity</button>
       </p>
     </>
   )

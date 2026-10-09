@@ -15,6 +15,7 @@ export function ActivityList({
   const [next, setNext] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
+  const [accountDeleted, setAccountDeleted] = useState(false)
 
   const fetchPage = useCallback(
     (cursor?: string) =>
@@ -25,6 +26,7 @@ export function ActivityList({
         })
         .catch((e: unknown) => {
           if (e instanceof ApiError && e.status === 401) onUnauthorized()
+          else if (e instanceof ApiError && e.status === 403) setAccountDeleted(true)
           else setFailed(true)
         })
         .finally(() => setLoading(false)),
@@ -41,6 +43,7 @@ export function ActivityList({
     void fetchPage(cursor)
   }
 
+  if (accountDeleted) return <p role="alert">This account was deleted. Its data is gone from Averyn.</p>
   if (failed) {
     return (
       <p role="alert">
