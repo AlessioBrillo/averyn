@@ -22,10 +22,11 @@ export function Account({ onUnauthorized }: { onUnauthorized: () => void }) {
   const download = () =>
     run(async () => {
       const link = document.createElement('a')
-      link.href = URL.createObjectURL(await downloadExport())
+      const url = URL.createObjectURL(await downloadExport())
+      link.href = url
       link.download = 'averyn-export.zip'
       link.click()
-      URL.revokeObjectURL(link.href)
+      setTimeout(() => URL.revokeObjectURL(url), 60_000) // not at once: some browsers start the save asynchronously
     }, 'Could not download your data. Try again.')
 
   const remove = () =>
