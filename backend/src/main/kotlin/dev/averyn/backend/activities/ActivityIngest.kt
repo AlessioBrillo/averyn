@@ -85,6 +85,9 @@ sealed interface IngestResult {
 
     /** Over the upload limit; produced by the route while reading the body, never by [ActivityIngest]. */
     data object TooLarge : IngestResult
+
+    /** The owner deleted this activity id (ADR-0017): it is not accepted again. */
+    data object Gone : IngestResult
 }
 
 /**
@@ -105,6 +108,7 @@ class ActivityIngest(
         file: java.nio.file.Path,
         sha256: String,
     ): IngestResult {
+        if (wasDeleted(ownerId, clientActivityId)) return IngestResult.Gone
         existing(ownerId, clientActivityId)?.let { return resolve(it, sha256) }
 
         val store = ActivityStore(Path(file.parent.toString()))
@@ -276,18 +280,32 @@ class ActivityIngest(
                 }
         }
 
+    private fun wasDeleted(
+        ownerId: UUID,
+        clientActivityId: UUID,
+    ): Boolean =
+        db.connection.use { conn ->
+            conn
+                .prepareStatement("SELECT 1 FROM deleted_activities WHERE owner_id = ? AND client_activity_id = ?")
+                .use { stmt ->
+                    stmt.setObject(1, ownerId)
+                    stmt.setObject(2, clientActivityId)
+                    stmt.executeQuery().use { it.next() }
+                }
+        }
+
     private fun resolve(
         existing: Existing,
         sha256: String,
     ): IngestResult = if (existing.sha256 == sha256) IngestResult.Existing(existing.summary) else IngestResult.Conflict
 }
 
-private const val SUMMARY_COLUMNS =
+internal const val SUMMARY_COLUMNS =
     "id, client_activity_id, sport, started_at, final_state, distance_m, elapsed_ms, moving_ms, paused_ms, " +
         "average_speed_mps, pace_sec_per_km, quality_grade, dropped_records, metrics_algorithm_version, " +
         "quality_algorithm_version, visibility"
 
-private fun ResultSet.toSummary(columnOffset: Int = 0): ActivitySummary {
+internal fun ResultSet.toSummary(columnOffset: Int = 0): ActivitySummary {
     var i = columnOffset
     return ActivitySummary(
         id = getObject(++i, UUID::class.java).toString(),

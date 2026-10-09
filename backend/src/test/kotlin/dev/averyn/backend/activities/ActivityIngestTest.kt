@@ -15,11 +15,13 @@ import dev.averyn.tracking.ActivityStore
 import dev.averyn.tracking.CompletedActivity
 import io.ktor.client.HttpClient
 import io.ktor.client.request.bearerAuth
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
@@ -38,10 +40,12 @@ import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.images.builder.Transferable
 import org.testcontainers.postgresql.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException
 import java.io.File
 import java.nio.file.Files
 import java.security.MessageDigest
 import java.util.UUID
+import java.util.zip.ZipInputStream
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -134,12 +138,13 @@ class ActivityIngestTest {
     private fun app(
         maxBytes: Long = MAX_ACTIVITY_BYTES,
         uploadSlots: Semaphore = Semaphore(MAX_CONCURRENT_UPLOADS),
+        exportSlots: Semaphore = Semaphore(MAX_CONCURRENT_EXPORTS),
         block: suspend HttpClient.() -> Unit,
     ) = testApplication {
         application {
             content()
             auth(idp.config, idp.jwks)
-            activities(db, raw, maxBytes, uploadSlots)
+            activities(db, raw, maxBytes, uploadSlots, exportSlots)
         }
         client.block()
     }
@@ -438,4 +443,161 @@ class ActivityIngestTest {
                 ),
             )
         }
+
+    private fun rawFileExists(key: String) =
+        try {
+            raw.get(key)
+            true
+        } catch (e: NoSuchKeyException) {
+            false
+        }
+
+    private fun unzip(bytes: ByteArray): Map<String, ByteArray> =
+        ZipInputStream(bytes.inputStream()).use { zip ->
+            buildMap { generateSequence { zip.nextEntry }.forEach { put(it.name, zip.readBytes()) } }
+        }
+
+    private fun keysOf(subject: String): List<String> =
+        db.connection.use { conn ->
+            val sql =
+                "SELECT raw_object_key FROM activities a JOIN users u ON u.id = a.owner_id WHERE u.oidc_subject = ?"
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.setString(1, subject)
+                stmt.executeQuery().use { rs -> buildList { while (rs.next()) add(rs.getString(1)) } }
+            }
+        }
+
+    @Test
+    fun deletingAnActivityRemovesRowAndFileAndTheSameIdIsRefusedAfterwards() =
+        app {
+            val rec = record()
+            val created = upload(rec.id, rec.bytes).summary()
+            val key = keysOf("alice").single()
+            assertTrue(rawFileExists(key))
+
+            assertEquals(HttpStatusCode.NoContent, delete("/v1/activities/${created.id}") { bearerAuth(alice) }.status)
+
+            assertEquals(0L, scalar("SELECT count(*) FROM activities"))
+            assertTrue(!rawFileExists(key), "the raw file must be gone")
+            assertEquals(HttpStatusCode.NotFound, get("/v1/activities/${created.id}") { bearerAuth(alice) }.status)
+            assertEquals(
+                HttpStatusCode.NotFound,
+                get("/v1/activities/${created.id}/track") { bearerAuth(alice) }.status,
+            )
+            // A device retrying the same file must not bring the activity back.
+            assertEquals(HttpStatusCode.Gone, upload(rec.id, rec.bytes).status)
+            assertEquals(0L, scalar("SELECT count(*) FROM activities"))
+            // Deleting twice is a plain 404, and a malformed id is a 400.
+            assertEquals(HttpStatusCode.NotFound, delete("/v1/activities/${created.id}") { bearerAuth(alice) }.status)
+            assertEquals(HttpStatusCode.BadRequest, delete("/v1/activities/nope") { bearerAuth(alice) }.status)
+            // The tombstone is per owner: another user's upload of that client id is their own activity.
+            assertEquals(HttpStatusCode.Created, upload(rec.id, rec.bytes, token = bob).status)
+        }
+
+    @Test
+    fun anotherUserCannotDeleteMyActivity() =
+        app {
+            val rec = record()
+            val created = upload(rec.id, rec.bytes).summary()
+            val key = keysOf("alice").single()
+
+            assertEquals(HttpStatusCode.NotFound, delete("/v1/activities/${created.id}") { bearerAuth(bob) }.status)
+
+            assertEquals(1L, scalar("SELECT count(*) FROM activities"))
+            assertTrue(rawFileExists(key))
+            assertEquals(HttpStatusCode.OK, upload(rec.id, rec.bytes).status) // still alice's, no tombstone
+            assertEquals(HttpStatusCode.Unauthorized, delete("/v1/activities/${created.id}").status)
+        }
+
+    @Test
+    fun deletingTheAccountRemovesItsDataAndBlocksTheAccountButNotOtherUsers() =
+        app {
+            val first = record()
+            val second = record()
+            val bobs = record()
+            upload(first.id, first.bytes)
+            upload(second.id, second.bytes)
+            upload(bobs.id, bobs.bytes, token = bob)
+            val aliceKeys = keysOf("alice")
+            val bobKey = keysOf("bob").single()
+            assertEquals(2, aliceKeys.size)
+
+            assertEquals(HttpStatusCode.NoContent, delete("/v1/me") { bearerAuth(alice) }.status)
+
+            assertTrue(aliceKeys.none(::rawFileExists))
+            assertEquals(0, keysOf("alice").size)
+            // The account is blocked for everything but repeating the deletion.
+            assertEquals(HttpStatusCode.Forbidden, get("/v1/activities") { bearerAuth(alice) }.status)
+            assertEquals(HttpStatusCode.Forbidden, get("/v1/me/export") { bearerAuth(alice) }.status)
+            assertEquals(HttpStatusCode.Forbidden, upload(first.id, first.bytes).status)
+            assertEquals(HttpStatusCode.NoContent, delete("/v1/me") { bearerAuth(alice) }.status)
+            assertEquals(1L, scalar("SELECT count(*) FROM users WHERE deleted_at IS NOT NULL"))
+            // Bob is untouched.
+            assertTrue(rawFileExists(bobKey))
+            val bobsList = get("/v1/activities") { bearerAuth(bob) }.bodyAsText()
+            assertEquals(
+                1,
+                json
+                    .parseToJsonElement(bobsList)
+                    .jsonObject
+                    .getValue("items")
+                    .jsonArray.size,
+            )
+        }
+
+    @Test
+    fun theExportHoldsEveryRawFileUnchangedItsGpxAndTheSummaries() =
+        app {
+            val a = record()
+            val b = record()
+            val others = record()
+            upload(a.id, a.bytes)
+            upload(b.id, b.bytes)
+            upload(others.id, others.bytes, token = bob) // someone else's data must not leak in
+
+            val response = get("/v1/me/export") { bearerAuth(alice) }
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertEquals("application/zip", response.contentType()?.withoutParameters().toString())
+            assertTrue(response.headers[HttpHeaders.ContentDisposition]!!.contains("averyn-export.zip"))
+            val files = unzip(response.readRawBytes())
+            assertEquals(5, files.size, files.keys.toString()) // 2 raw + 2 gpx + activities.json
+            for (rec in listOf(a, b)) {
+                assertContentEquals(rec.bytes, files.getValue("raw/${rec.id}.jsonl"))
+                val gpx = String(files.getValue("gpx/${rec.id}.gpx"))
+                assertTrue(gpx.contains("<gpx") && gpx.contains("<trkpt"), gpx.take(200))
+            }
+            val manifest = json.parseToJsonElement(String(files.getValue("activities.json"))).jsonObject
+            val listed = manifest.getValue("activities").jsonArray
+            assertEquals(2, listed.size)
+            assertTrue(
+                listed.all {
+                    it.jsonObject
+                        .getValue("gpxSkippedLines")
+                        .jsonPrimitive.content == "0"
+                },
+            )
+            val ids =
+                listed.map {
+                    it.jsonObject
+                        .getValue(
+                            "activity",
+                        ).jsonObject
+                        .getValue("clientActivityId")
+                        .jsonPrimitive.content
+                }
+            assertEquals(setOf(a.id.toString(), b.id.toString()), ids.toSet())
+            assertEquals(HttpStatusCode.Unauthorized, get("/v1/me/export").status)
+        }
+
+    @Test
+    fun whenAllExportSlotsAreTakenTheServerAsksToRetryLater() {
+        val slots = Semaphore(1)
+        assertTrue(slots.tryAcquire())
+        app(exportSlots = slots) {
+            val response = get("/v1/me/export") { bearerAuth(alice) }
+            assertEquals(HttpStatusCode.ServiceUnavailable, response.status)
+            assertEquals("5", response.headers[HttpHeaders.RetryAfter])
+        }
+    }
 }
