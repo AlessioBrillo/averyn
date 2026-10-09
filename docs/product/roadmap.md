@@ -25,7 +25,7 @@ Optional third-party sensor integration, see [ADR-0010](../adr/0010-ecosystem-bo
 
 ## MVP-1 work order
 
-Critical path: identity spike → build so the backend can use `shared/` → read-only replay → OIDC auth → activity ingest → `shared/sync` → app login and sync trigger. Spec: [TDD-0002](../design/TDD-0002-activity-sync.md). Next: web activity list and detail page, [TDD-0003](../design/TDD-0003-web-activity-view.md). Self-host hardening and data deletion/export follow.
+Critical path: identity spike → build so the backend can use `shared/` → read-only replay → OIDC auth → activity ingest → `shared/sync` → app login and sync trigger. Spec: [TDD-0002](../design/TDD-0002-activity-sync.md). Done: web activity list and detail page, [TDD-0003](../design/TDD-0003-web-activity-view.md). Next: data deletion and export, [TDD-0004](../design/TDD-0004-data-deletion-and-export.md) / [ADR-0017](../adr/0017-data-deletion-and-retention.md); then self-host hardening (TLS, CSP, per-user quota). Real-device runs (MVP-0 exit criteria, device-matrix S1–S14) stay open and take priority over MVP-2.
 
 ## MVP-0 work order
 
@@ -42,6 +42,6 @@ Tracked here until they become ADRs (report §24). ● = needed for MVP-0.
 - ~~CLA vs DCO~~ → resolved, [ADR-0012](../adr/0012-cla-and-store-distribution.md)
 - ~~Default bundled IdP~~ → resolved: Zitadel, [ADR-0011](../adr/0011-identity-oidc.md); passkeys/MFA timing still open
 - Map data source, routing engine (Valhalla vs. GraphHopper), DEM source, pilot region
-- Cloud provider; notification strategy; retention policy; moderation policy
+- Cloud provider; notification strategy; moderation policy (retention of user data: resolved, [ADR-0017](../adr/0017-data-deletion-and-retention.md))
 - Fair-use quota thresholds and club/team plan pricing → [business-model.md](business-model.md)
 - Device compatibility level (watches, sensors) beyond generic BLE HR → see the Synapse track above for the one integration currently planned

@@ -135,4 +135,4 @@ New tables via forward-only Flyway migrations. Existing local activities on test
 |---|---|---|
 | Q1 | Default bundled IdP (spike with measured criteria) | ADR-0011 → `accepted` |
 | Q2 | When do gzip/chunking become necessary (measured on real networks)? | additive header, no ADR |
-| Q3 | Retention and deletion of raw objects | ADR, before any public instance |
+| Q3 | Retention and deletion of raw objects | ADR, before any public instance. **Resolved:** [ADR-0017](../adr/0017-data-deletion-and-retention.md), [TDD-0004](TDD-0004-data-deletion-and-export.md) |

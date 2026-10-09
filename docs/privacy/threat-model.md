@@ -17,8 +17,11 @@ Device ↔ backend (internet, TLS), backend ↔ IdP (JWKS, discovery), backend �
 | **S**poofing | Forged or replayed bearer token | JWT verified against the issuer's JWKS: `iss`, `aud`, `exp` checked; short access-token lifetime; HTTPS only in release builds | auth tests: expired, wrong issuer, wrong audience, none |
 | **S** | Confused deputy via one shared service token | No service accounts for user data; every call carries a token for one user ([ADR-0011](../adr/0011-identity-oidc.md)) | — (design rule) |
 | **T**ampering | Modified body on retry | SHA-256 per `(owner, clientActivityId)`; a different hash → `409`, the first upload is never overwritten | ingest test: modified body → 409 |
-| **R**epudiation | A user disputes an upload | Request ids in logs ([ADR-0009](../adr/0009-observability-baseline.md)); row `created_at` and raw hash | — |
+| **R**epudiation | A deleted activity reappears from a device retry | Data-free tombstone; the upload answers `410` | deletion test: re-PUT → 410 |
+| **R** | A user disputes an upload | Request ids in logs ([ADR-0009](../adr/0009-observability-baseline.md)); row `created_at` and raw hash | — |
 | **I**nformation disclosure | **IDOR**: reading another user's activity by id | Ownership checked on every read; non-owner gets `404`, not `403` | ingest test: user B → 404 |
+| **I** | **IDOR on deletion**: deleting another user's activity by id | Deletion is scoped to the owner; a non-owner gets `404` and nothing changes | deletion test: user B → 404, row intact |
+| **I** | Data kept after the user asked to delete it | Hard delete of row and raw object; account deletion removes the whole `raw/{ownerId}/` prefix ([ADR-0017](../adr/0017-data-deletion-and-retention.md)); backups expire per operator policy | deletion tests: object absent |
 | **I** | Coordinates or tokens in logs | Log ids, counts and hashes only; reviewed in PRs | log grep in end-to-end verification |
 | **I** | Tokens read from a lost or backed-up phone | Android: session encrypted with an AES-GCM key held in the Android Keystore, `allowBackup=false`. iOS: Keychain `AfterFirstUnlockThisDeviceOnly` (no iCloud sync, no restore onto another device). Sign-out deletes it | manual: device matrix S14 |
 | **I** | Credentials or tokens sent in clear on the network | Release Android builds are HTTPS-only. The dev stack is plain HTTP: debug-only on Android, `NSAllowsArbitraryLoads` on iOS PoC builds (internal only); TLS example and removal before any store distribution | none |
@@ -30,4 +33,4 @@ Device ↔ backend (internet, TLS), backend ↔ IdP (JWKS, discovery), backend �
 
 ## Open items
 
-Per-user quota and rate limiting (before any public instance); retention and deletion schedule ([data classification](data-classification.md)); DPIA before a public hosted service.
+Per-user quota and rate limiting (before any public instance); legal retention and a deletion audit trail for a hosted service; DPIA before a public hosted service.
