@@ -1,6 +1,6 @@
 # ADR-0017: Data deletion and retention — hard delete, tombstones, account data only
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-10-07
 - **Deciders:** @AlessioBrillo
 

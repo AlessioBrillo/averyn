@@ -1,6 +1,6 @@
 # TDD-0004: Data Deletion and Export
 
-- **Status:** draft
+- **Status:** implemented
 - **Version:** 0.1
 - **Author:** @AlessioBrillo
 - **Date:** 2026-10-07
@@ -94,6 +94,7 @@ Backend integration tests (real PostGIS and object store, as TDD-0002): delete t
 | Large export ties up the server | streaming, 2 at once, `503` beyond |
 | Backups hold deleted data | operator retention, documented; ADR-0017 |
 | Deleted user cannot come back with the same identity | documented operator action; accepted in ADR-0017 |
+| The object store keeps empty prefix directories after deletion (seen with SeaweedFS) | they hold only owner and activity ids, no data; accepted |
 
 ## 9. Open questions
 
