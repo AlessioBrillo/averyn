@@ -25,7 +25,7 @@ Optional third-party sensor integration, see [ADR-0010](../adr/0010-ecosystem-bo
 
 ## MVP-1 work order
 
-Critical path: identity spike → build so the backend can use `shared/` → read-only replay → OIDC auth → activity ingest → `shared/sync` → app login and sync trigger. Spec: [TDD-0002](../design/TDD-0002-activity-sync.md). Done: web activity list and detail page, [TDD-0003](../design/TDD-0003-web-activity-view.md). Next: data deletion and export, [TDD-0004](../design/TDD-0004-data-deletion-and-export.md) / [ADR-0017](../adr/0017-data-deletion-and-retention.md); then self-host hardening (TLS, CSP, per-user quota). Real-device runs (MVP-0 exit criteria, device-matrix S1–S14) stay open and take priority over MVP-2.
+Critical path: identity spike → build so the backend can use `shared/` → read-only replay → OIDC auth → activity ingest → `shared/sync` → app login and sync trigger. Spec: [TDD-0002](../design/TDD-0002-activity-sync.md). Done: web activity list and detail page, [TDD-0003](../design/TDD-0003-web-activity-view.md). Next: data deletion and export, [TDD-0004](../design/TDD-0004-data-deletion-and-export.md) / [ADR-0017](../adr/0017-data-deletion-and-retention.md); then self-host hardening (TLS, CSP, per-user quota), [TDD-0005](../design/TDD-0005-self-host-hardening.md) / [ADR-0018](../adr/0018-tls-edge-and-public-issuer.md). Real-device runs (MVP-0 exit criteria, device-matrix S1–S14) stay open and take priority over MVP-2.
 
 ## MVP-0 work order
 
