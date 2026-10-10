@@ -52,4 +52,6 @@ if grep -v '^#' .env.tmp | grep -q 'CHANGE'; then
   exit 1
 fi
 mv .env.tmp .env
+# The object store reads this file as its own (non-root, unknown) user through a bind mount: it must be world-readable.
+chmod 644 seaweedfs-s3.local.json
 echo "wrote .env and seaweedfs-s3.local.json; the IdP console admin password is ZITADEL_ADMIN_PASSWORD in .env"
