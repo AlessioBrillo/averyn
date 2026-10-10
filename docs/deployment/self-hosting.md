@@ -1,6 +1,6 @@
 # Self-hosting
 
-Status: dev stack only. Production-grade self-hosting (TLS, backups, upgrades) is part of MVP-1 and tracked in GitHub issues.
+Status: single node. Two modes from the same files: the plain-HTTP **development stack** (default) and the **TLS stack** for an instance others reach ([below](#tls-public-instance), [ADR-0018](../adr/0018-tls-edge-and-public-issuer.md), [TDD-0005](../design/TDD-0005-self-host-hardening.md)).
 
 ## Quickstart (single node)
 
@@ -36,19 +36,37 @@ The `web` service serves the web app at `http://localhost:8082` (`WEB_PORT`) and
 - **Basemap:** `AVERYN_MAP_STYLE_URL` is a MapLibre style URL. Unset, the app uses a demo world style that is fine to try things out. Whoever serves the tiles learns which areas your users look at (the track itself is drawn in the browser and is never sent to them), so a real instance should point this at a tile service it trusts, or its own.
 - The container writes no access log, because request paths contain activity ids.
 
+## TLS (public instance)
+
+The overlay `docker-compose.tls.yml` puts Caddy in front of everything: it is the only service publishing ports (80, redirected, and 443), serves the web app and `/v1` on `AVERYN_DOMAIN` and the identity provider on `IDP_HOST`, and obtains certificates automatically. **Decide the two names before the first start:** the issuer becomes `https://IDP_HOST` and is fixed from then on; moving an existing plain-HTTP instance to TLS, or to other names, is not supported (ADR-0018).
+
+1. Two DNS names pointing at the machine, e.g. `averyn.example.org` and `auth.averyn.example.org`; ports 80 and 443 reachable from the internet (certificate issuance).
+2. In `.env`: `AVERYN_DOMAIN=averyn.example.org`, `IDP_HOST=auth.averyn.example.org` (leave `IDP_PORT` as is: it is now internal only).
+3. Start with both files:
+
+   ```sh
+   docker compose -f docker-compose.yml -f docker-compose.tls.yml --env-file .env up -d --build
+   ```
+
+4. Web app: `https://AVERYN_DOMAIN`. Console: `https://IDP_HOST/ui/console`. Apps: server URL `https://AVERYN_DOMAIN`.
+
+The backend reaches the identity provider inside the network (`AVERYN_OIDC_INTERNAL_URL`) and still checks that it publishes the issuer `https://IDP_HOST`. The OIDC apps are registered without development mode, so only `https` redirects are accepted for the web app.
+
+**Trying it locally:** `AVERYN_DOMAIN=averyn.localhost` and `IDP_HOST=auth.averyn.localhost` work without DNS; Caddy then issues certificates from its own local CA. Export its root with `docker compose ... cp web:/data/caddy/pki/authorities/local/root.crt .` and trust it in the browser (or the phone) you test with.
+
 ## Syncing from a phone
 
 1. In `.env` set `IDP_HOST=<host-lan-ip>.nip.io` (Android emulator: `10.0.2.2.nip.io`) and `AVERYN_BIND=0.0.0.0`, then `docker compose down -v && docker compose up -d --build` (the IdP stores its host at first start).
 2. In the console (`http://<IDP_HOST>:8081/ui/console`, see above) create a user.
 3. In the app enter the server URL `http://<host-lan-ip>:8080` (the `BACKEND_PORT`), tap **Sign in**, log in as that user in the browser sheet, and finish an activity (or tap **Sync now**): the status line shows `READY` once the server has it.
 
-Debug Android builds and the current iOS builds allow plain HTTP for this; put the stack behind HTTPS before using it beyond a trusted network.
+Debug builds allow plain HTTP for this; release builds need the TLS stack (server URL `https://AVERYN_DOMAIN`, no port).
 
 ## Security notes
 
-- The IdP is bound to `127.0.0.1` unless you set `AVERYN_BIND`, and speaks plain HTTP in this dev stack: do not expose it publicly without a TLS-terminating reverse proxy (a TLS example is still to be written).
+- Development stack: the IdP is bound to `127.0.0.1` unless you set `AVERYN_BIND`, and speaks plain HTTP: never expose it; use the TLS stack instead.
 - The S3 credentials in `seaweedfs-s3.json` are **development defaults**: change them before exposing the stack. Storage is not published to the host by default.
-- The backend is bound to `127.0.0.1` (host port `BACKEND_PORT`, default 8080; `AVERYN_BIND=0.0.0.0` also exposes the unauthenticated `/metrics`, so only use it on a trusted LAN). Put a TLS-terminating reverse proxy in front for public access, and do not proxy `/metrics`.
+- The backend is bound to `127.0.0.1` (host port `BACKEND_PORT`, default 8080; `AVERYN_BIND=0.0.0.0` also exposes the unauthenticated `/metrics`, so only use it on a trusted LAN). In the TLS stack it publishes no port at all and Caddy does not proxy `/metrics`.
 - Keep `.env` out of version control.
 
 ## Deleting data and backups
@@ -57,4 +75,4 @@ Users can delete an activity, delete their account's data and download an export
 
 ## Not yet available (tracked)
 
-Backup/restore scripts and runbooks · upgrade guide · reverse-proxy/TLS example · troubleshooting.
+Backup/restore scripts and runbooks · upgrade guide · troubleshooting.

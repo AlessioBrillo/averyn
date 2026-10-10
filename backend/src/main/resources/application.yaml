@@ -18,6 +18,8 @@ averyn:
     audience: "$AVERYN_OIDC_AUDIENCE"
     clientId: "$AVERYN_OIDC_CLIENT_ID"
     webClientId: "$AVERYN_OIDC_WEB_CLIENT_ID"
+    # Optional (ADR-0018): where the backend reaches the IdP when TLS ends at a proxy, e.g. http://idp:8081.
+    internalUrl: "$?AVERYN_OIDC_INTERNAL_URL"
   # Web basemap (TDD-0003): a MapLibre style URL; optional, a demo style is used when unset.
   web:
     mapStyleUrl: "$?AVERYN_MAP_STYLE_URL"

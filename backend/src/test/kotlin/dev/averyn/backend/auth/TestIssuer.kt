@@ -45,6 +45,14 @@ class TestIssuer(
             )
         }
 
+    /** The same key set as [jwks], as a provider publishes it at its `jwks_uri`. */
+    val jwksJson: String
+        get() {
+            val key = keys.public as RSAPublicKey
+            return """{"keys":[{"kty":"RSA","kid":"test-key","alg":"RS256","use":"sig",""" +
+                """"n":"${unsigned(key.modulus)}","e":"${unsigned(key.publicExponent)}"}]}"""
+        }
+
     fun token(
         subject: String? = "user-1",
         issuer: String = config.issuer,

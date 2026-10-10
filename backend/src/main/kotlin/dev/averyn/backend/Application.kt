@@ -24,6 +24,7 @@ fun Application.module() {
             audience = cfg.property("averyn.oidc.audience").getString(),
             clientId = cfg.property("averyn.oidc.clientId").getString(),
             webClientId = cfg.property("averyn.oidc.webClientId").getString(),
+            internalUrl = cfg.propertyOrNull("averyn.oidc.internalUrl")?.getString()?.ifBlank { null },
         )
     val mapStyleUrl =
         cfg.propertyOrNull("averyn.web.mapStyleUrl")?.getString()?.ifBlank { null } ?: DEFAULT_MAP_STYLE_URL
