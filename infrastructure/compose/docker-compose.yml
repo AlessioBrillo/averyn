@@ -54,12 +54,15 @@ services:
       idp-perms:
         condition: service_completed_successfully
     healthcheck:
+      # `ready` reads the config, not the --tlsMode flag of `start`: ZITADEL_TLS_ENABLED below makes it use plain HTTP.
       test: ["CMD", "/app/zitadel", "ready"]
       interval: 5s
       timeout: 3s
       retries: 60
     environment:
       ZITADEL_PORT: ${IDP_PORT:-8081}
+      # Zitadel itself never terminates TLS here (--tlsMode disabled, or external behind the TLS edge).
+      ZITADEL_TLS_ENABLED: "false"
       ZITADEL_EXTERNALDOMAIN: ${IDP_HOST:-idp.localhost}
       ZITADEL_EXTERNALPORT: ${IDP_PORT:-8081}
       ZITADEL_EXTERNALSECURE: "false"
