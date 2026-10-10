@@ -1,6 +1,6 @@
 # ADR-0018: TLS at one edge proxy, a fixed public issuer, internal OIDC discovery
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-10-10
 - **Deciders:** @AlessioBrillo
 

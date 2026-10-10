@@ -1,6 +1,6 @@
 # TDD-0005: Self-Host Hardening
 
-- **Status:** draft
+- **Status:** implemented
 - **Version:** 0.1
 - **Author:** @AlessioBrillo
 - **Date:** 2026-10-10
