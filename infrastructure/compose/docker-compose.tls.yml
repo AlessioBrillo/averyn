@@ -25,6 +25,7 @@ services:
   web:
     environment:
       AVERYN_DOMAIN: ${AVERYN_DOMAIN}
+      AVERYN_IDP_ORIGIN: https://${IDP_HOST}
       IDP_HOST: ${IDP_HOST}
       IDP_PORT: ${IDP_PORT:-8081}
     volumes:

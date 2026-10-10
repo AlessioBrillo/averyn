@@ -3,7 +3,12 @@
 # No `log` directive on purpose: an access log would record activity ids (W3). /metrics is not proxied (ADR-0009).
 encode zstd gzip
 
+# Content-Security-Policy (TDD-0005 §5.3): only this origin's scripts run, so injected script cannot read the session
+# token. connect-src adds the identity provider (discovery, token) and the basemap hosts (style, tiles, glyphs), both
+# deployment configuration: AVERYN_IDP_ORIGIN and AVERYN_MAP_ORIGINS (space-separated origins).
 header {
+	Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; worker-src 'self' blob:; connect-src 'self' {$AVERYN_IDP_ORIGIN} {$AVERYN_MAP_ORIGINS}; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+	Permissions-Policy "camera=(), microphone=(), geolocation=()"
 	X-Content-Type-Options nosniff
 	Referrer-Policy no-referrer
 	-Server
