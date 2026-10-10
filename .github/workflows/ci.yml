@@ -77,7 +77,15 @@ jobs:
           # EXCLUDED_ARCHS=x86_64: the generic simulator destination requests an Intel slice we
           # don't build (no iosX64 target — nothing here runs on an Intel simulator).
           xcodebuild build -project Averyn.xcodeproj -scheme Averyn \
-            -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO EXCLUDED_ARCHS=x86_64
+            -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO EXCLUDED_ARCHS=x86_64 \
+            -derivedDataPath build
+      - name: Plain HTTP is allowed in Debug builds only
+        working-directory: apps/ios
+        run: |
+          # The Info.plist every configuration starts from has no exception (so Release is HTTPS-only) ...
+          ! plutil -extract NSAppTransportSecurity xml1 -o - Averyn/Info.plist || exit 1
+          # ... and the Debug build step adds it.
+          [ "$(plutil -extract NSAppTransportSecurity.NSAllowsArbitraryLoads raw build/Build/Products/Debug-iphonesimulator/Averyn.app/Info.plist)" = true ]
 
   web:
     name: Web (lint, typecheck, test, build)
