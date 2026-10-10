@@ -1,26 +1,9 @@
-# Web app (TDD-0003): serves the built SPA and proxies /v1 to the backend, so the browser sees one origin (no CORS).
-# No `log` block on purpose: an access log would record activity ids (W3). /metrics is not proxied (ADR-0009).
+# Plain-HTTP development stack. With docker-compose.tls.yml, Caddyfile.tls is mounted here instead.
 {
 	admin off
 	auto_https off
 }
 
 :80 {
-	encode zstd gzip
-
-	header {
-		X-Content-Type-Options nosniff
-		Referrer-Policy no-referrer
-		-Server
-	}
-
-	handle /v1/* {
-		reverse_proxy backend:8080
-	}
-
-	handle {
-		root * /srv
-		try_files {path} /index.html
-		file_server
-	}
+	import web.caddy
 }

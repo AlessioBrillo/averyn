@@ -23,12 +23,14 @@ import java.util.concurrent.TimeUnit
 /**
  * The OIDC provider Averyn trusts (ADR-0011). [audience] must appear in a token's `aud`; [clientId] (mobile) and
  * [webClientId] (browser) are the public apps in the same project, so both get tokens with that audience.
+ * [internalUrl], when set, is where the backend reaches the provider inside its network (ADR-0018).
  */
 data class OidcConfig(
     val issuer: String,
     val audience: String,
     val clientId: String,
     val webClientId: String,
+    val internalUrl: String? = null,
 )
 
 /** Name of the authentication provider that protects every `/v1` route except `/v1/client-config`. */
@@ -41,7 +43,7 @@ const val OIDC_AUTH = "oidc"
  */
 fun Application.auth(
     config: OidcConfig,
-    jwks: JwkProvider = discoveredJwks(config.issuer),
+    jwks: JwkProvider = discoveredJwks(config.issuer, config.internalUrl),
 ) {
     install(Authentication) {
         jwt(OIDC_AUTH) {
@@ -60,9 +62,14 @@ fun Application.auth(
  * verifying, not at start-up: the identity provider may still be coming up. While it is unreachable, token
  * checks fail fast (the lookup is not repeated for [retryAfter]), so a down IdP cannot tie up request threads;
  * requests meanwhile get 401. Lookups are serialized: at most one blocks while the IdP is slow.
+ *
+ * With an [internalUrl] (ADR-0018: TLS ends at an edge proxy the backend does not go through), discovery and keys
+ * are fetched from there with `X-Forwarded-Host` naming the issuer's host, so the provider answers as its public
+ * self. The document's `issuer` must still equal [issuer]; its `jwks_uri` is moved onto [internalUrl].
  */
 fun discoveredJwks(
     issuer: String,
+    internalUrl: String? = null,
     retryAfter: Duration = Duration.ofSeconds(15),
 ): JwkProvider =
     object : JwkProvider {
@@ -77,8 +84,10 @@ fun discoveredJwks(
             if (failure != null && Duration.between(failure, Instant.now()) < retryAfter) {
                 throw JwkException("identity provider keys unavailable")
             }
+            val headers = if (internalUrl == null) emptyMap() else mapOf("X-Forwarded-Host" to URI(issuer).authority)
             return try {
-                JwkProviderBuilder(URI(jwksUri(issuer)).toURL())
+                JwkProviderBuilder(URI(jwksUri(issuer, internalUrl, headers)).toURL())
+                    .headers(headers)
                     .cached(10, 24, TimeUnit.HOURS)
                     .rateLimited(10, 1, TimeUnit.MINUTES)
                     .build()
@@ -95,16 +104,24 @@ fun discoveredJwks(
 
 private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build()
 
-private fun jwksUri(issuer: String): String {
+private fun jwksUri(
+    issuer: String,
+    internalUrl: String?,
+    headers: Map<String, String>,
+): String {
+    val base = (internalUrl ?: issuer).trimEnd('/')
     val request =
         HttpRequest
-            .newBuilder(URI("${issuer.trimEnd('/')}/.well-known/openid-configuration"))
+            .newBuilder(URI("$base/.well-known/openid-configuration"))
             .timeout(Duration.ofSeconds(3))
+            .apply { headers.forEach { (name, value) -> header(name, value) } }
             .build()
     val response = http.send(request, HttpResponse.BodyHandlers.ofString())
     check(response.statusCode() == 200) { "OIDC discovery failed: HTTP ${response.statusCode()}" }
     val doc = Json.parseToJsonElement(response.body()).jsonObject
     // OIDC Discovery 4.3: a document whose issuer differs from the one asked for must not be trusted.
     check(doc.getValue("issuer").jsonPrimitive.content == issuer) { "OIDC discovery issuer mismatch" }
-    return doc.getValue("jwks_uri").jsonPrimitive.content
+    val jwksUri = doc.getValue("jwks_uri").jsonPrimitive.content
+    val public = issuer.trimEnd('/')
+    return if (internalUrl != null && jwksUri.startsWith(public)) base + jwksUri.removePrefix(public) else jwksUri
 }
