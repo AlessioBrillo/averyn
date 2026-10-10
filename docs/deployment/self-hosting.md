@@ -8,13 +8,13 @@ Requirements: Docker with Compose v2.
 
 ```sh
 cd infrastructure/compose
-cp .env.example .env            # change every value marked CHANGE
+sh init-env.sh                  # writes .env and the object store's keys with random secrets (once)
 docker compose --env-file .env up -d --build
 curl http://localhost:8080/health   # {"status":"ok"}
 curl http://localhost:8080/ready    # {"status":"ready"} once the DB is migrated
 ```
 
-Services: `db` (PostgreSQL 18 + PostGIS), `storage` (SeaweedFS, S3 API), `idp` (Zitadel, [ADR-0011](../adr/0011-identity-oidc.md)), `backend` (Ktor), `web` (Caddy, see below). Flyway migrations run on backend startup. The backend stores each uploaded activity's raw file in `storage` (bucket `averyn`, created on first start) and a summary in PostgreSQL ([TDD-0002](../design/TDD-0002-activity-sync.md)); the S3 credentials are `S3_ACCESS_KEY` / `S3_SECRET_KEY` and must match `seaweedfs-s3.json`. Two one-shot jobs run on every start: `idp-perms` (volume ownership) and `idp-init` (creates the Averyn project and its two public OIDC apps, mobile and web, in the IdP, idempotently).
+Services: `db` (PostgreSQL 18 + PostGIS), `storage` (SeaweedFS, S3 API), `idp` (Zitadel, [ADR-0011](../adr/0011-identity-oidc.md)), `backend` (Ktor), `web` (Caddy, see below). Services start in dependency order and wait for each other's health checks. Flyway migrations run on backend startup. The backend stores each uploaded activity's raw file in `storage` (bucket `averyn`, created on first start) and a summary in PostgreSQL ([TDD-0002](../design/TDD-0002-activity-sync.md)); the S3 credentials are `S3_ACCESS_KEY` / `S3_SECRET_KEY` and must match the object store's identity file, `S3_CONFIG_FILE` (`init-env.sh` generates both; without it the development defaults in `seaweedfs-s3.json` are used). Two one-shot jobs run on every start: `idp-perms` (volume ownership) and `idp-init` (creates the Averyn project and its two public OIDC apps, mobile and web, in the IdP, idempotently).
 
 ## Identity provider
 
@@ -66,7 +66,7 @@ Debug builds allow plain HTTP for this; release builds need the TLS stack (serve
 ## Security notes
 
 - Development stack: the IdP is bound to `127.0.0.1` unless you set `AVERYN_BIND`, and speaks plain HTTP: never expose it; use the TLS stack instead.
-- The S3 credentials in `seaweedfs-s3.json` are **development defaults**: change them before exposing the stack. Storage is not published to the host by default.
+- The S3 credentials in `seaweedfs-s3.json` are **development defaults**; `init-env.sh` replaces them with generated ones. Storage is not published to the host by default.
 - The backend is bound to `127.0.0.1` (host port `BACKEND_PORT`, default 8080; `AVERYN_BIND=0.0.0.0` also exposes the unauthenticated `/metrics`, so only use it on a trusted LAN). In the TLS stack it publishes no port at all and Caddy does not proxy `/metrics`.
 - Keep `.env` out of version control.
 
@@ -74,6 +74,10 @@ Debug builds allow plain HTTP for this; release builds need the TLS stack (serve
 
 Users can delete an activity, delete their account's data and download an export from the web app ([ADR-0017](../adr/0017-data-deletion-and-retention.md)). Deleting the account removes Averyn's data only: close the person's identity in your identity provider separately (in the bundled Zitadel: Users, select the user, Delete). Deletion is immediate in the database and object store, but **your backups still hold the data**: make them expire within a retention period you choose and state to your users (we suggest at most 35 days). After restoring a backup, delete again whatever users deleted since it was taken.
 
+## Backups and upgrades
+
+Runbooks: [back up](../runbooks/backup-database.md), [restore](../runbooks/restore-database.md), [upgrade](../runbooks/upgrade-self-hosted.md). Back up before every upgrade: migrations only go forward.
+
 ## Not yet available (tracked)
 
-Backup/restore scripts and runbooks · upgrade guide · troubleshooting.
+Automated backups · secret rotation · troubleshooting.

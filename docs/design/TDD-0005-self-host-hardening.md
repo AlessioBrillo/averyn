@@ -25,7 +25,7 @@ Make the Compose stack fit to run where others can reach it: TLS at one edge, a 
 | H3 | Every web response carries the CSP in §5.3 and the other security headers; the web app works with it without console violations |
 | H4 | An authenticated user over the request limit gets `429` with `Retry-After`; other users are unaffected |
 | H5 | An upload that would take a user over the storage quota gets `507` and stores nothing; repeating an already stored upload still answers `200` |
-| H6 | Every long-running service has a health check; services start only after their dependencies are healthy |
+| H6 | Every service another one depends on has a health check (database, object store, IdP, backend); dependents start only once it is healthy |
 | H7 | A script creates `.env` and the object-store identity with random secrets and refuses to overwrite an existing `.env` |
 | H8 | Neither the edge nor the backend logs coordinates, tokens or request URLs carrying ids beyond what ADR-0009 allows (W3 unchanged) |
 
@@ -104,7 +104,7 @@ Only raw files count: they are the data the user owns and can delete (ADR-0017).
 
 ### 5.6 Operations
 
-Health checks: object store and edge with `wget`, IdP with its own `ready` command, backend on `/ready`. `init-env.sh` writes `.env` and a git-ignored object-store identity file with the same keys. Runbooks: backup (both databases, the object-store volume, the IdP bootstrap and OIDC volumes, the certificate volume, `.env`), restore onto fresh volumes, upgrade (backup, pull, rebuild, migrations at start, rollback = restore).
+Health checks: object store and backend with `wget` (`/healthz`, `/ready`), IdP with its own `ready` command, database with `pg_isready` over TCP (the image's first-start init runs a socket-only temporary server that a socket check reports as ready). The edge has none: nothing depends on it, and in TLS mode its port 80 only redirects. `init-env.sh` writes `.env` and a git-ignored object-store identity file with the same keys. Runbooks: backup (both databases, the object-store volume, the IdP bootstrap and OIDC volumes, the certificate volume, `.env`), restore onto fresh volumes, upgrade (backup, pull, rebuild, migrations at start, rollback = restore).
 
 ## 6. Test strategy
 
