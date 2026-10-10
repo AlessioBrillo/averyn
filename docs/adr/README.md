@@ -21,5 +21,6 @@ Format: [MADR](https://adr.github.io/madr/)-style, see [template](template.md). 
 | [0015](0015-local-activity-store.md) | Local activity store: append-only file, not a database | accepted |
 | [0016](0016-server-raw-activity-storage.md) | Server raw activity storage: the JSONL file is the system of record | accepted |
 | [0017](0017-data-deletion-and-retention.md) | Data deletion and retention: hard delete, tombstones, account data only | accepted |
+| [0018](0018-tls-edge-and-public-issuer.md) | TLS at one edge proxy, a fixed public issuer, internal OIDC discovery | proposed |
 
 Open decisions still without an ADR are tracked in [product/roadmap.md](../product/roadmap.md#open-decisions).

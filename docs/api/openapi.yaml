@@ -68,6 +68,7 @@ paths:
               schema: { $ref: "#/components/schemas/ActivityPage" }
         "400": { description: limit out of range or malformed cursor }
         "401": { description: Missing or invalid token }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
   /v1/activities/{clientActivityId}:
     put:
       summary: Upload a completed activity (idempotent, TDD-0002)
@@ -96,12 +97,14 @@ paths:
               schema: { $ref: "#/components/schemas/ActivitySummary" }
         "400": { description: Malformed activity id }
         "401": { description: Missing or invalid token }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
         "403": { description: The account was deleted (ADR-0017) }
         "409": { description: Same id already uploaded with different bytes }
         "410": { description: This activity id was deleted by its owner and is not accepted again (ADR-0017) }
         "413": { description: Body over the size limit }
         "422": { description: Unparseable file, no metadata, or activity not in a terminal state }
         "503": { description: Too many uploads in progress, retry after the Retry-After seconds }
+        "507": { description: "Storing this file would exceed the caller's storage quota; nothing was stored (TDD-0005)" }
   /v1/activities/{id}:
     get:
       summary: Read one activity summary (owner only; 404 for anyone else)
@@ -119,6 +122,7 @@ paths:
               schema: { $ref: "#/components/schemas/ActivitySummary" }
         "400": { description: Malformed activity id }
         "401": { description: Missing or invalid token }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
         "404": { description: Not found, or not owned by the caller }
     delete:
       summary: Delete one activity and its raw file (owner only; 404 for anyone else, ADR-0017)
@@ -132,6 +136,7 @@ paths:
         "204": { description: Deleted; the same id can no longer be uploaded }
         "400": { description: Malformed activity id }
         "401": { description: Missing or invalid token }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
         "403": { description: The account was deleted }
         "404": { description: Not found, or not owned by the caller }
   /v1/activities/{id}/track:
@@ -151,6 +156,7 @@ paths:
               schema: { type: object }
         "400": { description: Malformed activity id }
         "401": { description: Missing or invalid token }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
         "404": { description: Not found, or not owned by the caller }
   /v1/me:
     delete:
@@ -159,6 +165,7 @@ paths:
       responses:
         "204": { description: Deleted; any further call except this one answers 403 }
         "401": { description: Missing or invalid token }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
   /v1/me/export:
     get:
       summary: Download all of the caller's data as a ZIP (TDD-0004)
@@ -173,6 +180,7 @@ paths:
             application/zip:
               schema: { type: string, format: binary }
         "401": { description: Missing or invalid token }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
         "403": { description: The account was deleted }
         "503": { description: Too many exports in progress, retry after the Retry-After seconds }
 components:

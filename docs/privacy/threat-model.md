@@ -1,6 +1,6 @@
 # Threat model (STRIDE, MVP-1 sync)
 
-Status: v0.1, scope = account identity and activity sync ([TDD-0002](../design/TDD-0002-activity-sync.md)). Extend when new data flows are added. Classes refer to [data classification](data-classification.md).
+Status: v0.2, scope = account identity, activity sync ([TDD-0002](../design/TDD-0002-activity-sync.md)), web app and self-host edge ([TDD-0005](../design/TDD-0005-self-host-hardening.md)). Extend when new data flows are added. Classes refer to [data classification](data-classification.md).
 
 ## Assets
 
@@ -8,7 +8,7 @@ Raw activity files and routes (**Restricted**), access tokens and refresh tokens
 
 ## Trust boundaries
 
-Device ↔ backend (internet, TLS), backend ↔ IdP (JWKS, discovery), backend ↔ object storage and PostgreSQL (internal network), `/metrics` (internal network only, [ADR-0009](../adr/0009-observability-baseline.md)).
+Device / browser ↔ edge proxy (internet, TLS, [ADR-0018](../adr/0018-tls-edge-and-public-issuer.md)), edge ↔ backend and IdP (internal network), backend ↔ IdP (JWKS, discovery), backend ↔ object storage and PostgreSQL (internal network), `/metrics` (internal network only, [ADR-0009](../adr/0009-observability-baseline.md)).
 
 ## Threats and mitigations
 
@@ -24,13 +24,15 @@ Device ↔ backend (internet, TLS), backend ↔ IdP (JWKS, discovery), backend �
 | **I** | Data kept after the user asked to delete it | Hard delete of row and raw object; account deletion removes the whole `raw/{ownerId}/` prefix ([ADR-0017](../adr/0017-data-deletion-and-retention.md)); backups expire per operator policy | deletion tests: object absent |
 | **I** | Coordinates or tokens in logs | Log ids, counts and hashes only; reviewed in PRs | log grep in end-to-end verification |
 | **I** | Tokens read from a lost or backed-up phone | Android: session encrypted with an AES-GCM key held in the Android Keystore, `allowBackup=false`. iOS: Keychain `AfterFirstUnlockThisDeviceOnly` (no iCloud sync, no restore onto another device). Sign-out deletes it | manual: device matrix S14 |
-| **I** | Credentials or tokens sent in clear on the network | Release Android builds are HTTPS-only. The dev stack is plain HTTP: debug-only on Android, `NSAllowsArbitraryLoads` on iOS PoC builds (internal only); TLS example and removal before any store distribution | none |
+| **I** | Credentials or tokens sent in clear on the network | TLS overlay: only the edge publishes ports, 80 → 443, HSTS, issuer `https://` ([ADR-0018](../adr/0018-tls-edge-and-public-issuer.md)). Release builds of both apps are HTTPS-only; cleartext is allowed in Debug builds only, for the plain-HTTP development stack | CI TLS Compose job; CI check of the iOS Release Info.plist |
+| **I** | Injected script in the web app reads the session token from `sessionStorage` | Content-Security-Policy `script-src 'self'`, `connect-src` limited to the API, the IdP and the map hosts, `frame-ancestors 'none'` ([TDD-0005 §5.3](../design/TDD-0005-self-host-hardening.md)) | CI header check; browser run without violations |
 | **I** | Raw objects exposed through the storage endpoint | S3 not published to the host in Compose; backend is the only client | compose review |
 | **D**enial of service | Oversized or endless body | 32 MB limit enforced while streaming (`413`, also without `Content-Length`); idle read timeout of 60 s on the server | ingest tests; checked on a real connection |
 | **D** | Many concurrent uploads exhaust threads / temp disk | At most 8 uploads processed at once, the rest get `503` + `Retry-After`; JWKS lookups fail fast while the IdP is down, so a down IdP cannot tie up request threads | ingest test (slots), auth test (IdP unreachable → 401) |
-| **D** | Storage or capacity filled by one user | Per-user quota and rate limit: **not in v1**, required before any public instance | none |
+| **D** | Request capacity exhausted by one user | Per-user token bucket on every authenticated `/v1` route, `429` + `Retry-After` (TDD-0005 §5.4) | backend test: limit + 1 → 429, other user 200 |
+| **D** | Storage filled by one user | Per-user quota on raw files, checked in the ingest transaction; `507`, nothing stored (TDD-0005 §5.5) | integration test: over quota → 507, no row, no object |
 | **E**levation of privilege | Token for another audience accepted | `aud` verified; client id and audience configured explicitly | auth test: wrong audience |
 
 ## Open items
 
-Per-user quota and rate limiting (before any public instance); legal retention and a deletion audit trail for a hosted service; DPIA before a public hosted service.
+Backend-for-frontend session (TDD-0005 Q1); encryption at rest (TDD-0005 Q2); legal retention and a deletion audit trail for a hosted service; DPIA before a public hosted service.
