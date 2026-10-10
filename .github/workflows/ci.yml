@@ -160,6 +160,8 @@ jobs:
       - name: Web app is served and proxies the API (same origin)
         run: |
           curl -fsS http://127.0.0.1:8082/ | grep -q '<div id="root">'
+          curl -sSI http://127.0.0.1:8082/ | grep -qi "^content-security-policy: default-src 'none'; script-src 'self';.*connect-src 'self' http://idp.localhost:8081 https://demotiles.maplibre.org;"
+          curl -sSI http://127.0.0.1:8082/activities/x | grep -qi "^content-security-policy: .*frame-ancestors 'none'"
           curl -fsS http://127.0.0.1:8082/activities/00000000-0000-0000-0000-000000000000 | grep -q '<div id="root">'
           curl -fsS http://127.0.0.1:8082/v1/client-config | grep -q '"webClientId":"[0-9]*","mapStyleUrl":"https'
           [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8082/v1/activities)" = 401 ]
@@ -214,6 +216,7 @@ jobs:
           curl -fsS --cacert root.crt https://averyn.localhost/v1/client-config | grep -q '"issuer":"https://auth.averyn.localhost"'
           curl -fsS --cacert root.crt https://averyn.localhost/ | grep -q '<div id="root">'
           curl -sSI --cacert root.crt https://averyn.localhost/ | grep -qi '^strict-transport-security: max-age='
+          curl -sSI --cacert root.crt https://averyn.localhost/ | grep -qi "^content-security-policy: .*connect-src 'self' https://auth.averyn.localhost "
           [ "$(curl -s --cacert root.crt -o /dev/null -w '%{http_code}' https://averyn.localhost/v1/activities)" = 401 ]
           [ "$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' http://averyn.localhost/)" = "308 https://averyn.localhost/" ]
           ! curl -fsS --cacert root.crt https://averyn.localhost/metrics | grep -q '^# HELP' || exit 1

@@ -149,6 +149,11 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+    environment:
+      # For the Content-Security-Policy (web.caddy): the issuer's origin, and the origins serving the basemap's
+      # style, tiles and glyphs. Set AVERYN_MAP_ORIGINS together with AVERYN_MAP_STYLE_URL, or the map stays blank.
+      AVERYN_IDP_ORIGIN: http://${IDP_HOST:-idp.localhost}:${IDP_PORT:-8081}
+      AVERYN_MAP_ORIGINS: ${AVERYN_MAP_ORIGINS:-https://demotiles.maplibre.org}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./web.caddy:/etc/caddy/web.caddy:ro
