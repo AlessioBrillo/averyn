@@ -17,8 +17,8 @@
    done
    ```
 
-4. Start the database alone and load the dump: `dc up -d db`, wait until `dc ps db` says healthy, then `gunzip -c "$B/db.sql.gz" | dc exec -T db psql -q -U averyn -d postgres`. Two errors are expected and harmless: the role and the database named after `POSTGRES_USER` already exist (the image created them).
-5. Start everything: `dc up -d`.
+4. Start the database alone and load the dump: `dc up -d db`, wait until `dc ps db` says healthy, then `gunzip -c "$B/db.sql.gz" | dc exec -T db psql -q -U averyn -d postgres`. Seven `already exists` errors are expected and harmless: the database image has already created the role and database named after `POSTGRES_USER`, `template_postgis` and the PostGIS schemas. Any other error is not: stop and investigate.
+5. Start everything: `dc up -d --wait` (returns once every health check passes).
 6. **Repeat deletions** ([ADR-0017](../adr/0017-data-deletion-and-retention.md)): the backup may hold activities or accounts that users deleted after it was taken. Delete them again (from your deletion requests, or by asking affected users) before reopening the instance.
 
 ## Verify
