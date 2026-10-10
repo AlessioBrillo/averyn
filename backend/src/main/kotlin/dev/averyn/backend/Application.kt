@@ -1,5 +1,7 @@
 package dev.averyn.backend
 
+import dev.averyn.backend.activities.DEFAULT_REQUESTS_PER_MINUTE
+import dev.averyn.backend.activities.DEFAULT_USER_QUOTA_BYTES
 import dev.averyn.backend.activities.activities
 import dev.averyn.backend.auth.OidcConfig
 import dev.averyn.backend.auth.auth
@@ -39,7 +41,15 @@ fun Application.module() {
     observability(isReady = db::isReachable)
     auth(oidc)
     clientConfig(oidc, mapStyleUrl)
-    activities(db, raw)
+    activities(
+        db,
+        raw,
+        quotaBytes =
+            cfg.propertyOrNull("averyn.limits.quotaBytes")?.getString()?.toLong() ?: DEFAULT_USER_QUOTA_BYTES,
+        requestsPerMinute =
+            cfg.propertyOrNull("averyn.limits.requestsPerMinute")?.getString()?.toInt()
+                ?: DEFAULT_REQUESTS_PER_MINUTE,
+    )
 }
 
 /**
