@@ -49,4 +49,5 @@ coverage/
 
 # Local data
 infrastructure/compose/data/
+infrastructure/compose/seaweedfs-s3.local.json
 *.log

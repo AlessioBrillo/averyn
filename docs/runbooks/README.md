@@ -20,6 +20,12 @@ How to confirm it worked.
 ## Rollback
 ```
 
+## Procedures
+
+- [backup-database](backup-database.md): back up a self-hosted instance
+- [restore-database](restore-database.md): restore one from a backup
+- [upgrade-self-hosted](upgrade-self-hosted.md): move to a newer version
+
 ## Planned (tracked as issues)
 
-`backup-database`, `restore-database`, `rotate-secrets`, `upgrade-self-hosted`, `investigate-failed-sync`.
+`rotate-secrets`, `investigate-failed-sync`.
