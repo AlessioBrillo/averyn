@@ -23,6 +23,10 @@ averyn:
   # Web basemap (TDD-0003): a MapLibre style URL; optional, a demo style is used when unset.
   web:
     mapStyleUrl: "$?AVERYN_MAP_STYLE_URL"
+  # Per-user limits (TDD-0005): authenticated requests per minute (default 120) and raw bytes stored (default 1 GiB).
+  limits:
+    requestsPerMinute: "$?AVERYN_RATE_LIMIT_PER_MINUTE"
+    quotaBytes: "$?AVERYN_USER_QUOTA_BYTES"
   # Raw activity files (ADR-0016): any S3-compatible store.
   s3:
     endpoint: "$AVERYN_S3_ENDPOINT"
