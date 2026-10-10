@@ -1,0 +1,40 @@
+# TLS overlay (ADR-0018, TDD-0005): Caddy terminates TLS for the web app and the identity provider; nothing else
+# publishes a port. For a NEW instance only: the issuer https://IDP_HOST is fixed at the first start.
+#   docker compose -f docker-compose.yml -f docker-compose.tls.yml --env-file .env up -d --build
+# Needs in .env: AVERYN_DOMAIN (the web app, e.g. averyn.example.org) and IDP_HOST (e.g. auth.averyn.example.org),
+# both resolving to this machine, and ports 80/443 reachable for automatic certificates.
+services:
+  idp:
+    command: start-from-init --masterkey "${ZITADEL_MASTERKEY:?set ZITADEL_MASTERKEY in .env (32 characters)}" --tlsMode external
+    environment:
+      ZITADEL_EXTERNALPORT: 443
+      ZITADEL_EXTERNALSECURE: "true"
+    ports: !reset []
+
+  idp-init:
+    environment:
+      IDP_ISSUER: https://${IDP_HOST:?set IDP_HOST in .env}
+      WEB_ORIGIN: https://${AVERYN_DOMAIN:?set AVERYN_DOMAIN in .env}
+
+  backend:
+    environment:
+      # Discovery and keys from inside the network; the issuer checked is still https://IDP_HOST.
+      AVERYN_OIDC_INTERNAL_URL: http://idp:${IDP_PORT:-8081}
+    ports: !reset []
+
+  web:
+    environment:
+      AVERYN_DOMAIN: ${AVERYN_DOMAIN}
+      IDP_HOST: ${IDP_HOST}
+      IDP_PORT: ${IDP_PORT:-8081}
+    volumes:
+      - ./Caddyfile.tls:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports: !override
+      - "80:80"
+      - "443:443"
+
+volumes:
+  caddy-data:
+  caddy-config:

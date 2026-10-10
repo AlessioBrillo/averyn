@@ -5,9 +5,12 @@ set -eu
 
 # Zitadel picks its instance from the Host header, so call the service by name and send the issuer's host.
 # (Not by IDP_HOST: curl resolves *.localhost to loopback itself and would bypass the Compose network alias.)
-issuer="http://${IDP_HOST}:${IDP_PORT}"
+# IDP_ISSUER is http://IDP_HOST:IDP_PORT, or https://IDP_HOST behind the TLS edge (ADR-0018).
+issuer="${IDP_ISSUER}"
 base="http://idp:${IDP_PORT}"
-curl() { command curl -H "Host: ${IDP_HOST}:${IDP_PORT}" "$@"; }
+curl() { command curl -H "Host: ${issuer#*://}" "$@"; }
+# Development mode lets the apps use plain-HTTP redirect URIs; off as soon as the issuer is https.
+case "${issuer}" in https://*) dev_mode=false ;; *) dev_mode=true ;; esac
 
 # One management API call; prints the response body. Right after start the IdP can answer "ready" before its
 # projections have caught up with the bootstrap user (so the first calls are refused), hence the retries.
@@ -56,7 +59,7 @@ if [ -z "${client_id}" ]; then
     "appType": "OIDC_APP_TYPE_NATIVE",
     "authMethodType": "OIDC_AUTH_METHOD_TYPE_NONE",
     "accessTokenType": "OIDC_TOKEN_TYPE_JWT",
-    "devMode": true
+    "devMode": '"${dev_mode}"'
   }')
   client_id=$(printf '%s' "${created}" | first clientId)
 fi
@@ -76,7 +79,7 @@ if [ -z "${web_client_id}" ]; then
     "appType": "OIDC_APP_TYPE_USER_AGENT",
     "authMethodType": "OIDC_AUTH_METHOD_TYPE_NONE",
     "accessTokenType": "OIDC_TOKEN_TYPE_JWT",
-    "devMode": true
+    "devMode": '"${dev_mode}"'
   }')
   web_client_id=$(printf '%s' "${created}" | first clientId)
 fi

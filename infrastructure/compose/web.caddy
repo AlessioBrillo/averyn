@@ -1,0 +1,20 @@
+# The web site (TDD-0003), shared by Caddyfile (plain HTTP, development) and Caddyfile.tls (ADR-0018):
+# the built SPA plus a reverse proxy for /v1, so the browser sees one origin (no CORS).
+# No `log` directive on purpose: an access log would record activity ids (W3). /metrics is not proxied (ADR-0009).
+encode zstd gzip
+
+header {
+	X-Content-Type-Options nosniff
+	Referrer-Policy no-referrer
+	-Server
+}
+
+handle /v1/* {
+	reverse_proxy backend:8080
+}
+
+handle {
+	root * /srv
+	try_files {path} /index.html
+	file_server
+}

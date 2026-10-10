@@ -1,0 +1,18 @@
+# TLS edge (ADR-0018), mounted by docker-compose.tls.yml: the only service publishing ports. Port 80 redirects to
+# 443. Certificates are automatic: public names via ACME, *.localhost names from Caddy's local CA (stored in the
+# caddy-data volume, root at /data/caddy/pki/authorities/local/root.crt). No `log` directive (W3).
+{
+	admin off
+}
+
+{$AVERYN_DOMAIN} {
+	import web.caddy
+	# No includeSubDomains: the operator's other hosts under this domain are not ours to decide.
+	header Strict-Transport-Security "max-age=31536000"
+}
+
+# The identity provider, which runs with --tlsMode external and speaks HTTP/2 without TLS behind this proxy.
+{$IDP_HOST} {
+	header -Server
+	reverse_proxy h2c://idp:{$IDP_PORT}
+}

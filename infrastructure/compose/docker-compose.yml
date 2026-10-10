@@ -97,8 +97,9 @@ services:
       idp-perms:
         condition: service_completed_successfully
     environment:
-      IDP_HOST: ${IDP_HOST:-idp.localhost}
       IDP_PORT: ${IDP_PORT:-8081}
+      # The issuer as clients see it (docker-compose.tls.yml makes it https://IDP_HOST).
+      IDP_ISSUER: http://${IDP_HOST:-idp.localhost}:${IDP_PORT:-8081}
       # Public URL of the web app (must be exactly what users type): the browser app's redirect is registered with it.
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:${WEB_PORT:-8082}}
     entrypoint: ["/bin/sh", "/idp-init.sh"]
@@ -150,6 +151,7 @@ services:
       - backend
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./web.caddy:/etc/caddy/web.caddy:ro
     ports:
       - "${AVERYN_BIND:-127.0.0.1}:${WEB_PORT:-8082}:80"
 
