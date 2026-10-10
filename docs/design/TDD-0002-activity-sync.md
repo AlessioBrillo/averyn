@@ -127,7 +127,7 @@ New tables via forward-only Flyway migrations. Existing local activities on test
 | Body read fully in memory on large activities | Server streams to disk; the client reads the file whole (`ponytail`: fine to ~7 MB, stream if needed) |
 | iOS BG task killed mid-upload | The `PUT` is idempotent; the next run retries from scratch |
 | Token expires during a long offline period | Refresh with AppAuth; on failure `FAILED_RETRYABLE/AUTH` and a prompt to sign in |
-| The dev stack is plain HTTP | Debug-only cleartext on Android; iOS PoC builds set `NSAllowsArbitraryLoads` (internal builds only, TDD-0001 §7). Both go away with a TLS example in the self-hosting guide, before any store distribution |
+| The dev stack is plain HTTP | Cleartext in Debug builds only, on both platforms; release builds need the TLS stack ([TDD-0005](TDD-0005-self-host-hardening.md), [ADR-0018](../adr/0018-tls-edge-and-public-issuer.md)) |
 
 ## 9. Open questions
 

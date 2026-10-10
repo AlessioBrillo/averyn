@@ -33,10 +33,6 @@ targets:
         # Redirect scheme of the sign-in flow; must match infrastructure/compose/idp-init.sh.
         CFBundleURLTypes:
           - CFBundleURLSchemes: [dev.averyn.app]
-        # The dev stack is plain HTTP (a LAN address). PoC builds are internal (TDD-0001 §7): remove this and
-        # serve the stack over HTTPS before any store distribution.
-        NSAppTransportSecurity:
-          NSAllowsArbitraryLoads: true
         NSLocationWhenInUseUsageDescription: "Averyn uses your location to record your activity's route, distance and pace."
         NSLocationAlwaysAndWhenInUseUsageDescription: "Averyn uses your location to keep recording your activity while your phone is locked or the app is in the background."
     settings:
@@ -50,3 +46,14 @@ targets:
         script: |
           cd "$SRCROOT/../.."
           ./gradlew :shared:ios-umbrella:embedAndSignAppleFrameworkForXcode
+    postBuildScripts:
+      # Debug builds talk to the plain-HTTP development stack (a LAN address), so only they get the App Transport
+      # Security exception; Release builds are HTTPS-only, like Android's (TDD-0005, ADR-0018). XcodeGen cannot set a
+      # nested Info.plist key per configuration, hence this step; it runs before code signing.
+      - name: Allow plain HTTP in Debug builds
+        basedOnDependencyAnalysis: false
+        script: |
+          [ "$CONFIGURATION" = Debug ] || exit 0
+          plist="$TARGET_BUILD_DIR/$INFOPLIST_PATH"
+          /usr/libexec/PlistBuddy -c "Delete :NSAppTransportSecurity" "$plist" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$plist"
