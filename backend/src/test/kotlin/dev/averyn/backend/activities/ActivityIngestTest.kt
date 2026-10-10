@@ -139,12 +139,13 @@ class ActivityIngestTest {
         maxBytes: Long = MAX_ACTIVITY_BYTES,
         uploadSlots: Semaphore = Semaphore(MAX_CONCURRENT_UPLOADS),
         exportSlots: Semaphore = Semaphore(MAX_CONCURRENT_EXPORTS),
+        quotaBytes: Long = DEFAULT_USER_QUOTA_BYTES,
         block: suspend HttpClient.() -> Unit,
     ) = testApplication {
         application {
             content()
             auth(idp.config, idp.jwks)
-            activities(db, raw, maxBytes, uploadSlots, exportSlots)
+            activities(db, raw, maxBytes, uploadSlots, exportSlots, quotaBytes)
         }
         client.block()
     }
@@ -206,6 +207,30 @@ class ActivityIngestTest {
             assertEquals(first.summary().id, second.summary().id)
             assertEquals(1L, scalar("SELECT count(*) FROM activities"))
         }
+
+    @Test
+    fun anUploadOverTheStorageQuotaIs507AndStoresNothingWhileARetryOfAStoredOneStill200() {
+        val first = record()
+        val second = record()
+        app(quotaBytes = first.bytes.size + second.bytes.size - 1L) {
+            assertEquals(HttpStatusCode.Created, upload(first.id, first.bytes).status)
+
+            val over = upload(second.id, second.bytes)
+            assertEquals(HttpStatusCode.InsufficientStorage, over.status)
+            assertEquals(1L, scalar("SELECT count(*) FROM activities"))
+            val owner = scalar("SELECT owner_id FROM activities")
+            assertTrue(
+                runCatching { raw.get("raw/$owner/${second.id}/${sha256(second.bytes)}.jsonl") }
+                    .exceptionOrNull() is NoSuchKeyException,
+                "no object stored for the refused upload",
+            )
+
+            // The quota counts what is stored, so the device's retry of an upload that already succeeded still works.
+            assertEquals(HttpStatusCode.OK, upload(first.id, first.bytes).status)
+            // Another user has a quota of their own.
+            assertEquals(HttpStatusCode.Created, upload(second.id, second.bytes, token = bob).status)
+        }
+    }
 
     @Test
     fun theSameIdWithDifferentBytesIsAConflictAndTheFirstUploadWins() =
