@@ -164,7 +164,58 @@ jobs:
           curl -fsS http://127.0.0.1:8082/v1/client-config | grep -q '"webClientId":"[0-9]*","mapStyleUrl":"https'
           [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8082/v1/activities)" = 401 ]
           # /metrics is not proxied (it falls through to the SPA page), and the web container logs no request paths
-          ! curl -fsS http://127.0.0.1:8082/metrics | grep -q '^# HELP'
-          ! $COMPOSE logs --no-color web | grep -q 'activities'
+          ! curl -fsS http://127.0.0.1:8082/metrics | grep -q '^# HELP' || exit 1
+          ! $COMPOSE logs --no-color web | grep -q 'activities' || exit 1
+      - if: always()
+        run: $COMPOSE down -v
+
+  compose-tls:
+    name: Compose TLS overlay smoke test
+    runs-on: ubuntu-latest
+    env:
+      COMPOSE: docker compose -f infrastructure/compose/docker-compose.yml -f infrastructure/compose/docker-compose.tls.yml --env-file infrastructure/compose/.env
+    steps:
+      - uses: actions/checkout@v7
+      - run: |
+          cp infrastructure/compose/.env.example infrastructure/compose/.env
+          printf 'IDP_HOST=auth.averyn.localhost\nAVERYN_DOMAIN=averyn.localhost\n' >> infrastructure/compose/.env
+      - name: Start the stack
+        run: $COMPOSE up -d --build || { $COMPOSE logs --no-color; exit 1; }
+      - name: Only the edge publishes ports
+        run: |
+          $COMPOSE ps --format '{{.Service}} {{.Ports}}'
+          [ -z "$($COMPOSE ps --format '{{.Service}} {{.Ports}}' | grep -- '->' | grep -v '^web ')" ]
+      - name: Fetch the root of Caddy's local CA (*.localhost certificates)
+        run: |
+          for i in $(seq 1 30); do
+            $COMPOSE cp web:/data/caddy/pki/authorities/local/root.crt root.crt && break
+            sleep 2
+          done
+          test -s root.crt
+      - name: The identity provider publishes the https issuer through the edge
+        run: |
+          for i in $(seq 1 40); do
+            curl -fsS --cacert root.crt https://auth.averyn.localhost/.well-known/openid-configuration \
+              | grep -q '"issuer":"https://auth.averyn.localhost"' && break
+            sleep 5
+          done
+          for i in $(seq 1 30); do
+            [ "$($COMPOSE ps -a --format '{{.State}}' idp-init)" = exited ] && break
+            sleep 2
+          done
+          [ "$($COMPOSE ps -a --format '{{.ExitCode}}' idp-init)" = 0 ] || { $COMPOSE logs idp idp-init; exit 1; }
+      - name: Web app and API over https only
+        run: |
+          for i in $(seq 1 30); do
+            curl -fsS --cacert root.crt https://averyn.localhost/v1/client-config \
+              | grep -q '"issuer":"https://auth.averyn.localhost"' && break
+            sleep 5
+          done
+          curl -fsS --cacert root.crt https://averyn.localhost/v1/client-config | grep -q '"issuer":"https://auth.averyn.localhost"'
+          curl -fsS --cacert root.crt https://averyn.localhost/ | grep -q '<div id="root">'
+          curl -sSI --cacert root.crt https://averyn.localhost/ | grep -qi '^strict-transport-security: max-age='
+          [ "$(curl -s --cacert root.crt -o /dev/null -w '%{http_code}' https://averyn.localhost/v1/activities)" = 401 ]
+          [ "$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' http://averyn.localhost/)" = "308 https://averyn.localhost/" ]
+          ! curl -fsS --cacert root.crt https://averyn.localhost/metrics | grep -q '^# HELP' || exit 1
       - if: always()
         run: $COMPOSE down -v

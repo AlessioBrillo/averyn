@@ -1,5 +1,6 @@
 package dev.averyn.backend.auth
 
+import com.sun.net.httpserver.HttpServer
 import dev.averyn.backend.clientConfig
 import dev.averyn.backend.content
 import io.ktor.client.request.bearerAuth
@@ -14,6 +15,7 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
+import java.net.InetSocketAddress
 import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -78,6 +80,59 @@ class AuthTest {
                 assertEquals(HttpStatusCode.Unauthorized, client.get("/whoami") { bearerAuth(token) }.status)
             }
         }
+    }
+
+    @Test
+    fun keysComeFromTheInternalUrlButTheIssuerMustStillMatch() {
+        val good = providerBehindEdge(publishedIssuer = "https://idp.test")
+        val evil = providerBehindEdge(publishedIssuer = "https://evil.test")
+        try {
+            val token = idp.token()
+            assertEquals(HttpStatusCode.OK, whoami(discoveredJwks("https://idp.test", good.url()), token))
+            assertEquals(HttpStatusCode.Unauthorized, whoami(discoveredJwks("https://idp.test", evil.url()), token))
+        } finally {
+            good.stop(0)
+            evil.stop(0)
+        }
+    }
+
+    /**
+     * An IdP reached over plain HTTP that, like the bundled one, only answers as its public self (`jwks_uri` on
+     * https://idp.test) when told the public host with `X-Forwarded-Host`.
+     */
+    private fun providerBehindEdge(publishedIssuer: String): HttpServer =
+        HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            createContext("/") { exchange ->
+                val body =
+                    when {
+                        exchange.requestHeaders.getFirst("X-Forwarded-Host") != "idp.test" -> null
+                        exchange.requestURI.path == "/.well-known/openid-configuration" ->
+                            """{"issuer":"$publishedIssuer","jwks_uri":"https://idp.test/oauth/v2/keys"}"""
+                        exchange.requestURI.path == "/oauth/v2/keys" -> idp.jwksJson
+                        else -> null
+                    }?.toByteArray()
+                exchange.sendResponseHeaders(if (body == null) 404 else 200, body?.size?.toLong() ?: -1)
+                exchange.responseBody.use { if (body != null) it.write(body) }
+            }
+            start()
+        }
+
+    private fun HttpServer.url() = "http://127.0.0.1:${address.port}"
+
+    private fun whoami(
+        jwks: com.auth0.jwk.JwkProvider,
+        token: String,
+    ): HttpStatusCode {
+        var result: HttpStatusCode? = null
+        testApplication {
+            application {
+                content()
+                auth(idp.config, jwks)
+                routing { authenticate(OIDC_AUTH) { get("/whoami") { call.respondText("ok") } } }
+            }
+            result = client.get("/whoami") { bearerAuth(token) }.status
+        }
+        return checkNotNull(result)
     }
 
     @Test
