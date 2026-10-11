@@ -1,5 +1,5 @@
 # Build context: apps/web. The Caddyfile is mounted by Compose (infrastructure/compose/Caddyfile).
-FROM node:24-alpine AS build
+FROM node:25-alpine AS build
 WORKDIR /src
 COPY package.json package-lock.json ./
 RUN npm ci
