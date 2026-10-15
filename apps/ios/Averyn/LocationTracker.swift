@@ -8,6 +8,11 @@ import Shared
 final class LocationTracker: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     private let recorder: ActivityRecorder
+    /// Keeps the app running (and allowed to start location updates) while it is in the background (iOS 17).
+    private var session: CLBackgroundActivitySession?
+
+    /// Called when something the user must know happens (permission lost, accuracy reduced). Any queue.
+    var onIssue: ((String) -> Void)?
 
     init(recorder: ActivityRecorder) {
         self.recorder = recorder
@@ -22,33 +27,58 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
         manager.showsBackgroundLocationIndicator = true
     }
 
+    /// Recording can continue with the screen locked and be relaunched by the system: "Always" and precise.
+    var canRecordInBackground: Bool {
+        manager.authorizationStatus == .authorizedAlways && manager.accuracyAuthorization == .fullAccuracy
+    }
+
+    /// A short, fixed vocabulary for the diagnostics report (never free text).
+    var permissionLabel: String {
+        let precise = manager.accuracyAuthorization == .fullAccuracy
+        switch manager.authorizationStatus {
+        case .authorizedAlways: return precise ? "ALWAYS_PRECISE" : "ALWAYS_APPROXIMATE"
+        case .authorizedWhenInUse: return precise ? "WHEN_IN_USE_PRECISE" : "WHEN_IN_USE_APPROXIMATE"
+        case .denied, .restricted: return "DENIED"
+        default: return "NOT_DETERMINED"
+        }
+    }
+
     func start() {
         manager.requestAlwaysAuthorization()
+        // The background session and significant-change monitoring are what let iOS bring a terminated app back
+        // to continue recording (TDD-0006 §5.1): a relaunch runs `AppModel.resumeInterruptedIfRecent()`.
+        session = CLBackgroundActivitySession()
         manager.startUpdatingLocation()
+        manager.startMonitoringSignificantLocationChanges()
     }
 
     func stop() {
+        manager.stopMonitoringSignificantLocationChanges()
         manager.stopUpdatingLocation()
+        session?.invalidate()
+        session = nil
     }
 
     // F9: a permission change mid-activity is surfaced, not a silent stop. No auto-resume on re-grant —
-    // the user resumes explicitly, which is less surprising than the app deciding on its own. A denial
-    // while still PREPARING (no fix yet) has no "resume" to offer, so it fails outright instead of
-    // pausing — otherwise the activity would be stuck showing "Waiting for GPS…" forever.
+    // the user resumes explicitly, which is less surprising than the app deciding on its own. A change while
+    // still PREPARING (no fix yet) has no "resume" to offer, so it fails outright instead of pausing —
+    // otherwise the activity would be stuck showing "Waiting for GPS…" forever.
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        switch manager.authorizationStatus {
-        case .denied, .restricted:
-            switch recorder.currentState {
-            case .recording:
-                recorder.pause(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs(), reason: .permissionRevoked)
-            case .preparing:
-                recorder.fail(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs(), reason: .permissionRevoked)
-            default:
-                break
-            }
+        let denied = manager.authorizationStatus == .denied || manager.authorizationStatus == .restricted
+        let reduced = manager.accuracyAuthorization == .reducedAccuracy
+        guard denied || reduced else { return }
+        let reason: Reason = denied ? .permissionRevoked : .permissionDowngraded
+        switch recorder.currentState {
+        case .recording:
+            recorder.pause(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs(), reason: reason)
+        case .preparing:
+            recorder.fail(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs(), reason: reason)
         default:
-            break
+            return
         }
+        onIssue?(denied
+            ? "Location permission was removed: the activity is paused."
+            : "Precise location was turned off: the activity is paused. Turn Precise Location on to continue.")
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
@@ -64,21 +94,13 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
     }
 }
 
-private func nowElapsedRealtimeMs() -> Int64 {
-    Int64(ProcessInfo.processInfo.systemUptime * 1000)
-}
-
-private func nowTimeMs() -> Int64 {
-    Int64(Date().timeIntervalSince1970 * 1000)
-}
-
 private extension CLLocation {
-    /// Monotonic time from `ProcessInfo.systemUptime`, offset by how old this fix already is (TDD-0001
-    /// §5.3): CoreLocation only gives a wall-clock `timestamp` per fix, not a monotonic one like Android's
+    /// Monotonic time of the fix: "now" on the sleep-inclusive clock minus how old the fix already is (TDD-0001
+    /// §5.3). CoreLocation only gives a wall-clock `timestamp` per fix, not a monotonic one like Android's
     /// `elapsedRealtimeNanos`, so this is the closest equivalent.
     func toLocationSample() -> LocationSample {
-        let ageS = Date().timeIntervalSince(self.timestamp)
-        let elapsedRealtimeMs = Int64((ProcessInfo.processInfo.systemUptime - ageS) * 1000)
+        let ageS = max(0, Date().timeIntervalSince(self.timestamp))
+        let elapsedRealtimeMs = nowElapsedRealtimeMs() - Int64(ageS * 1000)
         let timeMs = Int64(self.timestamp.timeIntervalSince1970 * 1000)
         return LocationSample(
             timeMs: timeMs,

@@ -47,6 +47,9 @@ import dev.averyn.tracking.ActivityMetadata
 import dev.averyn.tracking.DiagnosticsReport
 import dev.averyn.tracking.LiveSnapshot
 import dev.averyn.tracking.RecoveryResult
+import dev.averyn.tracking.ResumeAction
+import dev.averyn.tracking.finishOlderInterrupted
+import dev.averyn.tracking.resumeDecision
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -123,26 +126,22 @@ private fun RecordScreen(app: AverynApplication) {
     LaunchedEffect(Unit) {
         if (recorder.currentState != ActivityState.IDLE) return@LaunchedEffect
         val (elapsedMs, timeMs) = now()
-        val latest = withContext(Dispatchers.IO) { latestInterrupted(app.store, timeMs) } ?: return@LaunchedEffect
+        val decision =
+            withContext(Dispatchers.IO) { app.store.resumeDecision(timeMs, hasPreciseLocation(context)) }
+                ?: return@LaunchedEffect
         val finishedOlder =
             withContext(Dispatchers.IO) {
-                finishOlderInterrupted(app.store, latest.metadata.activityId, elapsedMs, timeMs)
+                app.store.finishOlderInterrupted(decision.metadata.activityId, elapsedMs, timeMs)
             }
         if (finishedOlder > 0) {
             enqueueSync(context)
             historyVersion++
         }
-        val action =
-            if (latest.state == ActivityState.STOPPING) {
-                ResumeAction.RESUME_NOW
-            } else {
-                resumeAction(latest.gapMs, hasPreciseLocation(context))
-            }
-        if (action == ResumeAction.RESUME_NOW) {
-            applyRecovery(latest.metadata, finishNow = false)
+        if (decision.action == ResumeAction.RESUME_NOW) {
+            applyRecovery(decision.metadata, finishNow = false)
             notice = "Recording resumed after an interruption"
         } else {
-            pendingRecovery = latest.metadata
+            pendingRecovery = decision.metadata
         }
     }
 
