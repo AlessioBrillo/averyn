@@ -109,14 +109,29 @@ final class RecorderViewModel: ObservableObject {
 
     private func writeDiagnosticsJson(activityId: String, diagnostics: DiagnosticsReport) {
         let device = DeviceInfo(
-            model: UIDevice.current.model,
+            model: hardwareIdentifier(),
             osVersion: "iOS \(UIDevice.current.systemVersion)",
-            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
+            manufacturer: "Apple",
+            buildId: nil,
+            locationPermission: nil,
+            powerSaverOn: ProcessInfo.processInfo.isLowPowerModeEnabled ? KotlinBoolean(bool: true) : KotlinBoolean(bool: false),
+            batteryOptimisationExempt: nil
         )
         let json = diagnostics.toJson(device: device)
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(activityId)-diagnostics.json")
         try? json.write(to: url, atomically: true, encoding: .utf8)
         diagnosticsURL = url
+    }
+}
+
+/// The hardware identifier (e.g. "iPhone15,2"): `UIDevice.current.model` only says "iPhone", which cannot
+/// separate devices in the device matrix.
+private func hardwareIdentifier() -> String {
+    var info = utsname()
+    uname(&info)
+    return withUnsafePointer(to: &info.machine) {
+        $0.withMemoryRebound(to: CChar.self, capacity: 1) { String(cString: $0) }
     }
 }
 

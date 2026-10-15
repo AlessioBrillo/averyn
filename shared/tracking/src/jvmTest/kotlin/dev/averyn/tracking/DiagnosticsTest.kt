@@ -1,5 +1,6 @@
 package dev.averyn.tracking
 
+import dev.averyn.domain.ActivityState
 import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Sport
 import kotlinx.io.buffered
@@ -89,9 +90,67 @@ class DiagnosticsTest {
         recorder.onSample(sample(1_000, 45.001))
         val completed = recorder.stop(1_000, 1_000)
 
-        val json = completed.diagnostics.toJson(DeviceInfo("Pixel", "14", "0.0.1"))
+        val json = completed.diagnostics.toJson(DeviceInfo("Pixel", "14", "0.0.1", "Google", null, null, null, null))
 
         assertFalse("latitude" in json, "diagnostics export must not carry coordinates: $json")
         assertFalse("longitude" in json, "diagnostics export must not carry coordinates: $json")
+    }
+
+    @Test
+    fun v2ReportNamesTheAlgorithmsAndCarriesTheEventTimeline() {
+        val recorder = ActivityRecorder(store)
+        recorder.start("a1", Sport.RUN, 0, 1_000)
+        recorder.gpsReady(0, 1_000)
+        recorder.onSample(sample(0, 45.0))
+        recorder.pause(5_000, 6_000)
+        recorder.resume(9_000, 10_000)
+        recorder.onSample(sample(10_000, 45.001))
+        val diag = recorder.stop(10_000, 11_000).diagnostics
+
+        assertEquals("diagnostics-v2", diag.formatVersion)
+        assertEquals(AlgorithmVersions("distance-v1", "time-v1", "speed-v1", "quality-v1"), diag.algorithms)
+        assertEquals(
+            listOf(
+                ActivityState.PREPARING,
+                ActivityState.RECORDING,
+                ActivityState.PAUSED,
+                ActivityState.RECORDING,
+                ActivityState.STOPPING,
+                ActivityState.COMPLETED,
+            ),
+            diag.events.map { it.state },
+        )
+        assertEquals(11_000L, diag.endedAtMs)
+    }
+
+    @Test
+    fun fixesTheRecorderCouldNotUseAreCountedByReason() {
+        val recorder = ActivityRecorder(store)
+        recorder.onSample(sample(0, 45.0)) // no activity yet: a restarted service before recover()
+        recorder.start("a1", Sport.RUN, 0, 0)
+        recorder.gpsReady(0, 0)
+        recorder.onSample(sample(1_000, 45.0))
+        recorder.recordDroppedInput(DroppedInputReason.INVALID_SAMPLE)
+        val completed = recorder.stop(2_000, 2_000)
+        recorder.onSample(sample(3_000, 45.0)) // a late callback after the end
+
+        // start() begins a new activity's counters, so only what happened since then belongs to it.
+        assertEquals(mapOf(DroppedInputReason.INVALID_SAMPLE to 1), completed.diagnostics.droppedInputs)
+    }
+
+    @Test
+    fun fixesDroppedBeforeARecoveryBelongToTheRecoveredActivity() {
+        val original = ActivityRecorder(store)
+        original.start("a1", Sport.RUN, 0, 0)
+        original.gpsReady(0, 0)
+        original.onSample(sample(0, 45.0))
+
+        val restarted = ActivityRecorder(store) // the service came back before anyone recovered the activity
+        restarted.onSample(sample(1_000, 45.0))
+        restarted.onSample(sample(2_000, 45.0))
+        restarted.recover("a1", 3_000, 3_000)
+        val diag = restarted.stop(4_000, 4_000).diagnostics
+
+        assertEquals(mapOf(DroppedInputReason.NO_ACTIVE_ACTIVITY to 2), diag.droppedInputs)
     }
 }

@@ -34,6 +34,21 @@ class ActivityStoreTest {
     private fun sample(elapsedMs: Long) = LocationSample(elapsedMs, elapsedMs, 45.0, 9.0, 5.0)
 
     @Test
+    fun lastStateOfReadsOnlyTheEventLinesAndIgnoresDamagedOnes() {
+        store.create(ActivityMetadata("a1", Sport.RUN, 0))
+        store.appendEvent("a1", StateEvent(0, 0, ActivityState.PREPARING, Reason.USER))
+        store.appendEvent("a1", StateEvent(1, 1, ActivityState.RECORDING, Reason.GPS_READY))
+        repeat(50) { store.appendSample("a1", sample(100L + it)) }
+        store.appendEvent("a1", StateEvent(200, 200, ActivityState.PAUSED, Reason.USER))
+        repeat(5) { store.appendSample("a1", sample(300L + it)) }
+        val path = Path(dir.toString(), "a1.jsonl")
+        SystemFileSystem.sink(path, append = true).buffered().use { it.writeString("EVENT {\"elapsedRe") }
+
+        assertEquals(ActivityState.PAUSED, store.lastStateOf("a1"))
+        assertEquals(null, store.lastStateOf("missing"))
+    }
+
+    @Test
     fun roundTripsSamplesAndEventsInOrder() {
         store.create(ActivityMetadata("a1", Sport.RUN, 1_000))
         store.appendEvent("a1", StateEvent(0, 1_000, ActivityState.PREPARING, Reason.USER))

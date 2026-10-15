@@ -26,7 +26,7 @@ Setup common to all: fully charged unless the scenario says otherwise, location 
 | S2 | Background, screen locked, ≥ 1 h | Start, lock the screen, put the phone in a pocket, 1 h | No gap > 10 s in `intervalDistribution`; `longestGapMs` < 10 s outside known signal loss |
 | S3 | Pause / resume (manual) | 3 pauses of ≥ 1 min | `pausedMs` equals the sum within 2 s; no samples counted while paused; export has one segment per recording interval |
 | S4 | Intermittent GPS (tunnel, urban canyon) | Walk through ≥ 2 min of bad signal | Gap and `POOR_ACCURACY` counted in the report; no crash; track continues |
-| S5 | Force-kill during recording → recovery | Swipe the app away (Android also: `adb shell am kill dev.averyn.app`); note the instant; wait 30 s | Recording resumes by itself (R1) or is offered on next launch (iOS swipe-kill is expected to be the latter); `recoveries[0].lastSampleBeforeMs` within 1 s of the kill instant; numbers continuous |
+| S5 | Force-kill during recording → recovery | Swipe the app away (Android also: `adb shell am kill dev.averyn.app`); note the instant; wait 30 s | Recording resumes by itself (R1) or is offered on next launch (iOS swipe-kill is expected to be the latter); `recoveryGaps[0].lastSampleBeforeMs` within 1 s of the kill instant; numbers continuous |
 | S6 | Reboot during recording → recovery | Reboot the phone, then open/tap the notification | Recovery works; no `NON_MONOTONIC_TIME` burst; `rebootDetected: true`; distance keeps growing after the reboot |
 | S7 | Permission revoked / downgraded mid-activity | Switch to "While using"/"approximate" or revoke in Settings | Activity paused with reason `PERMISSION_*`, banner shown, never silently stopped (F9) |
 | S8 | Low battery / battery saver on | Run at ≤ 15% and with saver mode | Recording continues or fails visibly; battery drain/h in the row |
@@ -39,7 +39,7 @@ Setup common to all: fully charged unless the scenario says otherwise, location 
 
 ### Recovery loss (S5/S6)
 
-"Loses ≤ 1 sample interval" is a durability claim: every fix the app received before the kill is on disk. It cannot be read from the phone alone, so the tester records the **kill instant** (wall clock, to the second: `adb shell date +%T` before `am kill`, or a stopwatch app for a swipe). In the diagnostics, `recoveries[n].lastSampleBeforeMs` is the wall time of the last stored sample. Pass: `kill instant − lastSampleBeforeMs ≤ 1 s` (one 1 s interval; +1 s tolerance for clock reading). `gapMs` (time without GPS until recording resumed) is reported separately as resume latency; it is not part of the criterion.
+"Loses ≤ 1 sample interval" is a durability claim: every fix the app received before the kill is on disk. It cannot be read from the phone alone, so the tester records the **kill instant** (wall clock, to the second: `adb shell date +%T` before `am kill`, or a stopwatch app for a swipe). In the diagnostics, `recoveryGaps[n].lastSampleBeforeMs` is the wall time of the last stored sample. Pass: `kill instant − lastSampleBeforeMs ≤ 1 s` (one 1 s interval; +1 s tolerance for clock reading). `gapMs` (time without GPS until recording resumed) is reported separately as resume latency; it is not part of the criterion.
 
 ### GPX validation
 
