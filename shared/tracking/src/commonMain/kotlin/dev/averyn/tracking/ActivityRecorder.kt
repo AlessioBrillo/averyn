@@ -7,9 +7,6 @@ import dev.averyn.domain.Sport
 import dev.averyn.domain.StateEvent
 import dev.averyn.metrics.ActivityMetrics
 import dev.averyn.metrics.ActivitySnapshot
-import dev.averyn.metrics.DISTANCE_ALGORITHM_VERSION
-import dev.averyn.metrics.SPEED_ALGORITHM_VERSION
-import dev.averyn.metrics.TIME_ALGORITHM_VERSION
 import kotlin.math.abs
 
 /**
@@ -179,6 +176,17 @@ class ActivityRecorder(
         emit()
     }
 
+    /**
+     * The user gave up while waiting for the first fix (PREPARING -> IDLE, TDD-0001 §5.2): nothing was recorded,
+     * so nothing is kept and the activity file is removed.
+     */
+    fun cancel() {
+        state = state.transitionTo(ActivityState.IDLE)
+        activityId?.let { store.delete(it) }
+        activityId = null
+        emit()
+    }
+
     /** The native adapter calls this on the first fix after [start], or [fail] if none arrives. */
     fun gpsReady(
         elapsedRealtimeMs: Long,
@@ -293,17 +301,8 @@ class ActivityRecorder(
     private fun buildCompletedActivity(): CompletedActivity =
         CompletedActivity(activityId!!, sport!!, metrics.snapshot(), qualityAccumulator.build(), buildDiagnostics())
 
-    private fun buildDiagnostics(): DiagnosticsReport {
-        val snap = metrics.snapshot()
-        val hours = snap.elapsedMs / 3_600_000.0
-        val drainPerHour =
-            if (batteryReadingCount < 2 || hours <= 0.0) {
-                null
-            } else {
-                (batteryStartPercent!! - batteryEndPercent!!) / hours
-            }
-        return DiagnosticsReport(
-            formatVersion = DIAGNOSTICS_FORMAT_VERSION,
+    private fun buildDiagnostics(): DiagnosticsReport =
+        diagnosticsReport(
             activityId = activityId!!,
             sport = sport!!,
             startedAtMs = startedAtMs,
@@ -311,28 +310,16 @@ class ActivityRecorder(
             recordingSamples = recordingSamples,
             recordLosses = recordLosses.toMap(),
             recoveries = recoveries,
-            distanceM = snap.distanceM,
-            elapsedMs = snap.elapsedMs,
-            movingMs = snap.movingMs,
-            pausedMs = snap.pausedMs,
+            metrics = metrics.snapshot(),
             quality = qualityAccumulator.build(),
             batteryStartPercent = batteryStartPercent,
             batteryEndPercent = batteryEndPercent,
-            batteryDrainPercentPerHour = drainPerHour,
-            algorithms =
-                AlgorithmVersions(
-                    distance = DISTANCE_ALGORITHM_VERSION,
-                    time = TIME_ALGORITHM_VERSION,
-                    speed = SPEED_ALGORITHM_VERSION,
-                    quality = QUALITY_ALGORITHM_VERSION,
-                ),
-            stationaryMs = snap.stationaryMs,
-            endedAtMs = if (activityId == null) null else lastKnownTimeMs,
+            batteryReadingCount = batteryReadingCount,
             droppedInputs = droppedInputs.toMap(),
             recoveryGaps = recoveryGaps.snapshot(),
             events = timeline.toList(),
+            endedAtMs = lastKnownTimeMs,
         )
-    }
 
     /**
      * Rebuilds this recorder from a stored activity (F4) with [replay] (streaming, bounded memory), after a

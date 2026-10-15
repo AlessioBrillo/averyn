@@ -3,6 +3,10 @@ package dev.averyn.tracking
 import dev.averyn.domain.ActivityState
 import dev.averyn.domain.Reason
 import dev.averyn.domain.Sport
+import dev.averyn.metrics.ActivitySnapshot
+import dev.averyn.metrics.DISTANCE_ALGORITHM_VERSION
+import dev.averyn.metrics.SPEED_ALGORITHM_VERSION
+import dev.averyn.metrics.TIME_ALGORITHM_VERSION
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -144,6 +148,67 @@ data class DeviceInfo(
     /** Android only: the app is exempt from battery optimisation. */
     val batteryOptimisationExempt: Boolean?,
 )
+
+/**
+ * The one place a [DiagnosticsReport] is assembled, so the report a recorder builds live and the one rebuilt
+ * from a stored file (`ActivityStore.diagnosticsOf`, the history screen) cannot drift apart.
+ */
+internal fun diagnosticsReport(
+    activityId: String,
+    sport: Sport,
+    startedAtMs: Long,
+    totalSamples: Int,
+    recordingSamples: Int,
+    recordLosses: Map<RecordLossReason, Int>,
+    recoveries: Int,
+    metrics: ActivitySnapshot,
+    quality: QualityReport,
+    batteryStartPercent: Int?,
+    batteryEndPercent: Int?,
+    batteryReadingCount: Int,
+    droppedInputs: Map<DroppedInputReason, Int>,
+    recoveryGaps: List<RecoveryGap>,
+    events: List<TimelineEvent>,
+    endedAtMs: Long?,
+): DiagnosticsReport {
+    val hours = metrics.elapsedMs / 3_600_000.0
+    val drainPerHour =
+        if (batteryReadingCount < 2 || hours <= 0.0 || batteryStartPercent == null || batteryEndPercent == null) {
+            null
+        } else {
+            (batteryStartPercent - batteryEndPercent) / hours
+        }
+    return DiagnosticsReport(
+        formatVersion = DIAGNOSTICS_FORMAT_VERSION,
+        activityId = activityId,
+        sport = sport,
+        startedAtMs = startedAtMs,
+        totalSamples = totalSamples,
+        recordingSamples = recordingSamples,
+        recordLosses = recordLosses,
+        recoveries = recoveries,
+        distanceM = metrics.distanceM,
+        elapsedMs = metrics.elapsedMs,
+        movingMs = metrics.movingMs,
+        pausedMs = metrics.pausedMs,
+        quality = quality,
+        batteryStartPercent = batteryStartPercent,
+        batteryEndPercent = batteryEndPercent,
+        batteryDrainPercentPerHour = drainPerHour,
+        algorithms =
+            AlgorithmVersions(
+                distance = DISTANCE_ALGORITHM_VERSION,
+                time = TIME_ALGORITHM_VERSION,
+                speed = SPEED_ALGORITHM_VERSION,
+                quality = QUALITY_ALGORITHM_VERSION,
+            ),
+        stationaryMs = metrics.stationaryMs,
+        endedAtMs = endedAtMs,
+        droppedInputs = droppedInputs,
+        recoveryGaps = recoveryGaps,
+        events = events,
+    )
+}
 
 private val diagnosticsJsonFormat = Json { prettyPrint = true }
 

@@ -139,6 +139,38 @@ class DiagnosticsTest {
     }
 
     @Test
+    fun aReportRebuiltFromTheStoreEqualsTheOneBuiltLive() {
+        val recorder = ActivityRecorder(store)
+        recorder.batteryPercent = { 80 }
+        recorder.start("a1", Sport.RUN, 0, 1_000)
+        recorder.gpsReady(0, 1_000)
+        recorder.onSample(sample(0, 45.0))
+        recorder.pause(5_000, 6_000)
+        recorder.resume(9_000, 10_000)
+        recorder.onSample(sample(10_000, 45.001))
+        val live = recorder.stop(10_000, 11_000).diagnostics
+
+        val rebuilt = store.diagnosticsOf("a1")
+
+        assertEquals(live, rebuilt) // nothing was dropped before storing, so even droppedInputs matches
+        assertEquals(null, store.diagnosticsOf("missing"))
+    }
+
+    @Test
+    fun cancellingWhileWaitingForGpsKeepsNothing() {
+        val recorder = ActivityRecorder(store)
+        recorder.start("a1", Sport.RUN, 0, 0)
+        assertEquals(1, store.list().size)
+
+        recorder.cancel()
+
+        assertEquals(ActivityState.IDLE, recorder.currentState)
+        assertEquals(0, store.list().size)
+        recorder.start("a2", Sport.RUN, 10, 10) // and the recorder is reusable
+        assertEquals(ActivityState.PREPARING, recorder.currentState)
+    }
+
+    @Test
     fun fixesDroppedBeforeARecoveryBelongToTheRecoveredActivity() {
         val original = ActivityRecorder(store)
         original.start("a1", Sport.RUN, 0, 0)

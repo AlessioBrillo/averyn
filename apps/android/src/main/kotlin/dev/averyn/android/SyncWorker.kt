@@ -17,7 +17,9 @@ private const val SYNC_WORK_NAME = "activity-sync"
 
 /**
  * Asks WorkManager to upload finished activities when the network allows (TDD-0002 §5.7). Safe to call often:
- * a pending run is replaced, and the upload endpoint is idempotent, so a run cut short just starts over.
+ * a request made while a run is in progress is queued after it instead of replacing it, so a long upload is not
+ * cancelled by the next request and an activity that finished meanwhile is still picked up. The upload endpoint
+ * is idempotent, and a queued run with nothing left to do is cheap.
  */
 fun enqueueSync(context: Context) {
     val request =
@@ -25,7 +27,7 @@ fun enqueueSync(context: Context) {
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()
-    WorkManager.getInstance(context).enqueueUniqueWork(SYNC_WORK_NAME, ExistingWorkPolicy.REPLACE, request)
+    WorkManager.getInstance(context).enqueueUniqueWork(SYNC_WORK_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
 }
 
 /** Try again later (with backoff) only if something can still succeed without the user: not when sign-in is needed. */

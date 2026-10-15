@@ -22,6 +22,8 @@ import dev.averyn.domain.ActivityState
 import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Reason
 import dev.averyn.tracking.ActivityRecorder
+import dev.averyn.tracking.DroppedInputReason
+import dev.averyn.tracking.RecoveryResult
 
 private const val NOTIFICATION_CHANNEL_ID = "tracking"
 private const val NOTIFICATION_ID = 1
@@ -31,6 +33,11 @@ private const val LOCATION_INTERVAL_MS = 1_000L
  * Foreground service driving the shared [ActivityRecorder] (TDD-0001 §5.1: native code is thin, it only
  * converts platform callbacks to [LocationSample] and calls into shared/). Uses the platform
  * [LocationManager] directly — no Google Play Services dependency, so the app works on de-Googled devices.
+ *
+ * START_STICKY means the system recreates this service after the process was killed, with a fresh, IDLE
+ * recorder and no intent. That is the recovery path (TDD-0006 §5.1): it resumes the interrupted activity by
+ * itself when the interruption is recent and precise location is granted, and otherwise asks the user with a
+ * notification. It never leaves a "Recording" notification up while fixes are being thrown away.
  */
 class TrackingService : Service() {
     private val binder = LocalBinder()
@@ -50,7 +57,15 @@ class TrackingService : Service() {
                 // Always forward the fix: ActivityRecorder.onSample stores it in every non-terminal state
                 // (F5) and only feeds live metrics while RECORDING — gating the call itself here would
                 // silently lose every fix that arrives while PAUSED instead of just excluding it from metrics.
-                recorder.onSample(location.toSample())
+                val sample =
+                    try {
+                        location.toSample()
+                    } catch (e: IllegalArgumentException) {
+                        // A fix the sample model rejects (NaN, out-of-range): counted, never a crash.
+                        recorder.recordDroppedInput(DroppedInputReason.INVALID_SAMPLE)
+                        return
+                    }
+                recorder.onSample(sample)
             }
 
             @Deprecated("Deprecated in Java") // required override pre-API 29; no-op, no status info to act on
@@ -67,12 +82,7 @@ class TrackingService : Service() {
                 // resumes explicitly once the provider is back (no auto-resume: less surprising). A provider
                 // lost while still PREPARING (before the first fix) has no "resume" to offer, so it fails
                 // outright instead of pausing — otherwise the activity would wait for GPS forever.
-                val (elapsedMs, timeMs) = SystemClock.elapsedRealtime() to System.currentTimeMillis()
-                when (recorder.currentState) {
-                    ActivityState.RECORDING -> recorder.pause(elapsedMs, timeMs, Reason.PROVIDER_DISABLED)
-                    ActivityState.PREPARING -> recorder.fail(elapsedMs, timeMs, Reason.PROVIDER_DISABLED)
-                    else -> {}
-                }
+                interrupt(Reason.PROVIDER_DISABLED)
             }
         }
 
@@ -87,14 +97,62 @@ class TrackingService : Service() {
         flags: Int,
         startId: Int,
     ): Int {
-        ServiceCompat.startForeground(
-            this,
-            NOTIFICATION_ID,
-            buildNotification(),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
-        )
+        try {
+            ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                buildNotification(),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
+            )
+        } catch (e: RuntimeException) {
+            // Android 12+ refuses a foreground start from the background (a sticky restart can be one). The
+            // activity stays interrupted in the store; the user is one tap away from resuming it.
+            postInterruptedNotification(this)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        if (!hasActivityToRecord()) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         startLocationUpdates()
         return START_STICKY
+    }
+
+    /**
+     * True when the recorder has an activity this service should feed. A recorder that is IDLE here means the
+     * process was recreated: look for the interrupted activity and resume it, or ask the user to.
+     */
+    private fun hasActivityToRecord(): Boolean {
+        when (recorder.currentState) {
+            ActivityState.PREPARING, ActivityState.RECORDING, ActivityState.PAUSED -> return true
+            ActivityState.IDLE -> {}
+            else -> return false // terminal or finishing: a stray restart of a service that is no longer needed
+        }
+        val app = application as AverynApplication
+        val elapsedMs = SystemClock.elapsedRealtime()
+        val timeMs = System.currentTimeMillis()
+        val latest = latestInterrupted(app.store, timeMs) ?: return false
+        if (finishOlderInterrupted(app.store, latest.metadata.activityId, elapsedMs, timeMs) > 0) enqueueSync(this)
+
+        // A kill during STOPPING only needs finalizing: no GPS involved, so no reason to ask.
+        val action =
+            if (latest.state == ActivityState.STOPPING) {
+                ResumeAction.RESUME_NOW
+            } else {
+                resumeAction(latest.gapMs, hasPrecisePermission = hasPreciseLocation())
+            }
+        if (action == ResumeAction.ASK_USER) {
+            postInterruptedNotification(this)
+            return false
+        }
+        return when (recorder.recover(latest.metadata.activityId, elapsedMs, timeMs)) {
+            is RecoveryResult.Resumed -> true
+            is RecoveryResult.Completed -> {
+                enqueueSync(this)
+                false
+            }
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
@@ -104,21 +162,41 @@ class TrackingService : Service() {
         super.onDestroy()
     }
 
+    private fun hasPreciseLocation() =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+
     private fun startLocationUpdates() {
-        val hasPermission =
+        // Checked inline (not through hasPreciseLocation()) so lint sees the guard on requestLocationUpdates below.
+        val granted =
             ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
                 PackageManager.PERMISSION_GRANTED
-        if (!hasPermission) {
-            recorder.fail(SystemClock.elapsedRealtime(), System.currentTimeMillis(), Reason.PERMISSION_REVOKED)
+        if (!granted) {
+            interrupt(Reason.PERMISSION_REVOKED)
             stopSelf()
             return
         }
         if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-            recorder.fail(SystemClock.elapsedRealtime(), System.currentTimeMillis(), Reason.PROVIDER_DISABLED)
+            interrupt(Reason.PROVIDER_DISABLED)
             stopSelf()
             return
         }
         locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, LOCATION_INTERVAL_MS, 0f, listener)
+    }
+
+    /**
+     * The location source is gone while an activity exists (F9). Before the first fix there is nothing to keep, so
+     * the activity fails; once recording it is paused with the reason and the data stays resumable. Never throws:
+     * the state machine has no legal move from IDLE or a terminal state, and then there is nothing to interrupt.
+     */
+    private fun interrupt(reason: Reason) {
+        val elapsedMs = SystemClock.elapsedRealtime()
+        val timeMs = System.currentTimeMillis()
+        when (recorder.currentState) {
+            ActivityState.PREPARING -> recorder.fail(elapsedMs, timeMs, reason)
+            ActivityState.RECORDING -> recorder.pause(elapsedMs, timeMs, reason)
+            else -> {}
+        }
     }
 
     private fun Location.toSample() =

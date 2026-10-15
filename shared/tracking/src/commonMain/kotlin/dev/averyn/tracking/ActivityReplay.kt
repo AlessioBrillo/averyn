@@ -167,6 +167,34 @@ fun replay(
     )
 }
 
+/**
+ * The diagnostics report of a stored activity, rebuilt by [replay] (what a history screen exports for an
+ * activity that is no longer the one just recorded). Null when the file has no readable metadata. Inputs the
+ * recorder dropped before storing (`droppedInputs`) are not in the file, so that map is empty here.
+ */
+fun ActivityStore.diagnosticsOf(activityId: String): DiagnosticsReport? {
+    metadataOf(activityId) ?: return null
+    val replayed = replay(this, activityId)
+    return diagnosticsReport(
+        activityId = activityId,
+        sport = replayed.metadata.sport,
+        startedAtMs = replayed.metadata.startedAtMs,
+        totalSamples = replayed.totalSamples,
+        recordingSamples = replayed.recordingSamples,
+        recordLosses = replayed.recordLosses,
+        recoveries = replayed.recoveries,
+        metrics = replayed.metrics.snapshot(),
+        quality = replayed.quality.build(),
+        batteryStartPercent = replayed.batteryStartPercent,
+        batteryEndPercent = replayed.batteryEndPercent,
+        batteryReadingCount = replayed.batteryReadingCount,
+        droppedInputs = emptyMap(),
+        recoveryGaps = replayed.recoveryGaps.snapshot(),
+        events = replayed.timeline,
+        endedAtMs = replayed.lastKnownTimeMs,
+    )
+}
+
 /** [this] with its monotonic time moved onto the continuous clock; the same instance when nothing to add. */
 internal fun LocationSample.onClock(offsetMs: Long): LocationSample =
     if (offsetMs == 0L) this else copy(elapsedRealtimeMs = elapsedRealtimeMs + offsetMs)
