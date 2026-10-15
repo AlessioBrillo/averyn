@@ -88,7 +88,13 @@ sealed interface IngestResult {
 
     /** The owner deleted this activity id (ADR-0017): it is not accepted again. */
     data object Gone : IngestResult
+
+    /** Storing the file would take the owner over their storage quota (TDD-0005 §5.5); nothing was stored. */
+    data object QuotaExceeded : IngestResult
 }
+
+/** Raw bytes one user may store (TDD-0005 §5.5): about 30 files at the upload limit, far more real activities. */
+const val DEFAULT_USER_QUOTA_BYTES = 1024L * 1024 * 1024
 
 /**
  * Turns an uploaded raw activity file into an `activities` row (TDD-0002 §5.2): replay it with the shared device
@@ -97,6 +103,7 @@ sealed interface IngestResult {
 class ActivityIngest(
     private val db: DataSource,
     private val raw: RawObjectStore,
+    private val quotaBytes: Long = DEFAULT_USER_QUOTA_BYTES,
 ) {
     /**
      * @param file the uploaded body, already on disk and named `<clientActivityId>.jsonl` (the store layout)
@@ -110,6 +117,9 @@ class ActivityIngest(
     ): IngestResult {
         if (wasDeleted(ownerId, clientActivityId)) return IngestResult.Gone
         existing(ownerId, clientActivityId)?.let { return resolve(it, sha256) }
+        // ponytail: check, then insert, not serialized: one user's concurrent uploads can overshoot the quota by up to
+        // MAX_CONCURRENT_UPLOADS files. Lock the user row around put + insert if the quota must ever be exact.
+        if (storedBytes(ownerId) + Files.size(file) > quotaBytes) return IngestResult.QuotaExceeded
 
         val store = ActivityStore(Path(file.parent.toString()))
         val activityId = file.name.removeSuffix(".jsonl")
@@ -183,6 +193,14 @@ class ActivityIngest(
         return inserted?.let { IngestResult.Created(it) }
             ?: resolve(checkNotNull(existing(ownerId, clientActivityId)), sha256)
     }
+
+    private fun storedBytes(ownerId: UUID): Long =
+        db.connection.use { conn ->
+            conn.prepareStatement("SELECT coalesce(sum(raw_size_bytes), 0) FROM activities WHERE owner_id = ?").use {
+                it.setObject(1, ownerId)
+                it.executeQuery().use { rs -> if (rs.next()) rs.getLong(1) else 0 }
+            }
+        }
 
     /** The caller's activity by its server id, or null: also when it belongs to someone else (never a 403). */
     fun find(

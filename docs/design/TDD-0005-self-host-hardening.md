@@ -91,13 +91,14 @@ Ktor's `RateLimit` plugin, one token bucket per JWT `sub`, applied to every auth
 
 ### 5.5 Storage quota
 
-`AVERYN_USER_QUOTA_BYTES` (default 1 GiB, about 30 maximum-size files, many more real ones). In the ingest transaction, after the "already uploaded" and tombstone checks and before the object is written:
+`AVERYN_USER_QUOTA_BYTES` (default 1 GiB, about 30 maximum-size files, many more real ones). After the tombstone and "already uploaded" checks, before the file is replayed or written:
 
 ```sql
-SELECT 1 FROM users WHERE id = :owner FOR UPDATE;            -- serializes one user's uploads
 SELECT coalesce(sum(raw_size_bytes), 0) FROM activities WHERE owner_id = :owner;
 -- used + this file > quota  →  507, nothing stored
 ```
+
+The check is not serialized with the insert: one user's concurrent uploads can overshoot by at most the number of upload slots (8) times the file limit. Locking the user row instead would hold a pooled connection for the whole object-store write; accepted for a single node, revisit if the quota must be exact.
 
 Only raw files count: they are the data the user owns and can delete (ADR-0017). `507` rather than `413` because the request is valid and becomes acceptable after the user frees space, and the apps already retry `5xx`.
 

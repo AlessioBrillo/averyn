@@ -136,6 +136,9 @@ services:
       AVERYN_S3_SECRET_KEY: ${S3_SECRET_KEY:-averyn-dev-secret-change-me}
       # Web basemap (MapLibre style URL). Empty = a demo style; the tile host sees the areas users view.
       AVERYN_MAP_STYLE_URL: ${AVERYN_MAP_STYLE_URL:-}
+      # Per-user limits (TDD-0005): authenticated requests a minute, and bytes of raw activity files stored.
+      AVERYN_RATE_LIMIT_PER_MINUTE: ${AVERYN_RATE_LIMIT_PER_MINUTE:-120}
+      AVERYN_USER_QUOTA_BYTES: ${AVERYN_USER_QUOTA_BYTES:-1073741824}
     ports:
       # Bound to localhost; put a reverse proxy (Caddy/nginx) in front for public access.
       # /metrics is unauthenticated: never expose it publicly (ADR-0009).
