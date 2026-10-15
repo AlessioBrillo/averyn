@@ -12,6 +12,7 @@ import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.Delete
 import software.amazon.awssdk.services.s3.model.NoSuchBucketException
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException
 import software.amazon.awssdk.services.s3.model.ObjectIdentifier
 import java.net.URI
 import java.nio.file.Path
@@ -66,6 +67,15 @@ class RawObjectStore(
     }
 
     /** The whole object. For recomputing derived data from the raw file (ADR-0016) and for tests. */
+    /** Whether [key] exists, without reading it. */
+    fun exists(key: String): Boolean =
+        try {
+            s3.headObject { it.bucket(bucket).key(key) }
+            true
+        } catch (e: NoSuchKeyException) {
+            false
+        }
+
     fun get(key: String): ByteArray = s3.getObjectAsBytes { it.bucket(bucket).key(key) }.asByteArray()
 
     fun put(

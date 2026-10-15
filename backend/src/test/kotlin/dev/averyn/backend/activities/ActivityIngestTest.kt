@@ -50,6 +50,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -625,4 +626,35 @@ class ActivityIngestTest {
             assertEquals("5", response.headers[HttpHeaders.RetryAfter])
         }
     }
+
+    @Test
+    fun anUploadThatReachesTheInsertAfterTheAccountWasDeletedIsRefusedAndLeavesNothingBehind() =
+        app {
+            val first = record()
+            assertEquals(HttpStatusCode.Created, upload(first.id, first.bytes).status)
+            val ownerId = scalar("SELECT id FROM users") as UUID
+            assertEquals(HttpStatusCode.NoContent, delete("/v1/me") { bearerAuth(alice) }.status)
+
+            // What a slow upload that passed the request-start check meanwhile does: it reaches the insert.
+            val late = record()
+            val file = dir.resolve("${late.id}.jsonl")
+            val result = ActivityIngest(db, raw).ingest(ownerId, late.id, file, sha256(late.bytes))
+
+            assertEquals(IngestResult.AccountDeleted, result)
+            assertEquals(0L, scalar("SELECT count(*) FROM activities"))
+            val key = "raw/$ownerId/${late.id}/${sha256(late.bytes)}.jsonl"
+            assertFailsWith<NoSuchKeyException> { raw.get(key) }
+        }
+
+    @Test
+    fun anExportThatCannotBeCompleteIsAnErrorNotACorruptArchive() =
+        app {
+            val rec = record()
+            assertEquals(HttpStatusCode.Created, upload(rec.id, rec.bytes).status)
+            raw.delete(scalar("SELECT raw_object_key FROM activities") as String)
+
+            val response = get("/v1/me/export") { bearerAuth(alice) }
+
+            assertEquals(HttpStatusCode.InternalServerError, response.status)
+        }
 }

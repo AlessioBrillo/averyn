@@ -231,4 +231,64 @@ class ActivitySyncTest {
 
             assertEquals(1, sync(created).syncPending("tok").uploaded)
         }
+
+    @Test
+    fun aRateLimitedServerIsNotAskedAgainForEveryOtherActivity() =
+        runBlocking {
+            finishedActivity("a1", startedAtMs = 1_000)
+            finishedActivity("a2", startedAtMs = 2_000)
+
+            val result = sync(failing(HttpStatusCode.TooManyRequests)).syncPending("tok")
+
+            assertEquals(1, requests.size)
+            assertEquals(1, result.retryable)
+            assertNull(statuses.read("a2")) // untouched: the next pass picks it up
+            requests.clear()
+            assertEquals(2, sync(created).syncPending("tok").uploaded)
+        }
+
+    @Test
+    fun aServerWithNoUploadSlotLeftStopsThePassToo() =
+        runBlocking {
+            finishedActivity("a1", startedAtMs = 1_000)
+            finishedActivity("a2", startedAtMs = 2_000)
+
+            sync(failing(HttpStatusCode.ServiceUnavailable)).syncPending("tok")
+
+            assertEquals(1, requests.size)
+            assertEquals("HTTP_503", statuses.statusOf("a1").lastError)
+        }
+
+    @Test
+    fun aDeletedAccountIsPermanentWithItsOwnReasonAndStopsThePass() =
+        runBlocking {
+            finishedActivity("a1", startedAtMs = 1_000)
+            finishedActivity("a2", startedAtMs = 2_000)
+
+            val result = sync(failing(HttpStatusCode.Forbidden)).syncPending("tok")
+
+            assertEquals(1, requests.size)
+            assertEquals(1, result.permanent)
+            assertEquals(SyncStatus(SyncState.FAILED_PERMANENT, 1, "ACCOUNT_DELETED"), statuses.statusOf("a1"))
+        }
+
+    @Test
+    fun anActivityDeletedOnTheServerIsPermanentButTheOthersStillUpload() =
+        runBlocking {
+            finishedActivity("a1", startedAtMs = 1_000)
+            finishedActivity("a2", startedAtMs = 2_000)
+
+            val result =
+                sync { request ->
+                    if (request.url.encodedPath.endsWith("/a1")) {
+                        respond("", HttpStatusCode.Gone)
+                    } else {
+                        created(this, request)
+                    }
+                }.syncPending("tok")
+
+            assertEquals(SyncRunResult(uploaded = 1, retryable = 0, permanent = 1, needsLogin = false), result)
+            assertEquals(SyncStatus(SyncState.FAILED_PERMANENT, 1, "DELETED_ON_SERVER"), statuses.statusOf("a1"))
+            assertEquals(SyncState.READY, statuses.statusOf("a2").state)
+        }
 }

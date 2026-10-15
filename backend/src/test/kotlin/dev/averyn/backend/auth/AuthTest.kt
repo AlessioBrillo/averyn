@@ -146,4 +146,31 @@ class AuthTest {
             assertTrue(body.contains("\"webClientId\":\"web-1\""))
             assertTrue(body.contains("\"mapStyleUrl\":\"https://tiles.test/style.json\""))
         }
+
+    @Test
+    fun aKeyEndpointThatAcceptsAndNeverAnswersCannotHoldARequestForEver() {
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        val base = "http://127.0.0.1:${server.address.port}"
+        server.createContext("/.well-known/openid-configuration") { exchange ->
+            val body = """{"issuer":"$base","jwks_uri":"$base/keys"}""".toByteArray()
+            exchange.sendResponseHeaders(200, body.size.toLong())
+            exchange.responseBody.use { it.write(body) }
+        }
+        server.createContext("/keys") { exchange ->
+            Thread.sleep(20_000) // accepts the connection, never answers
+            exchange.close()
+        }
+        server.start()
+        try {
+            val jwks = discoveredJwks(base)
+            val startedAt = System.nanoTime()
+
+            runCatching { jwks.get("some-key") }
+
+            val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
+            assertTrue(elapsedMs < 10_000, "the key fetch gave up after $elapsedMs ms, it must not wait for ever")
+        } finally {
+            server.stop(0)
+        }
+    }
 }

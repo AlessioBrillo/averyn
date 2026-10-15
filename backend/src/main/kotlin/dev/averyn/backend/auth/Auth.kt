@@ -73,11 +73,15 @@ fun discoveredJwks(
     retryAfter: Duration = Duration.ofSeconds(15),
 ): JwkProvider =
     object : JwkProvider {
-        private var delegate: JwkProvider? = null
+        @Volatile private var delegate: JwkProvider? = null
         private var failedAt: Instant? = null
 
+        // Only the discovery step is serialized. Looking a key up goes straight to the (thread-safe, cached,
+        // rate-limited) provider, so one slow key fetch does not hold every other token check behind a lock.
+        override fun get(keyId: String?): Jwk = (delegate ?: resolveOnce()).get(keyId)
+
         @Synchronized
-        override fun get(keyId: String?): Jwk = (delegate ?: resolve()).get(keyId)
+        private fun resolveOnce(): JwkProvider = delegate ?: resolve()
 
         private fun resolve(): JwkProvider {
             val failure = failedAt
@@ -88,6 +92,9 @@ fun discoveredJwks(
             return try {
                 JwkProviderBuilder(URI(jwksUri(issuer, internalUrl, headers)).toURL())
                     .headers(headers)
+                    // jwks-rsa waits for ever by default: an IdP that accepts the connection and then hangs would
+                    // keep a request thread for as long as it likes.
+                    .timeouts(JWKS_TIMEOUT_MS, JWKS_TIMEOUT_MS)
                     .cached(10, 24, TimeUnit.HOURS)
                     .rateLimited(10, 1, TimeUnit.MINUTES)
                     .build()
@@ -101,6 +108,8 @@ fun discoveredJwks(
             }
         }
     }
+
+private const val JWKS_TIMEOUT_MS = 3_000
 
 private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build()
 
