@@ -1,5 +1,5 @@
 # Local development and single-node self-hosting stack.
-#   cp .env.example .env   # then edit secrets
+#   sh init-env.sh         # generates .env with random secrets (or: cp .env.example .env, then edit)
 #   docker compose --env-file .env up -d --build
 name: averyn
 

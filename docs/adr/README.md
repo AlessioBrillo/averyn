@@ -11,7 +11,7 @@ Format: [MADR](https://adr.github.io/madr/)-style, see [template](template.md). 
 | [0005](0005-ktor-modular-monolith.md) | Backend: Ktor modular monolith | accepted |
 | [0006](0006-postgres-postgis-s3-storage.md) | PostgreSQL/PostGIS and S3-compatible object storage | accepted |
 | [0007](0007-web-stack.md) | Web: React + TypeScript + Vite, admin inside the web app | accepted |
-| [0008](0008-project-codename.md) | Project name: "Averyn" is a codename | proposed |
+| [0008](0008-project-codename.md) | Project name: "Averyn" is a codename | accepted |
 | [0009](0009-observability-baseline.md) | Observability baseline | accepted |
 | [0010](0010-ecosystem-boundary.md) | Ecosystem boundary: Averyn is the platform, Synapse is an optional integration | accepted |
 | [0011](0011-identity-oidc.md) | Identity: Averyn as an OIDC relying party, no shared service-account tokens | accepted |
@@ -22,5 +22,6 @@ Format: [MADR](https://adr.github.io/madr/)-style, see [template](template.md). 
 | [0016](0016-server-raw-activity-storage.md) | Server raw activity storage: the JSONL file is the system of record | accepted |
 | [0017](0017-data-deletion-and-retention.md) | Data deletion and retention: hard delete, tombstones, account data only | accepted |
 | [0018](0018-tls-edge-and-public-issuer.md) | TLS at one edge proxy, a fixed public issuer, internal OIDC discovery | accepted |
+| [0019](0019-crash-reporting-and-tester-builds.md) | Crash reporting and tester builds: store vitals only, no SDK | proposed |
 
 Open decisions still without an ADR are tracked in [product/roadmap.md](../product/roadmap.md#open-decisions).

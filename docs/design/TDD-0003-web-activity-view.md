@@ -1,6 +1,6 @@
 # TDD-0003: Web Activity View
 
-- **Status:** draft
+- **Status:** implemented
 - **Version:** 0.1
 - **Author:** @AlessioBrillo
 - **Date:** 2026-10-05

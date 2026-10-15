@@ -7,4 +7,5 @@ apps/ios
 apps/web
 docs
 local.properties
-.env
+**/.env
+**/*.local.json

@@ -52,7 +52,7 @@ flowchart LR
     K --> O[(object store)]
 ```
 
-`docker-compose.tls.yml` overrides: the IdP's TLS mode and external settings, removes the published ports of the IdP and backend, gives the edge 80/443 and a certificate volume, and passes the https issuer and web origin to `idp-init`. `idp-init` registers redirect URIs from those values and turns `devMode` off when the issuer is https; it updates the existing apps too, so a rerun converges.
+`docker-compose.tls.yml` overrides: the IdP's TLS mode and external settings, removes the published ports of the IdP and backend, gives the edge 80/443 and a certificate volume, and passes the https issuer and web origin to `idp-init`. `idp-init` registers redirect URIs from those values and turns `devMode` off when the issuer is https. It only creates missing apps: an existing app keeps its settings, so after changing the domain fix the redirect URIs in the IdP console (or start from a fresh volume, ADR-0018).
 
 ### 5.2 Internal discovery
 
