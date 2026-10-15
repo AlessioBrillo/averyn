@@ -19,6 +19,7 @@
 We choose **option 2 for tester builds**. No crash SDK, no remote telemetry code in the apps. The on-device `diagnostics-v2` report ([TDD-0006 §5.5](../design/TDD-0006-field-readiness.md)) stays the primary artifact: it is exported by the tester, contains no coordinates, and carries the build id (version, commit) so that a store crash report and a matrix row can be matched.
 
 Tester builds:
+
 - Distributed only through Play internal testing and TestFlight, never as public listings (see [ADR-0008](0008-project-codename.md): technical ids fixed, display name "Averyn Beta").
 - Signed in CI with keys stored as repository secrets; a release is a manual workflow on a `v*` tag.
 - The commit SHA is compiled into the app and shown in diagnostics.
