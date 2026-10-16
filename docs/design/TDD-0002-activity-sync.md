@@ -1,6 +1,6 @@
 # TDD-0002: Activity Sync
 
-- **Status:** draft
+- **Status:** implemented
 - **Version:** 0.1
 - **Author:** @AlessioBrillo
 - **Date:** 2026-10-02
@@ -51,11 +51,14 @@ A completed activity recorded offline on a device is uploaded to the backend as 
 | Exists, different SHA-256 | `409` |
 | Not parseable, no `META` line, or last state not terminal | `422` |
 | Missing or invalid token | `401` |
+| Account deleted, or activity deleted (tombstone) | `403` / `410` ([ADR-0017](../adr/0017-data-deletion-and-retention.md)) |
+| Per-user request limit | `429` + `Retry-After` ([TDD-0005](TDD-0005-self-host-hardening.md)) |
+| Per-user storage quota | `507` (the apps treat it as retryable) |
 | Body over the limit (checked while streaming, also without a `Content-Length`) | `413` |
 | Malformed id in the URL | `400` |
 | All upload slots busy (at most 8 uploads are processed at once) | `503` + `Retry-After` (retryable) |
 
-Also: `GET /v1/activities/{id}` (owner only, `404` otherwise) and `GET /v1/client-config` (public: `{issuer, clientId}`, so a mobile app needs only the server URL).
+Also: `GET /v1/activities/{id}` (owner only, `404` otherwise) and `GET /v1/client-config` (public: `{issuer, clientId, webClientId, mapStyleUrl}`, so a mobile app needs only the server URL).
 
 ### 5.2 Server ordering
 
@@ -77,7 +80,7 @@ stateDiagram-v2
   QUEUED --> UPLOADING: worker runs
   UPLOADING --> READY: 200 / 201
   UPLOADING --> FAILED_RETRYABLE: network, 5xx, 408, 429, 401
-  UPLOADING --> FAILED_PERMANENT: 409, 413, 422
+  UPLOADING --> FAILED_PERMANENT: 409, 413, 422, other 4xx (400, 403, 404, 410)
   FAILED_RETRYABLE --> UPLOADING: backoff / re-login
   READY --> [*]
 ```
@@ -98,7 +101,7 @@ The recovery loop in `ActivityRecorder.recover()` is extracted into a read-only 
 |---|---|
 | Same activity uploaded twice | idempotent `200` |
 | Same id, different bytes | `409`, permanent; the first upload wins |
-| Concurrent deletion | out of scope (no deletion yet) |
+| Concurrent deletion | deletion wins: an upload cannot recreate a deleted activity or an account's data ([TDD-0004](TDD-0004-data-deletion-and-export.md); the insert guard is part of [TDD-0006 §5.9](TDD-0006-field-readiness.md)) |
 | Same file imported twice | out of scope (import is MVP-2) |
 | Privacy / metadata change | out of scope (immutable after upload) |
 | Schema version change | the `META` line and unknown-key tolerance of ADR-0015; new format = new version |
@@ -133,6 +136,6 @@ New tables via forward-only Flyway migrations. Existing local activities on test
 
 | # | Question | Produces |
 |---|---|---|
-| Q1 | Default bundled IdP (spike with measured criteria) | ADR-0011 → `accepted` |
+| Q1 | Default bundled IdP (spike with measured criteria) | ADR-0011 → `accepted`. **Resolved:** Zitadel |
 | Q2 | When do gzip/chunking become necessary (measured on real networks)? | additive header, no ADR |
 | Q3 | Retention and deletion of raw objects | ADR, before any public instance. **Resolved:** [ADR-0017](../adr/0017-data-deletion-and-retention.md), [TDD-0004](TDD-0004-data-deletion-and-export.md) |

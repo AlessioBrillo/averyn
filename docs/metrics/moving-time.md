@@ -25,13 +25,16 @@ Same exclusion list as `docs/metrics/distance.md` (a `DUPLICATE`/`NON_MONOTONIC_
 
 ## Missing-data handling
 
-A signal gap (large time delta between two accepted samples) is counted as **stationary**, not moving — a conservative choice: v1 doesn't try to guess what happened during the gap. Revisited if fixtures show this misclassifies clear "recording resumed after a tunnel" cases.
+A signal gap (large time delta between two accepted samples) is one leg like any other: it is classified by its implied speed (distance between the two samples over the gap). A long gap over a short distance therefore comes out stationary, which is the conservative case v1 was designed for; a gap that spans a real displacement at `≥ 0.5 m/s` counts as moving. v1 does not try to guess what happened during the gap. Revisited if fixtures show this misclassifies clear "recording resumed after a tunnel" cases.
+
+The same rule covers the gap of an interrupted and recovered activity (kill, reboot): the elapsed time is real time, the leg across it is classified like any other, and a negative or reset clock never reaches this formula because the monotonic clock is made continuous at recovery ([TDD-0006 §5.2](../design/TDD-0006-field-readiness.md)).
 
 ## Version history
 
 | Version | Date | Change |
 |---|---|---|
 | time-v1 | 2026-09-27 | Initial: 0.5 m/s stationary threshold, gaps counted as stationary |
+| time-v1 | 2026-10-15 | Clarification, no behavior change: the text said gaps are always stationary; the implementation and the formula above classify a gap by its implied speed. Recovery across reboot and replay equivalence fixed in code ([TDD-0006](../design/TDD-0006-field-readiness.md)); no data existed outside development, so no new version |
 
 ## Reliability level
 

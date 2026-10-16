@@ -1,6 +1,6 @@
 # TDD-0001: Tracking Engine
 
-- **Status:** draft
+- **Status:** implemented
 - **Version:** 0.1
 - **Author:** @AlessioBrillo
 - **Date:** 2026-09-26
@@ -23,7 +23,7 @@ The tracking engine records an activity from native location services into a dur
 | F1 | Record location samples at a configurable interval while `RECORDING`, in foreground and background, with the screen locked |
 | F2 | Pause and resume; total, moving and paused durations are tracked separately |
 | F3 | Every accepted sample is durably written locally **before** it is used for live metrics |
-| F4 | After process death, crash or reboot, an interrupted activity is detected on next launch and offered for resume or finish; data recorded up to the last durable write is kept |
+| F4 | After process death, crash or reboot, an interrupted activity is recovered: automatically where the OS allows it (service restart, relaunch), otherwise detected on the next launch and offered for resume or finish ([TDD-0006 §5.1](TDD-0006-field-readiness.md)); data recorded up to the last durable write is kept |
 | F5 | **No silent data loss:** every dropped/filtered sample is counted with a reason; raw samples are never modified or deleted by filtering |
 | F6 | Live metrics: elapsed time, moving time, distance, current/average speed and pace |
 | F7 | Export a completed (or recovered) activity as valid GPX 1.1 |
@@ -128,8 +128,8 @@ Grade: `GOOD` if ≤ 5% of samples flagged and % time accuracy ≤ 20 m is ≥ 9
 
 ### 5.5 Local persistence and recovery
 
-- Append-only write path: samples are appended to the local store in small batches (flush by count **or** time, whichever first). Activity metadata records `state`, `startedAt`, `lastFlushAt`.
-- On launch, any activity whose state is `RECORDING`/`PAUSED`/`STOPPING` without a clean end is **interrupted**: recover, show the user what was kept, let them resume or finish.
+- Append-only write path: every record is written and flushed individually before the caller can use it (see the storage engine bullet and [ADR-0015](../adr/0015-local-activity-store.md)); there is no batching and the state is derived from the last `EVENT`, not from a metadata field.
+- Any activity whose state is `RECORDING`/`PAUSED`/`STOPPING` without a clean end is **interrupted**: it is recovered automatically when the platform restarts the app or service ([TDD-0006 §5.1](TDD-0006-field-readiness.md)); anything that cannot resume by itself is shown on the next launch with what was kept, to resume or finish.
 - Background execution: iOS uses the location background mode with `allowsBackgroundLocationUpdates` and pause-safe settings; Android uses a foreground service of type `location` with a persistent notification. Vendor battery-killer behavior is documented per device in the matrix.
 - **Storage engine (Q2/Q4 — resolved, [ADR-0015](../adr/0015-local-activity-store.md)):** an append-only JSON Lines file per activity, one `SAMPLE` or `EVENT` record per line, written and flushed before the caller can use a sample for live metrics. `ActivityStore` in `shared/tracking` exposes `create`/`appendSample`/`appendEvent`/`forEachRecord` (streaming) /`interrupted`/`list`. A truncated or corrupt trailing line (mid-write kill) is dropped and counted as a loss with reason `TRUNCATED_RECORD` — never guessed at or silently repaired.
 
@@ -148,7 +148,7 @@ Grade: `GOOD` if ≤ 5% of samples flagged and % time accuracy ≤ 20 m is ≥ 9
 
 ## 7. Rollout
 
-PoC apps are internal builds (Android debug APK, iOS via a personal dev team). No user data leaves the device in MVP-0.
+PoC apps are tester builds on Play internal testing and TestFlight ([ADR-0019](../adr/0019-crash-reporting-and-tester-builds.md)). No user data leaves the device in MVP-0 unless the tester exports it (sync arrives with MVP-1, [TDD-0002](TDD-0002-activity-sync.md)).
 
 ## 8. Risks and mitigations
 

@@ -27,6 +27,8 @@ Optional third-party sensor integration, see [ADR-0010](../adr/0010-ecosystem-bo
 
 Critical path: identity spike → build so the backend can use `shared/` → read-only replay → OIDC auth → activity ingest → `shared/sync` → app login and sync trigger. Spec: [TDD-0002](../design/TDD-0002-activity-sync.md). Done: web activity list and detail page, [TDD-0003](../design/TDD-0003-web-activity-view.md); data deletion and export, [TDD-0004](../design/TDD-0004-data-deletion-and-export.md) / [ADR-0017](../adr/0017-data-deletion-and-retention.md); self-host hardening (TLS, CSP, per-user limits, health checks, runbooks), [TDD-0005](../design/TDD-0005-self-host-hardening.md) / [ADR-0018](../adr/0018-tls-edge-and-public-issuer.md). Real-device runs (MVP-0 exit criteria, device-matrix S1–S14) stay open and take priority over MVP-2.
 
+**Next: field readiness, [TDD-0006](../design/TDD-0006-field-readiness.md).** An audit on 2026-10-15 found defects that would make the real-device campaign fail or mislead (recovery across reboot, replay after recovery, Android service restart, iOS clock during sleep, truncated GPX on Android) and tooling gaps (history/export, diagnostics, tester builds). They are fixed before the campaign starts; the campaign itself, run with the protocol in the [device matrix](../testing/device-matrix.md), closes the MVP-0 and MVP-1 exit criteria.
+
 ## MVP-0 work order
 
 From [report §22](reference-report-v0.1.md), steps 1–9: requirements → sample model → iOS adapter → Android adapter → local storage → pause/resume/recovery → base metrics → fixtures and tests → real-device validation. Spec: [TDD-0001](../design/TDD-0001-tracking-engine.md).
@@ -38,7 +40,7 @@ Tracked here until they become ADRs (report §24). ● = needed for MVP-0.
 - ~~Raw sample internal format and storage; sampling frequency; GPS filtering strategy~~ → resolved, [TDD-0001](../design/TDD-0001-tracking-engine.md), [ADR-0015](../adr/0015-local-activity-store.md)
 - ~~Mobile local database~~ → resolved, append-only file not a DB, [ADR-0015](../adr/0015-local-activity-store.md)
 - ~~Sports supported in MVP~~ → resolved: run, ride, walk, hike, [TDD-0001 §5.3](../design/TDD-0001-tracking-engine.md)
-- Final project name → [ADR-0008](../adr/0008-project-codename.md)
+- Final public project name (the technical identifiers are fixed) → [ADR-0008](../adr/0008-project-codename.md)
 - ~~CLA vs DCO~~ → resolved, [ADR-0012](../adr/0012-cla-and-store-distribution.md)
 - ~~Default bundled IdP~~ → resolved: Zitadel, [ADR-0011](../adr/0011-identity-oidc.md); passkeys/MFA timing still open
 - Map data source, routing engine (Valhalla vs. GraphHopper), DEM source, pilot region

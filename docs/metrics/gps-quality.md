@@ -13,7 +13,7 @@ Per-sample: a set of `QualityFlag` values. Per-activity: counts, a longest-gap d
 
 ## Formula / method
 
-`quality-v1`: each accepted sample is compared only to the last *accepted* sample (rejected/flagged samples don't become the new baseline), in arrival order:
+`quality-v1`: each sample is compared only to the last sample that became the baseline, in arrival order. A `DUPLICATE` or `NON_MONOTONIC_TIME` sample does not become the baseline; a sample flagged `SPEED_OUTLIER`, `JUMP`, `ALTITUDE_SPIKE` or `POOR_ACCURACY` does (it is a plausible current position, and holding on to an old baseline would flag every later sample). Which samples count towards distance is a separate rule, see [distance.md](distance.md):
 
 | Flag | Rule |
 |---|---|
