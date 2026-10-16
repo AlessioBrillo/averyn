@@ -173,7 +173,8 @@ class ActivityIngest(
                             ST_GeomFromText(?::text, 4326)
                         WHERE NOT EXISTS (SELECT 1 FROM users WHERE id = ?::uuid AND deleted_at IS NOT NULL)
                             AND NOT EXISTS (
-                                SELECT 1 FROM deleted_activities WHERE owner_id = ?::uuid AND client_activity_id = ?::uuid
+                                SELECT 1 FROM deleted_activities
+                                WHERE owner_id = ?::uuid AND client_activity_id = ?::uuid
                             )
                         ON CONFLICT (owner_id, client_activity_id) DO NOTHING
                         RETURNING $SUMMARY_COLUMNS

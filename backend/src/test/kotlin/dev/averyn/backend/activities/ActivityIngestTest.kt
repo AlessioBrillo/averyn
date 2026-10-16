@@ -50,8 +50,8 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /** Real PostgreSQL/PostGIS and a real S3 API (SeaweedFS, as in Compose) via Testcontainers: Docker is required. */
