@@ -89,6 +89,9 @@ sealed interface IngestResult {
     /** The owner deleted this activity id (ADR-0017): it is not accepted again. */
     data object Gone : IngestResult
 
+    /** The account was deleted (ADR-0017), possibly while this very upload was being processed. */
+    data object AccountDeleted : IngestResult
+
     /** Storing the file would take the owner over their storage quota (TDD-0005 §5.5); nothing was stored. */
     data object QuotaExceeded : IngestResult
 }
@@ -156,12 +159,23 @@ class ActivityIngest(
             db.connection.use { conn ->
                 conn
                     .prepareStatement(
+                        // The two NOT EXISTS make deletion win a race with this upload: the owner's account flag and
+                        // the activity tombstone are read in the same statement that inserts, not once at the start
+                        // of a request that can run for minutes.
                         """
                         INSERT INTO activities (owner_id, client_activity_id, sport, started_at, final_state,
                             raw_object_key, raw_sha256, raw_size_bytes, distance_m, elapsed_ms, moving_ms, paused_ms,
                             average_speed_mps, pace_sec_per_km, quality_grade, dropped_records,
                             metrics_algorithm_version, quality_algorithm_version, track)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ST_GeomFromText(?, 4326))
+                        SELECT ?::uuid, ?::uuid, ?::text, ?::timestamptz, ?::text, ?::text, ?::text, ?::bigint,
+                            ?::double precision, ?::bigint, ?::bigint, ?::bigint, ?::double precision,
+                            ?::double precision, ?::text, ?::integer, ?::text, ?::text,
+                            ST_GeomFromText(?::text, 4326)
+                        WHERE NOT EXISTS (SELECT 1 FROM users WHERE id = ?::uuid AND deleted_at IS NOT NULL)
+                            AND NOT EXISTS (
+                                SELECT 1 FROM deleted_activities
+                                WHERE owner_id = ?::uuid AND client_activity_id = ?::uuid
+                            )
                         ON CONFLICT (owner_id, client_activity_id) DO NOTHING
                         RETURNING $SUMMARY_COLUMNS
                         """.trimIndent(),
@@ -186,13 +200,28 @@ class ActivityIngest(
                         stmt.setString(++i, METRICS_ALGORITHM_VERSION)
                         stmt.setString(++i, quality.algorithmVersion)
                         stmt.setString(++i, wkt)
+                        stmt.setObject(++i, ownerId)
+                        stmt.setObject(++i, ownerId)
+                        stmt.setObject(++i, clientActivityId)
                         stmt.executeQuery().use { rs -> if (rs.next()) rs.toSummary() else null }
                     }
             }
-        // No row back: a concurrent upload of this id won the race between our check and our insert.
-        return inserted?.let { IngestResult.Created(it) }
-            ?: resolve(checkNotNull(existing(ownerId, clientActivityId)), sha256)
+        if (inserted != null) return IngestResult.Created(inserted)
+        // No row back: either a concurrent upload of this id won the race between our check and our insert, or the
+        // account/activity was deleted meanwhile and the insert refused. In the second case the object just stored
+        // can never be referenced by a row, so it goes (an identical concurrent upload would have been `existing`).
+        existing(ownerId, clientActivityId)?.let { return resolve(it, sha256) }
+        raw.delete(key)
+        return if (accountDeleted(ownerId)) IngestResult.AccountDeleted else IngestResult.Gone
     }
+
+    private fun accountDeleted(ownerId: UUID): Boolean =
+        db.connection.use { conn ->
+            conn.prepareStatement("SELECT deleted_at IS NOT NULL FROM users WHERE id = ?").use { stmt ->
+                stmt.setObject(1, ownerId)
+                stmt.executeQuery().use { rs -> rs.next() && rs.getBoolean(1) }
+            }
+        }
 
     private fun storedBytes(ownerId: UUID): Long =
         db.connection.use { conn ->

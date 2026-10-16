@@ -98,6 +98,19 @@ class UserData(
     }
 
     /**
+     * The object keys of [ownerId]'s activities whose raw file is not in the store. An export of such an account
+     * cannot be complete, and starting the ZIP would answer `200` before finding out: the route checks this first.
+     */
+    fun missingRawObjects(ownerId: UUID): List<String> =
+        db.connection
+            .use { conn ->
+                conn.prepareStatement("SELECT raw_object_key FROM activities WHERE owner_id = ?").use { stmt ->
+                    stmt.setObject(1, ownerId)
+                    stmt.executeQuery().use { rs -> buildList { while (rs.next()) add(rs.getString(1)) } }
+                }
+            }.filterNot { raw.exists(it) }
+
+    /**
      * Writes a ZIP of everything the user has to [out]: each raw file unchanged, a GPX of it, and `activities.json`
      * (last, because it records what the GPX skipped). One raw file is in memory at a time.
      */

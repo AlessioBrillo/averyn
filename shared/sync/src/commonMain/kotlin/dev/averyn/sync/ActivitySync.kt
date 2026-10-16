@@ -90,6 +90,9 @@ class ActivitySync internal constructor(
                         )
                     401 -> SyncStatus(SyncState.FAILED_RETRYABLE, attempts, "AUTH")
                     null -> SyncStatus(SyncState.FAILED_RETRYABLE, attempts, "NETWORK")
+                    // Distinct, permanent reasons the apps can explain (TDD-0006 R11): not "HTTP_403" / "HTTP_410".
+                    403 -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "ACCOUNT_DELETED")
+                    410 -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "DELETED_ON_SERVER")
                     408, 429, in 500..599 -> SyncStatus(SyncState.FAILED_RETRYABLE, attempts, "HTTP_$code")
                     else -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "HTTP_$code")
                 }
@@ -104,6 +107,9 @@ class ActivitySync internal constructor(
                 needsLogin = true
                 break // the same token would be refused for every other activity too
             }
+            // A server that asked to slow down (or has no upload slot) is not asked again for every other activity:
+            // the platform scheduler's backoff retries the pass. A deleted account refuses every upload alike.
+            if (code == 429 || code == 503 || status.lastError == "ACCOUNT_DELETED") break
         }
         return SyncRunResult(uploaded, retryable, permanent, needsLogin)
     }

@@ -140,6 +140,8 @@ fun Application.activities(
                                 HttpStatusCode.Gone,
                                 errorBody("activity was deleted and is not accepted again"),
                             )
+                        IngestResult.AccountDeleted ->
+                            call.respond(HttpStatusCode.Forbidden, errorBody("account was deleted"))
                         IngestResult.QuotaExceeded ->
                             call.respond(HttpStatusCode.InsufficientStorage, errorBody("storage quota exceeded"))
                         IngestResult.TooLarge ->
@@ -228,6 +230,15 @@ fun Application.activities(
                         )
                     }
                     try {
+                        // Starting the ZIP answers 200 before a missing file can be found: look first, so an export
+                        // that cannot be complete is an error the client sees, not a corrupt archive it cannot tell.
+                        val missing = withContext(Dispatchers.IO) { userData.missingRawObjects(owner) }
+                        if (missing.isNotEmpty()) {
+                            return@get call.respond(
+                                HttpStatusCode.InternalServerError,
+                                errorBody("export unavailable: ${missing.size} stored file(s) are missing"),
+                            )
+                        }
                         val disposition =
                             ContentDisposition.Attachment.withParameter(
                                 ContentDisposition.Parameters.FileName,
