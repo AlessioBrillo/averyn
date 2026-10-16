@@ -50,9 +50,12 @@ Android  reboot           BOOT_COMPLETED receiver -> notification "Activity inte
                           (Android 15 forbids starting a location foreground service from boot)
 iOS      kill / reboot    significant-change monitoring relaunches the app (UIApplication.LaunchOptionsKey.location)
                           -> same recover() path
-fallback                  anything not resumable automatically (permission lost, GPS off, no relaunch):
-                          the next app start offers resume or finish, exactly as TDD-0001 F4 before
+fallback                  anything not resumable automatically (permission lost, GPS off, no relaunch,
+                          or an interruption older than 30 minutes): a notification and, on the next
+                          app start, the resume-or-finish dialog, exactly as TDD-0001 F4 before
 ```
+
+"Automatically" is bounded: the interruption must be recent (`AUTO_RESUME_MAX_GAP_MS`, 30 min of wall clock since the last sample or event) and precise location granted. A person who reopens the app three days later decides whether those days belong to the activity. A kill during STOPPING is always finalized without asking (no GPS involved). Older interrupted activities, when several exist, are finished at their last known time so none is left orphaned; the newest is the one resumed.
 
 `recover()` already rebuilds the recorder from the store and logs `RECOVERED`. What changes is who calls it and when. State machine unchanged: no new state, `ActivityState` and the TDD-0001 diagram stay in sync. A service restart with nothing to recover stops itself; nothing may call `fail()` from `IDLE`.
 
@@ -110,7 +113,7 @@ Both apps get a minimal list of local activities (`ActivityStore.list()`): state
 
 ### 5.7 Permissions (R9)
 
-Android requests `ACCESS_FINE_LOCATION` and `ACCESS_COARSE_LOCATION` together and `POST_NOTIFICATIONS`; "approximate" shows why precise is needed and does not start. A guidance screen opens the system battery-optimisation settings (no direct-exemption permission: Play policy). iOS checks `accuracyAuthorization`; a reduction mid-activity pauses with `PERMISSION_DOWNGRADED`. "Waiting for GPS" has a timeout and a cancel (PREPARING → IDLE is added to the TDD-0001 diagram and `ActivityState` together).
+Android requests `ACCESS_FINE_LOCATION` and `ACCESS_COARSE_LOCATION` together and `POST_NOTIFICATIONS`; "approximate" shows why precise is needed and does not start. A guidance screen opens the system battery-optimisation settings (no direct-exemption permission: Play policy). iOS checks `accuracyAuthorization`; a reduction mid-activity pauses with `PERMISSION_DOWNGRADED`. "Waiting for GPS" has a Cancel (PREPARING → IDLE is already a legal transition and is in the TDD-0001 diagram; `ActivityRecorder.cancel()` is its API and removes the empty activity file). No automatic timeout: a silent give-up would be a silent loss.
 
 ### 5.8 Tester builds (R10)
 
