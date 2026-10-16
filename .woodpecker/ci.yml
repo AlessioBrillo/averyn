@@ -1,0 +1,48 @@
+# CI gate (was GitHub ci.yml): jvm check, android assembleDebug+lint, web, docs. iOS excluded
+# (needs macOS); compose smoke not included (needs docker-in-docker). Local: `ci-local`.
+# The jvm step mounts the Docker socket for the backend Testcontainers tests.
+when:
+  - event: [push, manual]
+
+steps:
+  - name: jvm-android
+    image: eclipse-temurin:21-jdk
+    environment:
+      ANDROID_HOME: /ci-android
+      GRADLE_USER_HOME: /ci-gradle
+      # Testcontainers (backend tests) starts PostGIS/SeaweedFS as siblings on the host Docker through the
+      # mounted socket; the tests reach them on the host, not on the step container.
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+    volumes:
+      - ci-gradle:/ci-gradle
+      - ci-android-sdk:/ci-android
+      - /var/run/docker.sock:/var/run/docker.sock
+    commands:
+      - apt-get update -q && apt-get install -y -q unzip curl git
+      - |
+        if [ ! -x /ci-android/cmdline-tools/latest/bin/sdkmanager ]; then
+          mkdir -p /ci-android/cmdline-tools
+          curl -fsSL -o /tmp/cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q /tmp/cmdline-tools.zip -d /tmp/cmdline-tools
+          mv /tmp/cmdline-tools/cmdline-tools /ci-android/cmdline-tools/latest
+        fi
+      - yes | /ci-android/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
+      - git config --global --add safe.directory '*'
+      - ./gradlew check --console=plain
+      - ./gradlew :apps:android:assembleDebug :apps:android:lintDebug --console=plain
+
+  - name: web
+    image: node:24
+    volumes:
+      - ci-npm:/root/.npm
+    commands:
+      - cd apps/web
+      - npm ci
+      - npm run check
+      - npm run build
+      - ls dist/assets | grep -q '^maplibre-gl-worker-.*\.js$'
+
+  - name: docs
+    image: node:24
+    commands:
+      - npx --yes markdownlint-cli2 "**/*.md" "!docs/product/reference-report-v0.1.md" "!docs/strategy/00-visione-strategica-completa.md" "!docs/strategy/01-synapse24-restructure-plan.md" "!docs/strategy/02-averyn-synapse-integration.md" "!docs/strategy/03-synapse-cloud-adr.md" "!docs/strategy/04-synapse-device-sdk-spec.md" "!docs/strategy/05-master-index.md" "!LICENSE" "!**/node_modules/**"

@@ -10,6 +10,8 @@ settings:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "0.0.1"
     CURRENT_PROJECT_VERSION: "1"
+    # The release workflow overrides this with the commit id (ADR-0019); it is shown in the diagnostics report.
+    AVERYN_COMMIT: dev
 packages:
   AppAuth:
     url: https://github.com/openid/AppAuth-iOS
@@ -24,7 +26,8 @@ targets:
     info:
       path: Averyn/Info.plist
       properties:
-        CFBundleDisplayName: Averyn
+        CFBundleDisplayName: Averyn Beta
+        AverynCommit: $(AVERYN_COMMIT)
         UILaunchScreen: {}
         # TDD-0001 §5.5: background location mode, required for recording with the screen locked.
         # `processing`: the background sync task (TDD-0002 §5.7).

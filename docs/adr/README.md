@@ -22,6 +22,6 @@ Format: [MADR](https://adr.github.io/madr/)-style, see [template](template.md). 
 | [0016](0016-server-raw-activity-storage.md) | Server raw activity storage: the JSONL file is the system of record | accepted |
 | [0017](0017-data-deletion-and-retention.md) | Data deletion and retention: hard delete, tombstones, account data only | accepted |
 | [0018](0018-tls-edge-and-public-issuer.md) | TLS at one edge proxy, a fixed public issuer, internal OIDC discovery | accepted |
-| [0019](0019-crash-reporting-and-tester-builds.md) | Crash reporting and tester builds: store vitals only, no SDK | proposed |
+| [0019](0019-crash-reporting-and-tester-builds.md) | Crash reporting and tester builds: store vitals only, no SDK | accepted |
 
 Open decisions still without an ADR are tracked in [product/roadmap.md](../product/roadmap.md#open-decisions).
