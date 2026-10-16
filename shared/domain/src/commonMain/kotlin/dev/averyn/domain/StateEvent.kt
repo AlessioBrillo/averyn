@@ -13,6 +13,9 @@ enum class Reason {
     /** Location permission was revoked or downgraded mid-activity (F9). */
     PERMISSION_REVOKED,
 
+    /** Precise location was reduced to approximate mid-activity (F9): fixes are no longer usable for tracking. */
+    PERMISSION_DOWNGRADED,
+
     /** The platform location provider (GPS) was disabled mid-activity. */
     PROVIDER_DISABLED,
 

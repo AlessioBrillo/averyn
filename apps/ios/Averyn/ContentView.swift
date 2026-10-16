@@ -5,24 +5,30 @@ struct ContentView: View {
     @StateObject private var viewModel = RecorderViewModel()
 
     var body: some View {
-        VStack(spacing: 16) {
-            if let warning = viewModel.recoveryWarning {
-                Text(warning)
-            }
-            liveMetrics
-            controls
-            if let url = viewModel.exportURL {
-                ShareLink(item: url) { Text("Share GPX") }
-            }
-            if let diagnostics = viewModel.diagnostics {
-                diagnosticsSummary(diagnostics)
-                if let url = viewModel.diagnosticsURL {
-                    ShareLink(item: url) { Text("Share diagnostics") }
+        ScrollView {
+            VStack(spacing: 16) {
+                if let notice = viewModel.notice {
+                    Text(notice)
                 }
+                if let warning = viewModel.recoveryWarning {
+                    Text(warning)
+                }
+                liveMetrics
+                controls
+                if let url = viewModel.exportURL {
+                    ShareLink(item: url) { Text("Share GPX") }
+                }
+                if let diagnostics = viewModel.diagnostics {
+                    diagnosticsSummary(diagnostics)
+                    if let url = viewModel.diagnosticsURL {
+                        ShareLink(item: url) { Text("Share diagnostics") }
+                    }
+                }
+                historySection
+                AccountSection(auth: AppModel.shared.auth, sync: AppModel.shared.sync)
             }
-            AccountSection(auth: AppModel.shared.auth, sync: AppModel.shared.sync)
+            .padding()
         }
-        .padding()
         .alert(
             "Interrupted activity found",
             isPresented: .constant(viewModel.pendingRecovery != nil),
@@ -48,12 +54,38 @@ struct ContentView: View {
     private func diagnosticsSummary(_ diagnostics: DiagnosticsReport) -> some View {
         VStack {
             Text("Quality: \(diagnostics.quality.grade) (\(diagnostics.quality.algorithmVersion))")
-            Text("Samples: \(diagnostics.recordingSamples)/\(diagnostics.totalSamples)")
+            Text("Samples: \(diagnostics.recordingSamples)/\(diagnostics.totalSamples), losses: \(diagnostics.recordLosses)")
             Text("Longest gap: \(diagnostics.quality.longestGapMs / 1000) s")
             Text(String(format: "Accuracy ≤ 20 m: %.0f%%", diagnostics.quality.accuracyWithin20mPercent))
             if let start = diagnostics.batteryStartPercent, let end = diagnostics.batteryEndPercent {
                 let drainText = diagnostics.batteryDrainPercentPerHour.map { String(format: " (%.1f%%/h)", $0.doubleValue) } ?? ""
                 Text("Battery: \(start.intValue)% → \(end.intValue)%\(drainText)")
+            }
+            ForEach(Array(diagnostics.recoveryGaps.enumerated()), id: \.offset) { _, gap in
+                let length = gap.gapMs.map { "\($0.int64Value / 1000) s" } ?? "open"
+                Text("Recovered: gap \(length)" + (gap.rebootDetected ? " (reboot)" : ""))
+            }
+        }
+    }
+
+    /// TDD-0006 R8: GPX, diagnostics and the raw file of any stored activity, not only the one just finished.
+    private var historySection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("History")
+            if viewModel.history.isEmpty { Text("No activities yet") }
+            ForEach(viewModel.history) { row in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(row.title) — \(row.state), sync \(row.sync)")
+                    if let files = viewModel.preparedExports[row.id] {
+                        HStack {
+                            ShareLink(item: files.gpx) { Text("GPX") }
+                            ShareLink(item: files.diagnostics) { Text("Diagnostics") }
+                            ShareLink(item: files.raw) { Text("Raw file") }
+                        }
+                    } else {
+                        Button("Export") { viewModel.prepareExport(activityId: row.id) }
+                    }
+                }
             }
         }
     }
@@ -68,7 +100,10 @@ struct ContentView: View {
                 }
             }
         case .preparing:
-            Text("Waiting for GPS…")
+            VStack {
+                Text("Waiting for GPS…")
+                Button("Cancel") { viewModel.cancel() }
+            }
         case .recording:
             HStack {
                 Button("Pause") { viewModel.pause() }
@@ -91,6 +126,7 @@ struct ContentView: View {
 private struct AccountSection: View {
     @ObservedObject var auth: AuthManager
     @ObservedObject var sync: SyncService
+    @Environment(\.scenePhase) private var scenePhase
     @State private var message: String?
 
     var body: some View {
@@ -121,7 +157,10 @@ private struct AccountSection: View {
             if let message { Text(message) }
             Text(sync.statusText)
         }
-        .task {
+        // Only while the screen is in front: nothing here is worth CPU or battery while a recording runs with the
+        // screen locked. The task restarts by itself when the scene becomes active again.
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
             while !Task.isCancelled {
                 sync.refreshStatus()
                 try? await Task.sleep(for: .seconds(3))

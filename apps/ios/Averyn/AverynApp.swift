@@ -7,6 +7,9 @@ struct AverynApp: App {
     init() {
         // BGTaskScheduler handlers must be registered before the app finishes launching.
         AppModel.shared.sync.register()
+        // Also runs when iOS relaunches a terminated app in the background to keep recording (significant-change
+        // location event): no scene exists then, so it cannot wait for a view model (TDD-0006 §5.1).
+        AppModel.shared.resumeInterruptedIfRecent()
     }
 
     var body: some Scene {

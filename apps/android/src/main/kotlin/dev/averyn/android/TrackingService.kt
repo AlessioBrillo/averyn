@@ -24,6 +24,9 @@ import dev.averyn.domain.Reason
 import dev.averyn.tracking.ActivityRecorder
 import dev.averyn.tracking.DroppedInputReason
 import dev.averyn.tracking.RecoveryResult
+import dev.averyn.tracking.ResumeAction
+import dev.averyn.tracking.finishOlderInterrupted
+import dev.averyn.tracking.resumeDecision
 
 private const val NOTIFICATION_CHANNEL_ID = "tracking"
 private const val NOTIFICATION_ID = 1
@@ -132,21 +135,13 @@ class TrackingService : Service() {
         val app = application as AverynApplication
         val elapsedMs = SystemClock.elapsedRealtime()
         val timeMs = System.currentTimeMillis()
-        val latest = latestInterrupted(app.store, timeMs) ?: return false
-        if (finishOlderInterrupted(app.store, latest.metadata.activityId, elapsedMs, timeMs) > 0) enqueueSync(this)
-
-        // A kill during STOPPING only needs finalizing: no GPS involved, so no reason to ask.
-        val action =
-            if (latest.state == ActivityState.STOPPING) {
-                ResumeAction.RESUME_NOW
-            } else {
-                resumeAction(latest.gapMs, hasPrecisePermission = hasPreciseLocation())
-            }
-        if (action == ResumeAction.ASK_USER) {
+        val decision = app.store.resumeDecision(timeMs, hasPrecisePermission = hasPreciseLocation()) ?: return false
+        if (app.store.finishOlderInterrupted(decision.metadata.activityId, elapsedMs, timeMs) > 0) enqueueSync(this)
+        if (decision.action == ResumeAction.ASK_USER) {
             postInterruptedNotification(this)
             return false
         }
-        return when (recorder.recover(latest.metadata.activityId, elapsedMs, timeMs)) {
+        return when (recorder.recover(decision.metadata.activityId, elapsedMs, timeMs)) {
             is RecoveryResult.Resumed -> true
             is RecoveryResult.Completed -> {
                 enqueueSync(this)

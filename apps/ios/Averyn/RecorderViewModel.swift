@@ -2,11 +2,27 @@ import Foundation
 import Shared
 import UIKit
 
+/// One row of the history list (TDD-0006 R8): an activity stored on this device.
+struct HistoryRow: Identifiable {
+    let id: String
+    let title: String
+    let state: String
+    let sync: String
+}
+
+/// The files prepared for sharing one stored activity.
+struct PreparedExport {
+    let gpx: URL
+    let diagnostics: URL
+    let raw: URL
+}
+
 @MainActor
 final class RecorderViewModel: ObservableObject {
     let store: ActivityStore
     let recorder: ActivityRecorder
-    private lazy var tracker = LocationTracker(recorder: recorder)
+    private let tracker: LocationTracker
+    private let activitiesDirectory: URL
 
     @Published var snapshot: LiveSnapshot
     @Published var pendingRecovery: ActivityMetadata?
@@ -15,25 +31,30 @@ final class RecorderViewModel: ObservableObject {
     @Published var diagnosticsURL: URL?
     /// F5: a recovery that lost store lines is surfaced, never silent — see RecoveryResult.droppedRecordCount.
     @Published var recoveryWarning: String?
+    /// Something the user should know right now: an automatic resume, a lost permission.
+    @Published var notice: String?
+    @Published var history: [HistoryRow] = []
+    @Published var preparedExports: [String: PreparedExport] = [:]
 
     init() {
-        let store = AppModel.shared.store
-        self.store = store
-        let recorder = ActivityRecorder(store: store)
-        self.recorder = recorder
-        self.snapshot = recorder.snapshot()
-        // TDD-0001 F4: an interrupted activity is offered for resume/finish once, right at launch.
-        self.pendingRecovery = store.interrupted().first
-
-        UIDevice.current.isBatteryMonitoringEnabled = true
-        recorder.batteryPercent = {
-            let level = UIDevice.current.batteryLevel
-            return level >= 0 ? KotlinInt(int: Int32(level * 100)) : nil
-        }
+        let model = AppModel.shared
+        store = model.store
+        recorder = model.recorder
+        tracker = model.tracker
+        activitiesDirectory = model.activitiesDirectory
+        snapshot = recorder.snapshot()
+        // TDD-0001 F4: whatever the launch did not resume by itself (see AppModel.resumeInterruptedIfRecent) is
+        // put to the user once. A recorder that is already recording owns its activity.
+        pendingRecovery = recorder.currentState == .idle ? store.interrupted().first : nil
+        notice = model.resumedAtLaunch ? "Recording resumed after an interruption" : nil
 
         recorder.listener = { [weak self] newSnapshot in
             DispatchQueue.main.async { self?.snapshot = newSnapshot }
         }
+        tracker.onIssue = { [weak self] message in
+            DispatchQueue.main.async { self?.notice = message }
+        }
+        refreshHistory()
     }
 
     func start(sport: Sport) {
@@ -56,6 +77,13 @@ final class RecorderViewModel: ObservableObject {
         export(activityId: completed.activityId, diagnostics: completed.diagnostics)
     }
 
+    /// The user gave up while waiting for the first fix: nothing was recorded, so nothing is kept.
+    func cancel() {
+        recorder.cancel()
+        tracker.stop()
+        refreshHistory()
+    }
+
     func resolveRecoveryResume() {
         guard let metadata = pendingRecovery else { return }
         let result = recorder.recover(activityId: metadata.activityId, nowElapsedRealtimeMs: nowElapsedRealtimeMs(), nowTimeMs: nowTimeMs())
@@ -68,6 +96,7 @@ final class RecorderViewModel: ObservableObject {
             export(activityId: completed.activity.activityId, diagnostics: completed.activity.diagnostics)
         }
         pendingRecovery = nil
+        refreshHistory()
     }
 
     func resolveRecoveryFinish() {
@@ -105,23 +134,76 @@ final class RecorderViewModel: ObservableObject {
         }
         self.diagnostics = diagnostics
         writeDiagnosticsJson(activityId: activityId, diagnostics: diagnostics)
+        refreshHistory()
     }
 
     private func writeDiagnosticsJson(activityId: String, diagnostics: DiagnosticsReport) {
-        let device = DeviceInfo(
+        let json = diagnostics.toJson(device: currentDeviceInfo())
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(activityId)-diagnostics.json")
+        try? json.write(to: url, atomically: true, encoding: .utf8)
+        diagnosticsURL = url
+    }
+
+    /// No device identifiers (docs/privacy/data-classification.md) — just what a device-matrix row needs.
+    private func currentDeviceInfo() -> DeviceInfo {
+        DeviceInfo(
             model: hardwareIdentifier(),
             osVersion: "iOS \(UIDevice.current.systemVersion)",
             appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
             manufacturer: "Apple",
             buildId: nil,
-            locationPermission: nil,
-            powerSaverOn: ProcessInfo.processInfo.isLowPowerModeEnabled ? KotlinBoolean(bool: true) : KotlinBoolean(bool: false),
+            locationPermission: tracker.permissionLabel,
+            powerSaverOn: KotlinBoolean(bool: ProcessInfo.processInfo.isLowPowerModeEnabled),
             batteryOptimisationExempt: nil
         )
-        let json = diagnostics.toJson(device: device)
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(activityId)-diagnostics.json")
-        try? json.write(to: url, atomically: true, encoding: .utf8)
-        diagnosticsURL = url
+    }
+
+    /// Reloads the list of stored activities (newest first). The sync status of each is a small file read.
+    func refreshHistory() {
+        let store = self.store
+        DispatchQueue.global(qos: .utility).async {
+            let statuses = SyncStatusStore(store: store)
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .short
+            let rows = store.list()
+                .sorted { $0.startedAtMs > $1.startedAtMs }
+                .prefix(20)
+                .map { metadata in
+                    HistoryRow(
+                        id: metadata.activityId,
+                        title: "\(metadata.sport.name) \(formatter.string(from: Date(timeIntervalSince1970: Double(metadata.startedAtMs) / 1000)))",
+                        state: store.lastStateOf(activityId: metadata.activityId).map { "\($0)" } ?? "?",
+                        sync: "\(statuses.statusOf(activityId: metadata.activityId).state)"
+                    )
+                }
+            DispatchQueue.main.async { [weak self] in
+                self?.history = Array(rows)
+            }
+        }
+    }
+
+    /// Writes the GPX and the diagnostics of a stored activity next to each other (not in `tmp`, which the system
+    /// may purge) and exposes them, with the raw file, for sharing (TDD-0006 R8).
+    func prepareExport(activityId: String) {
+        let store = self.store
+        let device = currentDeviceInfo()
+        let raw = activitiesDirectory.appendingPathComponent("\(activityId).jsonl")
+        let directory = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("exports", isDirectory: true)
+        DispatchQueue.global(qos: .utility).async {
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let gpx = directory.appendingPathComponent("\(activityId).gpx")
+            let diagnostics = directory.appendingPathComponent("\(activityId)-diagnostics.json")
+            store.exportGpxToFile(activityId: activityId, filePath: gpx.path, content: .raw)
+            if let report = store.diagnosticsOf(activityId: activityId) {
+                try? report.toJson(device: device).write(to: diagnostics, atomically: true, encoding: .utf8)
+            }
+            DispatchQueue.main.async { [weak self] in
+                self?.preparedExports[activityId] = PreparedExport(gpx: gpx, diagnostics: diagnostics, raw: raw)
+            }
+        }
     }
 }
 
@@ -137,12 +219,4 @@ private func hardwareIdentifier() -> String {
 
 private func droppedRecordWarning(_ droppedRecordCount: Int32) -> String? {
     droppedRecordCount > 0 ? "Recovery lost \(droppedRecordCount) corrupted record(s) from the interrupted activity" : nil
-}
-
-private func nowElapsedRealtimeMs() -> Int64 {
-    Int64(ProcessInfo.processInfo.systemUptime * 1000)
-}
-
-private func nowTimeMs() -> Int64 {
-    Int64(Date().timeIntervalSince1970 * 1000)
 }
