@@ -9,6 +9,7 @@ import kotlinx.serialization.json.Json
 import java.io.OutputStream
 import java.nio.file.Files
 import java.sql.Connection
+import java.sql.ResultSet
 import java.time.Instant
 import java.util.UUID
 import java.util.zip.ZipEntry
@@ -94,6 +95,14 @@ class UserData(
                     stmt.executeUpdate()
                 }
             }
+            // Health data imported from Synapse (day-1 lab path) belongs to the
+            // user and is deleted with the account (ADR-0017).
+            for (table in listOf("imported_health_samples", "devices")) {
+                conn.prepareStatement("DELETE FROM $table WHERE owner_id = ?").use { stmt ->
+                    stmt.setObject(1, ownerId)
+                    stmt.executeUpdate()
+                }
+            }
         }
     }
 
@@ -153,6 +162,40 @@ class UserData(
 
                     exported += ExportedActivity(summary, skipped)
                 }
+
+                // Health data imported from Synapse (day-1 lab path): include it
+                // in the export so the user can take it with them (ADR-0017).
+                val healthRows =
+                    db.connection.use { conn ->
+                        val sql =
+                            "SELECT recorded_at, kind, value_json, source, algorithm_version, device_id " +
+                            "FROM imported_health_samples WHERE owner_id = ? ORDER BY recorded_at, id"
+                        conn.prepareStatement(sql).use { stmt ->
+                            stmt.setObject(1, ownerId)
+                            stmt.executeQuery().use { rs ->
+                                val rows = mutableListOf<Map<String, Any?>>()
+                                while (rs.next()) {
+                                    rows += mapOf(
+                                        "recorded_at" to rs.getTimestamp(1)?.toInstant(),
+                                        "kind" to rs.getString(2),
+                                        "value_json" to rs.getString(3),
+                                        "source" to rs.getString(4),
+                                        "algorithm_version" to rs.getString(5),
+                                        "device_id" to rs.getObject(6, UUID::class.java),
+                                    )
+                                }
+                                rows
+                            }
+                        }
+                    }
+                if (healthRows.isNotEmpty()) {
+                    zip.putNextEntry(ZipEntry("health/imported_samples.jsonl"))
+                    healthRows.forEach { row ->
+                        zip.write((Json.encodeToString(row) + "\n").toByteArray())
+                    }
+                    zip.closeEntry()
+                }
+
                 zip.putNextEntry(ZipEntry("activities.json"))
                 zip.write(Json.encodeToString(ExportManifest(Instant.now().toString(), exported)).toByteArray())
                 zip.closeEntry()

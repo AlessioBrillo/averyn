@@ -3,6 +3,7 @@ package dev.averyn.backend
 import dev.averyn.backend.activities.DEFAULT_REQUESTS_PER_MINUTE
 import dev.averyn.backend.activities.DEFAULT_USER_QUOTA_BYTES
 import dev.averyn.backend.activities.activities
+import dev.averyn.backend.activities.health
 import dev.averyn.backend.auth.OidcConfig
 import dev.averyn.backend.auth.auth
 import dev.averyn.backend.storage.RawObjectStore
@@ -50,6 +51,7 @@ fun Application.module() {
             cfg.propertyOrNull("averyn.limits.requestsPerMinute")?.getString()?.toInt()
                 ?: DEFAULT_REQUESTS_PER_MINUTE,
     )
+    health(db)
 }
 
 /**
