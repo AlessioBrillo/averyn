@@ -26,9 +26,16 @@ class ReplayResult internal constructor(
     val batteryStartPercent: Int?,
     val batteryEndPercent: Int?,
     val batteryReadingCount: Int,
-    /** Time of the last thing that happened to the activity: a sample or a state event. */
+    /**
+     * Time of the last thing that happened to the activity: a sample or a state event (a same-state
+     * `RECOVERED` marker is not one). On the continuous clock: raw values plus [clockOffsetMs].
+     */
     val lastKnownElapsedRealtimeMs: Long,
     val lastKnownTimeMs: Long,
+    /** Cumulative offset in force after the last stored event (TDD-0006 §5.2); 0 for a file never rebooted. */
+    val clockOffsetMs: Long,
+    internal val recoveryGaps: RecoveryGapTracker,
+    val timeline: List<TimelineEvent>,
 )
 
 /**
@@ -82,6 +89,9 @@ fun replay(
     var batteryReadings = 0
     var lastElapsedMs = 0L
     var lastTimeMs = 0L
+    var offsetMs = 0L
+    val gaps = RecoveryGapTracker()
+    val timeline = mutableListOf<TimelineEvent>()
 
     store.forEachRecord(
         activityId,
@@ -89,31 +99,48 @@ fun replay(
     ) { record ->
         when (record) {
             is ActivityRecord.Sample -> {
+                // The raw sample stays as stored; only what is fed to the metrics is moved onto the
+                // continuous clock (TDD-0006 §5.2).
+                val sample = record.sample.onClock(offsetMs)
                 totalSamples++
-                lastElapsedMs = record.sample.elapsedRealtimeMs
-                lastTimeMs = record.sample.timeMs
+                gaps.onSample(sample.timeMs)
+                lastElapsedMs = sample.elapsedRealtimeMs
+                lastTimeMs = sample.timeMs
                 if (lastState == ActivityState.RECORDING) {
                     recordingSamples++
-                    if (ingestSample(record.sample, assessor, quality, metrics)) onMeteredSample(record.sample)
+                    if (ingestSample(sample, assessor, quality, metrics)) onMeteredSample(sample)
                 }
             }
             is ActivityRecord.Event -> {
                 val event = record.event
-                if (event.reason == Reason.RECOVERED) recoveries++
+                val recovered = event.reason == Reason.RECOVERED
+                val previousOffsetMs = offsetMs
+                if (recovered) offsetMs = event.clockOffsetMs
+                // A recovery also finalizes a killed STOPPING as COMPLETED(RECOVERED): one recovery, two events.
+                if (recovered && event.state != ActivityState.COMPLETED) {
+                    recoveries++
+                    gaps.onRecovered(event.timeMs, rebootDetected = offsetMs != previousOffsetMs)
+                }
+                val elapsedMs = event.elapsedRealtimeMs + offsetMs
                 event.batteryPercent?.let { percent ->
                     if (batteryStart == null) batteryStart = percent
                     batteryEnd = percent
                     batteryReadings++
                 }
-                when (event.state) {
-                    ActivityState.PAUSED -> metrics.onPause(event.elapsedRealtimeMs)
-                    ActivityState.RECORDING ->
-                        if (lastState == ActivityState.PAUSED) metrics.onResume(event.elapsedRealtimeMs)
-                    else -> {}
+                // A RECOVERED event that repeats the state is a marker: the activity did not change state,
+                // so it neither opens a pause nor moves "the last thing that happened" to the relaunch time.
+                val marker = recovered && event.state == lastState
+                if (!marker) {
+                    when (event.state) {
+                        ActivityState.PAUSED -> metrics.onPause(elapsedMs)
+                        ActivityState.RECORDING -> if (lastState == ActivityState.PAUSED) metrics.onResume(elapsedMs)
+                        else -> {}
+                    }
+                    lastElapsedMs = elapsedMs
+                    lastTimeMs = event.timeMs
                 }
                 lastState = event.state
-                lastElapsedMs = event.elapsedRealtimeMs
-                lastTimeMs = event.timeMs
+                timeline += TimelineEvent(elapsedMs, event.timeMs, event.state, event.reason)
             }
         }
     }
@@ -134,5 +161,12 @@ fun replay(
         batteryReadingCount = batteryReadings,
         lastKnownElapsedRealtimeMs = lastElapsedMs,
         lastKnownTimeMs = lastTimeMs,
+        clockOffsetMs = offsetMs,
+        recoveryGaps = gaps,
+        timeline = timeline.toList(),
     )
 }
+
+/** [this] with its monotonic time moved onto the continuous clock; the same instance when nothing to add. */
+internal fun LocationSample.onClock(offsetMs: Long): LocationSample =
+    if (offsetMs == 0L) this else copy(elapsedRealtimeMs = elapsedRealtimeMs + offsetMs)

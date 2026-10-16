@@ -7,6 +7,17 @@ import dev.averyn.domain.Sport
 import dev.averyn.domain.StateEvent
 import dev.averyn.metrics.ActivityMetrics
 import dev.averyn.metrics.ActivitySnapshot
+import dev.averyn.metrics.DISTANCE_ALGORITHM_VERSION
+import dev.averyn.metrics.SPEED_ALGORITHM_VERSION
+import dev.averyn.metrics.TIME_ALGORITHM_VERSION
+import kotlin.math.abs
+
+/**
+ * A recovery decides the monotonic clock was restarted (reboot) when "now" is behind the last known activity
+ * time, or when the raw clock and the wall clock disagree about how long the interruption was by more than
+ * this. Sized above NTP corrections and below any realistic reboot (TDD-0006 section 5.2).
+ */
+private const val CLOCK_DISAGREEMENT_TOLERANCE_MS = 60_000L
 
 data class LiveSnapshot(
     val state: ActivityState,
@@ -74,7 +85,16 @@ class ActivityRecorder(
     private var totalSamples = 0
     private var recordingSamples = 0
     private val recordLosses = mutableMapOf<RecordLossReason, Int>()
+
+    // Inputs this recorder could not use (F5). Deliberately not reset by recover(): a service that was restarted
+    // before it could recover has already dropped fixes, and they belong to the activity it then recovers.
+    private val droppedInputs = mutableMapOf<DroppedInputReason, Int>()
     private var recoveries = 0
+
+    // Continuous monotonic clock (TDD-0006 section 5.2): raw platform values plus this offset. 0 until a reboot.
+    private var clockOffsetMs = 0L
+    private var recoveryGaps = RecoveryGapTracker()
+    private val timeline = mutableListOf<TimelineEvent>()
     private var batteryStartPercent: Int? = null
     private var batteryEndPercent: Int? = null
     private var batteryReadingCount = 0
@@ -104,17 +124,29 @@ class ActivityRecorder(
      * across an app-relaunch gap: use it (not the caller's own clock) to finalize a recovered activity that
      * the user chooses to finish without resuming live tracking.
      */
-    var lastKnownElapsedRealtimeMs: Long = 0
-        private set
+    val lastKnownElapsedRealtimeMs: Long get() = lastKnownEffectiveMs - clockOffsetMs
     var lastKnownTimeMs: Long = 0
         private set
 
+    // Same instant as above on the continuous clock; `lastKnownElapsedRealtimeMs` is expressed in the clock the
+    // native caller reads (raw), so that `stop(lastKnownElapsedRealtimeMs, ...)` lands exactly on it.
+    private var lastKnownEffectiveMs = 0L
+
+    /** Records "the last thing that happened", from a raw platform timestamp. */
     private fun trackLastKnown(
         elapsedRealtimeMs: Long,
         timeMs: Long,
     ) {
-        lastKnownElapsedRealtimeMs = elapsedRealtimeMs
+        lastKnownEffectiveMs = elapsedRealtimeMs + clockOffsetMs
         lastKnownTimeMs = timeMs
+    }
+
+    /** Raw platform timestamp -> continuous clock, the clock every metric works on. */
+    private fun effective(elapsedRealtimeMs: Long) = elapsedRealtimeMs + clockOffsetMs
+
+    /** Counts an input the caller could not turn into a usable fix (e.g. NaN coordinates) - F5. */
+    fun recordDroppedInput(reason: DroppedInputReason) {
+        droppedInputs[reason] = (droppedInputs[reason] ?: 0) + 1
     }
 
     /** Current numbers, callable anytime (not just from [listener]) — e.g. right after [start] or [recover]. */
@@ -130,6 +162,10 @@ class ActivityRecorder(
         // starts over, and each activity gets its own quality/metrics accumulators.
         if (state.isTerminal) state = ActivityState.IDLE
         state = state.transitionTo(ActivityState.PREPARING)
+        clockOffsetMs = 0
+        recoveryGaps = RecoveryGapTracker()
+        timeline.clear()
+        droppedInputs.clear()
         this.activityId = activityId
         this.sport = sport
         this.startedAtMs = timeMs
@@ -161,14 +197,23 @@ class ActivityRecorder(
      * that arrive while PAUSED instead of just excluding them from live metrics, which is what this does.
      */
     fun onSample(sample: LocationSample) {
-        val id = activityId ?: return
-        if (state.isTerminal) return // a stray late callback after stop()/fail(): nothing to append to anymore
-        store.appendSample(id, sample)
+        val id = activityId
+        if (id == null) {
+            recordDroppedInput(DroppedInputReason.NO_ACTIVE_ACTIVITY)
+            return
+        }
+        if (state.isTerminal) {
+            // a stray late callback after stop()/fail(): nothing to append to anymore, but it is counted
+            recordDroppedInput(DroppedInputReason.ACTIVITY_ENDED)
+            return
+        }
+        store.appendSample(id, sample) // raw, exactly as the platform reported it
         totalSamples++
+        recoveryGaps.onSample(sample.timeMs)
         trackLastKnown(sample.elapsedRealtimeMs, sample.timeMs)
         if (state == ActivityState.RECORDING) {
             recordingSamples++
-            ingestSample(sample, qualityAssessor, qualityAccumulator, metrics)
+            ingestSample(sample.onClock(clockOffsetMs), qualityAssessor, qualityAccumulator, metrics)
         }
         emit()
     }
@@ -179,7 +224,7 @@ class ActivityRecorder(
         reason: Reason = Reason.USER,
     ) {
         state = state.transitionTo(ActivityState.PAUSED)
-        metrics.onPause(elapsedRealtimeMs)
+        metrics.onPause(effective(elapsedRealtimeMs))
         trackLastKnown(elapsedRealtimeMs, timeMs)
         logEvent(elapsedRealtimeMs, timeMs, ActivityState.PAUSED, reason)
         emit()
@@ -190,7 +235,7 @@ class ActivityRecorder(
         timeMs: Long,
     ) {
         state = state.transitionTo(ActivityState.RECORDING)
-        metrics.onResume(elapsedRealtimeMs)
+        metrics.onResume(effective(elapsedRealtimeMs))
         trackLastKnown(elapsedRealtimeMs, timeMs)
         logEvent(elapsedRealtimeMs, timeMs, ActivityState.RECORDING, Reason.USER)
         emit()
@@ -203,7 +248,7 @@ class ActivityRecorder(
     ): CompletedActivity {
         state = state.transitionTo(ActivityState.STOPPING)
         logEvent(elapsedRealtimeMs, timeMs, ActivityState.STOPPING, Reason.USER)
-        metrics.finish(elapsedRealtimeMs)
+        metrics.finish(effective(elapsedRealtimeMs))
         trackLastKnown(elapsedRealtimeMs, timeMs)
         state = state.transitionTo(ActivityState.COMPLETED)
         logEvent(elapsedRealtimeMs, timeMs, ActivityState.COMPLETED, Reason.USER)
@@ -235,7 +280,10 @@ class ActivityRecorder(
         val id = activityId ?: return
         val battery = batteryPercent?.invoke()
         trackBattery(battery)
-        store.appendEvent(id, StateEvent(elapsedRealtimeMs, timeMs, newState, reason, battery))
+        // Stored raw; the offset travels on RECOVERED events only, which is what replay() reads it from.
+        val offset = if (reason == Reason.RECOVERED) clockOffsetMs else 0L
+        store.appendEvent(id, StateEvent(elapsedRealtimeMs, timeMs, newState, reason, battery, offset))
+        timeline += TimelineEvent(effective(elapsedRealtimeMs), timeMs, newState, reason)
     }
 
     private fun emit() {
@@ -271,6 +319,18 @@ class ActivityRecorder(
             batteryStartPercent = batteryStartPercent,
             batteryEndPercent = batteryEndPercent,
             batteryDrainPercentPerHour = drainPerHour,
+            algorithms =
+                AlgorithmVersions(
+                    distance = DISTANCE_ALGORITHM_VERSION,
+                    time = TIME_ALGORITHM_VERSION,
+                    speed = SPEED_ALGORITHM_VERSION,
+                    quality = QUALITY_ALGORITHM_VERSION,
+                ),
+            stationaryMs = snap.stationaryMs,
+            endedAtMs = if (activityId == null) null else lastKnownTimeMs,
+            droppedInputs = droppedInputs.toMap(),
+            recoveryGaps = recoveryGaps.snapshot(),
+            events = timeline.toList(),
         )
     }
 
@@ -300,18 +360,40 @@ class ActivityRecorder(
         batteryStartPercent = replayed.batteryStartPercent
         batteryEndPercent = replayed.batteryEndPercent
         batteryReadingCount = replayed.batteryReadingCount
-        trackLastKnown(replayed.lastKnownElapsedRealtimeMs, replayed.lastKnownTimeMs)
+        recoveryGaps = replayed.recoveryGaps
+        timeline.clear()
+        timeline.addAll(replayed.timeline)
+
+        // Is "now" on the same monotonic clock the file was written on? (TDD-0006 section 5.2.) If the raw clock
+        // is behind the last known activity time it was restarted by a reboot; if it merely disagrees with the
+        // wall clock about the length of the interruption by more than a minute, the same goes (the new boot can
+        // already be older than the old one). Either way "now" is placed at last-known + wall-clock gap.
+        val previousOffsetMs = replayed.clockOffsetMs
+        val lastKnownEffective = replayed.lastKnownElapsedRealtimeMs
+        val wallGapMs = maxOf(0L, nowTimeMs - replayed.lastKnownTimeMs)
+        val expectedNowMs = lastKnownEffective + wallGapMs
+        val candidateNowMs = nowElapsedRealtimeMs + previousOffsetMs
+        val rebooted =
+            candidateNowMs < lastKnownEffective ||
+                abs(candidateNowMs - expectedNowMs) > CLOCK_DISAGREEMENT_TOLERANCE_MS
+        clockOffsetMs = if (rebooted) expectedNowMs - nowElapsedRealtimeMs else previousOffsetMs
+        lastKnownEffectiveMs = lastKnownEffective
+        lastKnownTimeMs = replayed.lastKnownTimeMs
+
         val lastState = replayed.lastState
         val droppedRecordCount = replayed.recordLosses.values.sum()
         state = lastState
         recoveries++ // this recovery itself; past ones were counted from the replayed RECOVERED events
+        recoveryGaps.onRecovered(nowTimeMs, rebootDetected = clockOffsetMs != previousOffsetMs)
         logEvent(nowElapsedRealtimeMs, nowTimeMs, lastState, Reason.RECOVERED)
 
         return if (lastState == ActivityState.STOPPING) {
             state = state.transitionTo(ActivityState.COMPLETED)
-            logEvent(nowElapsedRealtimeMs, nowTimeMs, ActivityState.COMPLETED, Reason.RECOVERED)
-            // Finalize at the last known activity time, not "now" (relaunch can happen long after the kill).
-            metrics.finish(lastKnownElapsedRealtimeMs)
+            // Finalize at the last known activity time, not "now" (relaunch can happen long after the kill):
+            // the event carries that time, so replay() closes the activity at the same instant.
+            val finishedAtRawMs = lastKnownEffectiveMs - clockOffsetMs
+            logEvent(finishedAtRawMs, lastKnownTimeMs, ActivityState.COMPLETED, Reason.RECOVERED)
+            metrics.finish(lastKnownEffectiveMs)
             RecoveryResult.Completed(
                 buildCompletedActivity(),
                 droppedRecordCount,

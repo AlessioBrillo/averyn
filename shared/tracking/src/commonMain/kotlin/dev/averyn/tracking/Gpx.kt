@@ -24,6 +24,10 @@ enum class GpxContent { RAW, ACCEPTED_ONLY }
  *
  * Returns the number of corrupt/truncated store lines skipped (F5: counted, never silently dropped) — a
  * non-zero result means the export is missing some points and the caller should surface that, not ignore it.
+ *
+ * The sink is flushed before returning but not closed (the caller owns it). A buffered sink wrapped around a
+ * platform stream holds back its last bytes, `</gpx>` among them, until flushed; closing only the stream
+ * underneath it would drop them.
  */
 fun writeGpx(
     store: ActivityStore,
@@ -68,6 +72,7 @@ fun writeGpx(
     closeSegmentIfOpen()
     sink.writeString("  </trk>\n")
     sink.writeString(GPX_FOOTER)
+    sink.flush()
     return droppedRecordCount
 }
 
@@ -75,10 +80,38 @@ private fun writeTrkpt(
     sink: Sink,
     sample: LocationSample,
 ) {
-    sink.writeString("      <trkpt lat=\"${sample.latitude}\" lon=\"${sample.longitude}\">\n")
-    sample.altitudeM?.let { sink.writeString("        <ele>$it</ele>\n") }
+    sink.writeString(
+        "      <trkpt lat=\"${plainDecimal(sample.latitude)}\" lon=\"${plainDecimal(sample.longitude)}\">\n",
+    )
+    // GPX <ele> is an xsd:decimal: NaN/Infinity would make the whole file invalid, so such a value is left out.
+    sample.altitudeM?.takeIf { it.isFinite() }?.let { sink.writeString("        <ele>${plainDecimal(it)}</ele>\n") }
     sink.writeString("        <time>${isoInstant(sample.timeMs)}</time>\n")
     sink.writeString("      </trkpt>\n")
+}
+
+/**
+ * [value] as a plain decimal. `Double.toString()` switches to `1.0E-4` below 1e-3 and above 1e7, which the GPX
+ * schema's `xsd:decimal` rejects (a fix near the equator or at sea level would otherwise corrupt the file).
+ */
+internal fun plainDecimal(value: Double): String {
+    val text = value.toString()
+    val e = text.indexOf('E')
+    if (e < 0) return text
+    val negative = text.startsWith("-")
+    val mantissa = text.substring(if (negative) 1 else 0, e)
+    val exponent = text.substring(e + 1).toInt()
+    val point = mantissa.indexOf('.')
+    val digits = mantissa.replace(".", "")
+    val intLength = (if (point < 0) mantissa.length else point) + exponent
+    val plain =
+        when {
+            intLength <= 0 -> "0." + "0".repeat(-intLength) + digits
+            intLength >= digits.length -> digits + "0".repeat(intLength - digits.length)
+            else -> digits.substring(0, intLength) + "." + digits.substring(intLength)
+        }
+    val trimmed = if (plain.contains('.')) plain.trimEnd('0').trimEnd('.') else plain
+    val result = trimmed.ifEmpty { "0" }
+    return if (negative && result != "0") "-$result" else result
 }
 
 private fun xmlEscape(text: String): String =

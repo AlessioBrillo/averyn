@@ -37,4 +37,10 @@ data class StateEvent(
     val reason: Reason,
     /** Device battery level 0–100 at this transition, if the platform reported one. Used by diagnostics-v1. */
     val batteryPercent: Int? = null,
+    /**
+     * Only meaningful on a [Reason.RECOVERED] event: the cumulative amount to add to every raw
+     * [elapsedRealtimeMs] recorded from this event on, so the monotonic clock stays continuous across a
+     * reboot (TDD-0006 §5.2). Raw values are never rewritten; absent (0) in files without a reboot.
+     */
+    val clockOffsetMs: Long = 0,
 )

@@ -362,6 +362,11 @@ private fun deviceInfo(context: android.content.Context): DeviceInfo {
         model = android.os.Build.MODEL,
         osVersion = "Android ${android.os.Build.VERSION.RELEASE}",
         appVersion = appVersion,
+        manufacturer = android.os.Build.MANUFACTURER,
+        buildId = null,
+        locationPermission = null,
+        powerSaverOn = null,
+        batteryOptimisationExempt = null,
     )
 }
 

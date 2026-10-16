@@ -58,7 +58,13 @@ private const val EVENT_PREFIX = "EVENT "
 class ActivityStore(
     val directory: Path,
 ) {
-    private val json = Json { ignoreUnknownKeys = true }
+    // NaN/Infinity in an optional field (altitude, speed, bearing) is stored as the platform reported it rather than
+    // crashing the recording thread: raw samples are immutable and never silently lost (F5).
+    private val json =
+        Json {
+            ignoreUnknownKeys = true
+            allowSpecialFloatingPointValues = true
+        }
 
     init {
         if (!SystemFileSystem.exists(directory)) SystemFileSystem.createDirectories(directory)
@@ -187,11 +193,27 @@ class ActivityStore(
             .filter { it.name.endsWith(".jsonl") }
             .mapNotNull { metadataOf(it.name.removeSuffix(".jsonl")) }
 
-    /** The state after [activityId]'s last EVENT, or null if it has none (or no file). */
+    /**
+     * The state after [activityId]'s last EVENT, or null if it has none (or no file).
+     *
+     * The apps poll this while an activity is being recorded, so it decodes only the EVENT lines (a handful)
+     * and merely skips past the SAMPLE lines (one per second, thousands after a long run) instead of parsing
+     * every one of them. A corrupt EVENT line is ignored here; `forEachRecord` is where losses are counted.
+     */
     fun lastStateOf(activityId: String): ActivityState? {
+        val path = pathFor(activityId)
+        if (!SystemFileSystem.exists(path)) return null
         var lastState: ActivityState? = null
-        forEachRecord(activityId) { record ->
-            if (record is ActivityRecord.Event) lastState = record.event.state
+        SystemFileSystem.source(path).buffered().use { source ->
+            source.readLine() // META line
+            while (true) {
+                val line = source.readLine() ?: break
+                if (!line.startsWith(EVENT_PREFIX)) continue
+                val decoded = decodeLine(line)
+                if (decoded is DecodeResult.Ok && decoded.record is ActivityRecord.Event) {
+                    lastState = decoded.record.event.state
+                }
+            }
         }
         return lastState
     }

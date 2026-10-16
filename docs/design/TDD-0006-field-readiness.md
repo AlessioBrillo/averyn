@@ -60,7 +60,7 @@ Resuming from PAUSED stays PAUSED (the user paused; GPS keeps feeding samples th
 
 ### 5.2 Clock continuity (R2, R3)
 
-`elapsedRealtime` restarts at boot. `StateEvent` gets an optional `clockOffsetMs` (default 0, absent in old files), meaningful on `RECOVERED` events: the **cumulative** offset in force from that event on. Effective time of any raw value is `raw + offset`.
+`elapsedRealtime` restarts at boot. `StateEvent` gets an optional `clockOffsetMs` (default 0, absent in old files and when no reboot happened), meaningful on `RECOVERED` events: the **cumulative** offset in force from that event on. Effective time of any raw value is `raw + offset`. `ActivityStore` also accepts NaN/Infinity in optional fields (`allowSpecialFloatingPointValues`), so an odd platform value is stored as reported instead of crashing the recording.
 
 At `recover()`, with `prev` the cumulative offset replayed from the file, `lastEff` the last known effective time and Δwall the wall-clock difference since then:
 
@@ -95,12 +95,12 @@ Additive over `diagnostics-v1`; `formatVersion` becomes 2.
 
 | Field | Meaning |
 |---|---|
-| `recoveries[]` | per recovery: `lastSampleBeforeMs`, `recoveredAtMs`, `firstSampleAfterMs?`, `gapMs`, `rebootDetected` |
+| `recoveryGaps[]` | per recovery: `lastSampleBeforeMs`, `recoveredAtMs`, `firstSampleAfterMs?`, `gapMs`, `rebootDetected` (the `recoveries` count stays) |
 | `events[]` | state timeline: effective ms, wall ms, state, reason |
 | `algorithms` | `distance-v1`, `time-v1`, `speed-v1`, `quality-v1` |
 | `stationaryMs`, `endedAtMs` | previously missing |
 | `droppedInputs` | by reason: `NO_ACTIVE_ACTIVITY`, `INVALID_SAMPLE`, plus the store losses |
-| `DeviceInfo` | manufacturer, hardware model (`utsname` on iOS), OS, app version, **build/commit**, permission level (precise/approximate, always/when-in-use), power-saver on, battery-optimisation exempt (Android) |
+| `DeviceInfo` | manufacturer, hardware model (`utsname` on iOS), OS, app version, **build/commit**, permission level (precise/approximate, always/when-in-use), power-saver on, battery-optimisation exempt (Android). Every field is passed explicitly by the native caller (Swift cannot see Kotlin default arguments) |
 
 A FAILED activity also gets a report (the `ponytail:` in `ActivityRecorder.fail`).
 
