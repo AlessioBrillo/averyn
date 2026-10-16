@@ -38,7 +38,7 @@ internal fun deviceInfo(context: Context): DeviceInfo {
         osVersion = "Android ${Build.VERSION.RELEASE}",
         appVersion = appVersion,
         manufacturer = Build.MANUFACTURER,
-        buildId = null, // the commit id arrives with the tester-build workflow (TDD-0006 §5.8)
+        buildId = BuildConfig.COMMIT_ID,
         locationPermission = locationPermissionLabel(context),
         powerSaverOn = power.isPowerSaveMode,
         batteryOptimisationExempt = power.isIgnoringBatteryOptimizations(context.packageName),

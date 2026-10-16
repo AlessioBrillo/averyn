@@ -1,6 +1,6 @@
 # TDD-0006: Field Readiness
 
-- **Status:** draft
+- **Status:** implemented
 - **Version:** 0.1
 - **Author:** @AlessioBrillo
 - **Date:** 2026-10-15
@@ -117,7 +117,7 @@ Android requests `ACCESS_FINE_LOCATION` and `ACCESS_COARSE_LOCATION` together an
 
 ### 5.8 Tester builds (R10)
 
-See [ADR-0019](../adr/0019-crash-reporting-and-tester-builds.md). `versionCode` = CI run number, `versionName` = tag, the commit SHA in `DeviceInfo`. Display name "Averyn Beta"; application id and bundle id stay `dev.averyn.app` ([ADR-0008](../adr/0008-project-codename.md)). Release workflow is manual, on `v*` tags; signing keys and store API keys are repository secrets.
+See [ADR-0019](../adr/0019-crash-reporting-and-tester-builds.md). `versionCode` = CI run number, `versionName` = tag, the commit SHA in `DeviceInfo`. Display name "Averyn Beta"; application id and bundle id stay `dev.averyn.app` ([ADR-0008](../adr/0008-project-codename.md)). The release workflow (`.github/workflows/release.yml`) is manual and builds the signed Android bundle from repository secrets; the Play internal and TestFlight uploads are manual steps, written down in [tester builds](../deployment/tester-builds.md). A CI job for the iOS upload is deliberately not written: it cannot be tested without the signing material.
 
 ### 5.9 Backend and sync (R11)
 
@@ -125,7 +125,7 @@ See [ADR-0019](../adr/0019-crash-reporting-and-tester-builds.md). `versionCode` 
 - JWKS fetches get connect/read timeouts; the key lookup no longer holds a global lock across the network call.
 - `shared/sync`: 429 and 503 stop the pass and honour `Retry-After`; 403 and 410 are distinct permanent states (`ACCOUNT_DELETED`, `DELETED_ON_SERVER`); a running upload is not replaced by a new enqueue (`KEEP`).
 - Export validates every raw object exists before sending the first byte; a failure becomes a 5xx, never a 200 with a corrupt archive.
-- CI gains an authenticated end-to-end job on the Compose stack: machine-user token → `PUT` a fixture → list → track → export.
+- The upload → list → track → export path is covered against real PostGIS and SeaweedFS by the backend tests (Testcontainers, a stub identity provider). An end-to-end job against the real Zitadel on the Compose stack is **not built** (Q3).
 
 ## 6. Test strategy
 
@@ -154,3 +154,5 @@ Seven stacked PRs, merged bottom first (docs → tracking → Android → iOS �
 |---|---|---|---|
 | Q1 | Does auto-resume after a swipe-kill behave the same on aggressive OEMs (Xiaomi, OnePlus)? | Matrix rows + guidance text | Open — needs devices |
 | Q2 | Final public name and store listing | ADR (supersedes interim part of 0008) | Open — before any public release |
+| Q3 | End-to-end CI job with real Zitadel tokens (machine-user token → `PUT` → list → track → export) | CI job | Open — needs a minting recipe that is stable in CI; the Compose smoke tests only assert `401`s today |
+| Q4 | Real-device campaign S1–S14 on ≥ 2 Android and ≥ 2 iOS devices | Rows in the device matrix | Open — the exit criteria of MVP-0 and MVP-1 |

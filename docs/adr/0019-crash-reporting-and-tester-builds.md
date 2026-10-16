@@ -1,6 +1,6 @@
 # ADR-0019: Crash reporting and tester builds — store vitals only, no SDK
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-10-15
 - **Deciders:** @AlessioBrillo
 

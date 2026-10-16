@@ -151,7 +151,7 @@ final class RecorderViewModel: ObservableObject {
             osVersion: "iOS \(UIDevice.current.systemVersion)",
             appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
             manufacturer: "Apple",
-            buildId: nil,
+            buildId: Bundle.main.infoDictionary?["AverynCommit"] as? String,
             locationPermission: tracker.permissionLabel,
             powerSaverOn: KotlinBoolean(bool: ProcessInfo.processInfo.isLowPowerModeEnabled),
             batteryOptimisationExempt: nil

@@ -12,7 +12,7 @@
     <application
         android:name=".AverynApplication"
         android:allowBackup="false"
-        android:label="Averyn"
+        android:label="Averyn Beta"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity
