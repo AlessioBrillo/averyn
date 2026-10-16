@@ -66,7 +66,6 @@ class RawObjectStore(
         }
     }
 
-    /** The whole object. For recomputing derived data from the raw file (ADR-0016) and for tests. */
     /** Whether [key] exists, without reading it. */
     fun exists(key: String): Boolean =
         try {
@@ -76,6 +75,7 @@ class RawObjectStore(
             false
         }
 
+    /** The whole object. For recomputing derived data from the raw file (ADR-0016) and for tests. */
     fun get(key: String): ByteArray = s3.getObjectAsBytes { it.bucket(bucket).key(key) }.asByteArray()
 
     fun put(

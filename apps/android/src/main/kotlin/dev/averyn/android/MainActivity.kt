@@ -137,6 +137,9 @@ private fun RecordScreen(app: AverynApplication) {
             enqueueSync(context)
             historyVersion++
         }
+        // The tracking service restarted by the system may have recovered the same activity while the reads above
+        // ran: recovering it twice would log a second RECOVERED event and restart the service for nothing.
+        if (recorder.currentState != ActivityState.IDLE) return@LaunchedEffect
         if (decision.action == ResumeAction.RESUME_NOW) {
             applyRecovery(decision.metadata, finishNow = false)
             notice = "Recording resumed after an interruption"
