@@ -37,6 +37,25 @@ final class SyncService: ObservableObject {
             let sync = ActivitySync.companion.create(store: store, serverUrl: server)
             defer { sync.close() }
             let result = try await sync.syncPending(accessToken: token)
+            if result.needsLogin {
+                // S14: a refused / revoked session must be observable as FAILED_RETRYABLE (AUTH) so the UI
+                // can prompt the user to sign in again. Mark every queued/uploading activity accordingly.
+                let statusStore = SyncStatusStore(store: store)
+                for metadata in store.list() {
+                    let current = statusStore.statusOf(activityId: metadata.activityId)
+                    if current.state == .queued || current.state == .uploading {
+                        statusStore.write(
+                            activityId: metadata.activityId,
+                            status: SyncStatus(
+                                state: .failedRetryable,
+                                attempts: current.attempts,
+                                lastError: "AUTH",
+                                serverActivityId: current.serverActivityId
+                            )
+                        )
+                    }
+                }
+            }
             // Sign-in needed: a background retry would just fail again; signing in starts a fresh pass.
             finished = !(result.retryable > 0 && !result.needsLogin)
         } catch {

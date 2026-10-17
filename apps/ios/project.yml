@@ -27,6 +27,8 @@ targets:
       path: Averyn/Info.plist
       properties:
         CFBundleDisplayName: Averyn Beta
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         AverynCommit: $(AVERYN_COMMIT)
         UILaunchScreen: {}
         # TDD-0001 §5.5: background location mode, required for recording with the screen locked.

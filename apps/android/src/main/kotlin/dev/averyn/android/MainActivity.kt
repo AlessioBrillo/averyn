@@ -51,6 +51,7 @@ import dev.averyn.tracking.ResumeAction
 import dev.averyn.tracking.finishOlderInterrupted
 import dev.averyn.tracking.resumeDecision
 import kotlinx.coroutines.Dispatchers
+import androidx.core.app.NotificationManagerCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -83,17 +84,20 @@ private fun RecordScreen(app: AverynApplication) {
     var permissionMessage by remember { mutableStateOf<String?>(null) }
     // Reloads the history when something was finished or recovered.
     var historyVersion by remember { mutableStateOf(0) }
+    val scope = rememberCoroutineScope()
 
     DisposableEffect(recorder) {
         recorder.listener = { snapshot = it }
         onDispose { recorder.listener = null }
     }
 
-    /** Recovers [metadata] into the app's recorder; [finishNow] closes it at its last known activity time. */
+    /** Recovers [metadata] into the app's recorder; [finishNow] closes it at its last known activity time.
+     * The recover() replay itself is IO-bound (whole stored file): call it off the main thread.
+     * Returns the result so the caller can start the foreground service on the main thread after IO. */
     fun applyRecovery(
         metadata: ActivityMetadata,
         finishNow: Boolean,
-    ) {
+    ): RecoveryResult? {
         val (elapsedMs, timeMs) = now()
         val result = recorder.recover(metadata.activityId, elapsedMs, timeMs)
         val dropped =
@@ -105,9 +109,6 @@ private fun RecordScreen(app: AverynApplication) {
                         val completed = recorder.stop(recorder.lastKnownElapsedRealtimeMs, recorder.lastKnownTimeMs)
                         completedDiagnostics = completed.diagnostics
                         enqueueSync(context)
-                    } else {
-                        snapshot = result.snapshot
-                        context.startForegroundService(Intent(context, TrackingService::class.java))
                     }
                     result.droppedRecordCount
                 }
@@ -119,6 +120,10 @@ private fun RecordScreen(app: AverynApplication) {
             }
         recoveryWarning = droppedRecordWarning(dropped)
         historyVersion++
+        // The "tap to resume" notification is no longer needed once the activity has been recovered.
+        // InterruptedNotification.NOTIFICATION_ID == 2 (same module, same channel).
+        NotificationManagerCompat.from(context).cancel(2)
+        return result
     }
 
     // TDD-0001 F4 / TDD-0006 §5.1: an interruption is resumed by itself when it is recent and precise location is
@@ -141,21 +146,44 @@ private fun RecordScreen(app: AverynApplication) {
         // ran: recovering it twice would log a second RECOVERED event and restart the service for nothing.
         if (recorder.currentState != ActivityState.IDLE) return@LaunchedEffect
         if (decision.action == ResumeAction.RESUME_NOW) {
-            applyRecovery(decision.metadata, finishNow = false)
+            // recover() replays the whole stored file: do it off the main thread so a long activity
+            // (S11: ~10 k lines for 3 h) doesn't ANR the launcher. Start the foreground service back
+            // on the main thread once IO is done.
+            val result = withContext(Dispatchers.IO) {
+                applyRecovery(decision.metadata, finishNow = false)
+            }
+            if (result is RecoveryResult.Resumed) {
+                context.startForegroundService(Intent(context, TrackingService::class.java))
+            }
             notice = "Recording resumed after an interruption"
         } else {
             pendingRecovery = decision.metadata
         }
     }
 
+    /** Completes an in-flight start/resume after the location grant; never starts a second activity
+     * on top of one that is already PAUSED/RECORDING (that would throw IllegalStateException). */
     val permissionLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
-            if (grants[Manifest.permission.ACCESS_FINE_LOCATION] == true || hasPreciseLocation(context)) {
-                permissionMessage = null
-                startRecording(context, app, pendingSport)
-            } else {
+            val fineGranted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true
+            val hasPrecise = fineGranted || hasPreciseLocation(context)
+            permissionMessage = null
+            if (!hasPrecise) {
                 permissionMessage =
                     "Precise location is needed to record. Choose “Precise” when asked, or allow it in the app settings."
+                return@rememberLauncherForActivityResult
+            }
+            when (recorder.currentState) {
+                ActivityState.IDLE -> startRecording(context, app, pendingSport)
+                ActivityState.PAUSED -> {
+                    val (e, t) = now()
+                    recorder.resume(e, t)
+                    context.startForegroundService(Intent(context, TrackingService::class.java))
+                }
+                else -> {
+                    // RECORDING/PREPARING/STOPPING/COMPLETED/FAILED: nothing to start or resume here.
+                    // A pending recovery was already applied before the permission request.
+                }
             }
         }
 
@@ -175,14 +203,25 @@ private fun RecordScreen(app: AverynApplication) {
             metadata = metadata,
             onResume = {
                 pendingRecovery = null
-                applyRecovery(metadata, finishNow = false)
-                // Without precise location the service pauses the activity again at once: ask now, and the
-                // user resumes from the activity's own controls once it is granted.
-                if (!hasPreciseLocation(context)) requestPermissions()
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        applyRecovery(metadata, finishNow = false)
+                    }
+                    if (result is RecoveryResult.Resumed) {
+                        context.startForegroundService(Intent(context, TrackingService::class.java))
+                    }
+                    // Without precise location the service pauses the activity again at once: ask now, and the
+                    // user resumes from the activity's own controls once it is granted.
+                    if (!hasPreciseLocation(context)) requestPermissions()
+                }
             },
             onFinish = {
                 pendingRecovery = null
-                applyRecovery(metadata, finishNow = true)
+                scope.launch {
+                    withContext(Dispatchers.IO) {
+                        applyRecovery(metadata, finishNow = true)
+                    }
+                }
             },
         )
     }
@@ -349,6 +388,19 @@ private fun AccountSection(app: AverynApplication) {
 
 private fun latestSyncText(app: AverynApplication): String {
     val latest = app.store.list().maxByOrNull { it.startedAtMs } ?: return "Sync: no activities yet"
+    // If the latest activity is being recorded right now, report from the live recorder instead of
+    // re-parsing the whole store file on every 3 s poll (TDD-0006 §4: no per-second work proportional
+    // to activity length).
+    val recorder = app.recorder
+    if (recorder.currentState != ActivityState.IDLE && recorder.currentActivityId == latest.activityId) {
+        val state = when (recorder.currentState) {
+            ActivityState.RECORDING -> "RECORDING"
+            ActivityState.PAUSED -> "PAUSED"
+            ActivityState.PREPARING -> "PREPARING"
+            else -> recorder.currentState.toString()
+        }
+        return "Sync: $state (recording)"
+    }
     val status = SyncStatusStore(app.store).statusOf(latest.activityId)
     return "Sync: ${status.state}" + (status.lastError?.let { " ($it)" } ?: "")
 }

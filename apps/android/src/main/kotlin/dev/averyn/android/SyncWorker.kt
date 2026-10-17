@@ -6,6 +6,7 @@ import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
+import kotlinx.coroutines.CancellationException
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -27,7 +28,8 @@ fun enqueueSync(context: Context) {
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()
-    WorkManager.getInstance(context).enqueueUniqueWork(SYNC_WORK_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+    // KEEP: an upload already in progress must not be replaced by a new enqueue (TDD-0006 §5.9).
+    WorkManager.getInstance(context).enqueueUniqueWork(SYNC_WORK_NAME, ExistingWorkPolicy.KEEP, request)
 }
 
 /** Try again later (with backoff) only if something can still succeed without the user: not when sign-in is needed. */
@@ -43,6 +45,8 @@ class SyncWorker(
         val token =
             try {
                 app.auth.freshAccessToken()
+            } catch (e: CancellationException) {
+                throw e // WorkManager cancelled this worker: don't report it as retryable
             } catch (e: Exception) {
                 return Result.retry() // no network or the IdP is unreachable
             }

@@ -13,11 +13,17 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Binder
 import android.os.Bundle
+import android.app.PendingIntent
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import dev.averyn.domain.ActivityState
 import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Reason
@@ -46,6 +52,14 @@ class TrackingService : Service() {
     private val binder = LocalBinder()
     private lateinit var locationManager: LocationManager
     private val recorder: ActivityRecorder get() = (application as AverynApplication).recorder
+
+    // Recovery after a kill/reboot replays the whole stored file: do it off the service's main thread
+    // to avoid blocking onStartCommand (ANR risk on long activities, S11).
+    private val recoveryExecutor = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "TrackingService-recovery").apply { isDaemon = true }
+    }
+    private val recovering = AtomicBoolean(false)
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     inner class LocalBinder : Binder() {
         val service: TrackingService get() = this@TrackingService
@@ -114,11 +128,25 @@ class TrackingService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (!hasActivityToRecord()) {
-            stopSelf()
-            return START_NOT_STICKY
+        // If the recorder already serves an activity (started from the UI), just keep feeding fixes.
+        if (recorder.currentState != ActivityState.IDLE) {
+            startLocationUpdates()
+            return START_STICKY
         }
-        startLocationUpdates()
+        // System-initiated restart (sticky, boot): look for an interrupted activity off the main thread.
+        if (recovering.getAndSet(true)) return START_STICKY // a recovery is already in flight
+        recoveryExecutor.execute {
+            try {
+                val hasActivity = hasActivityToRecord()
+                if (!hasActivity) {
+                    mainHandler.post { stopSelf() }
+                    return@execute
+                }
+                mainHandler.post { startLocationUpdates() }
+            } finally {
+                recovering.set(false)
+            }
+        }
         return START_STICKY
     }
 
@@ -167,16 +195,28 @@ class TrackingService : Service() {
             ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
                 PackageManager.PERMISSION_GRANTED
         if (!granted) {
-            interrupt(Reason.PERMISSION_REVOKED)
-            stopSelf()
+            interruptAndStop(Reason.PERMISSION_REVOKED)
             return
         }
         if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-            interrupt(Reason.PROVIDER_DISABLED)
-            stopSelf()
+            interruptAndStop(Reason.PROVIDER_DISABLED)
             return
         }
-        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, LOCATION_INTERVAL_MS, 0f, listener)
+        try {
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, LOCATION_INTERVAL_MS, 0f, listener)
+        } catch (e: SecurityException) {
+            // Android 14+: background restart with only while-in-use location throws here. The activity stays
+            // interrupted in the store; the user is one tap away from resuming it — never a crash loop.
+            interruptAndStop(Reason.PERMISSION_REVOKED)
+        }
+    }
+
+    /** Interrupts the activity for [reason] and stops this service: never leaves a "Recording" notification up
+     * while fixes are being thrown away. */
+    private fun interruptAndStop(reason: Reason) {
+        interrupt(reason)
+        stopSelf()
+        NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID)
     }
 
     /**
@@ -212,14 +252,25 @@ class TrackingService : Service() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
-    private fun buildNotification(): Notification =
-        NotificationCompat
+    private fun buildNotification(): Notification {
+        val open =
+            PendingIntent.getActivity(
+                this,
+                0,
+                Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+        return NotificationCompat
             .Builder(this, NOTIFICATION_CHANNEL_ID)
             .setContentTitle("Recording activity")
+            .setContentText("Tap to return to Averyn")
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setContentIntent(open)
             .build()
-}
+    }
 
 /**
  * The platform-conversion part of `Location.toSample()`, pulled out as a pure function (no `android.location
@@ -247,3 +298,4 @@ internal fun buildLocationSample(
     speedMps = speedMps,
     bearingDeg = bearingDeg,
 )
+}

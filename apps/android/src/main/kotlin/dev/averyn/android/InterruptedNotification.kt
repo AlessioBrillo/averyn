@@ -12,7 +12,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 
 private const val CHANNEL_ID = "interrupted"
-private const val NOTIFICATION_ID = 2
+internal const val INTERRUPTED_NOTIFICATION_ID = 2
 
 /**
  * "Tap to resume" for an activity the app could not resume by itself: after a reboot (Android 15 does not let a
@@ -48,5 +48,5 @@ internal fun postInterruptedNotification(context: Context) {
             .setContentIntent(open)
             .setAutoCancel(true)
             .build()
-    manager.notify(NOTIFICATION_ID, notification)
+    manager.notify(INTERRUPTED_NOTIFICATION_ID, notification)
 }
