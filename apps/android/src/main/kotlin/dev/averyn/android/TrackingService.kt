@@ -61,6 +61,23 @@ class TrackingService : Service() {
     private val recovering = AtomicBoolean(false)
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    // Watchdog: if RECORDING but no fix arrives for too long, surface it instead of staying silent (S5).
+    private val watchdogHandler = Handler(Looper.getMainLooper())
+    private var lastFixMs: Long = 0
+    private val WATCHDOG_GAP_MS = 5L * 60 * 1000 // no fix for 5 minutes while recording
+    private val WATCHDOG_CHECK_INTERVAL_MS = 2L * 60 * 1000 // check every 2 minutes
+
+    private val watchdogRunnable: Runnable = Runnable {
+        if (recorder.currentState == ActivityState.RECORDING && lastFixMs > 0) {
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastFixMs > WATCHDOG_GAP_MS) {
+                interruptAndStop(Reason.PROVIDER_DISABLED)
+                return@Runnable
+            }
+        }
+        watchdogHandler.postDelayed(watchdogRunnable, WATCHDOG_CHECK_INTERVAL_MS)
+    }
+
     inner class LocalBinder : Binder() {
         val service: TrackingService get() = this@TrackingService
     }
@@ -83,6 +100,7 @@ class TrackingService : Service() {
                         return
                     }
                 recorder.onSample(sample)
+                lastFixMs = SystemClock.elapsedRealtime()
             }
 
             @Deprecated("Deprecated in Java") // required override pre-API 29; no-op, no status info to act on
@@ -182,6 +200,7 @@ class TrackingService : Service() {
 
     override fun onDestroy() {
         locationManager.removeUpdates(listener)
+        watchdogHandler.removeCallbacks(watchdogRunnable)
         super.onDestroy()
     }
 
@@ -209,6 +228,8 @@ class TrackingService : Service() {
             // interrupted in the store; the user is one tap away from resuming it — never a crash loop.
             interruptAndStop(Reason.PERMISSION_REVOKED)
         }
+        // Start watching for a silent loss of fixes while recording (F1.7 / S5).
+        watchdogHandler.postDelayed(watchdogRunnable, WATCHDOG_CHECK_INTERVAL_MS)
     }
 
     /** Interrupts the activity for [reason] and stops this service: never leaves a "Recording" notification up
