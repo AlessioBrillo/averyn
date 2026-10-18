@@ -183,11 +183,13 @@ class ActivityIngest(
                         INSERT INTO activities (owner_id, client_activity_id, sport, started_at, final_state,
                             raw_object_key, raw_sha256, raw_size_bytes, distance_m, elapsed_ms, moving_ms, paused_ms,
                             average_speed_mps, pace_sec_per_km, quality_grade, dropped_records,
-                            metrics_algorithm_version, quality_algorithm_version, track)
+                            metrics_algorithm_version, quality_algorithm_version, track,
+                            avg_hr_bpm, max_hr_bpm, hr_source)
                         SELECT ?::uuid, ?::uuid, ?::text, ?::timestamptz, ?::text, ?::text, ?::text, ?::bigint,
                             ?::double precision, ?::bigint, ?::bigint, ?::bigint, ?::double precision,
                             ?::double precision, ?::text, ?::integer, ?::text, ?::text,
-                            ST_GeomFromText(?::text, 4326)
+                            ST_GeomFromText(?::text, 4326),
+                            ?::integer, ?::integer, ?::text
                         WHERE NOT EXISTS (SELECT 1 FROM users WHERE id = ?::uuid AND deleted_at IS NOT NULL)
                             AND NOT EXISTS (
                                 SELECT 1 FROM deleted_activities
