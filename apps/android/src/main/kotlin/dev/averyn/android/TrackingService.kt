@@ -22,6 +22,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import dev.averyn.android.ble.BleHrAdapter
 import dev.averyn.domain.ActivityState
 import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Reason
@@ -31,6 +32,11 @@ import dev.averyn.tracking.RecoveryResult
 import dev.averyn.tracking.ResumeAction
 import dev.averyn.tracking.finishOlderInterrupted
 import dev.averyn.tracking.resumeDecision
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -51,7 +57,13 @@ private const val LOCATION_INTERVAL_MS = 1_000L
 class TrackingService : Service() {
     private val binder = LocalBinder()
     private lateinit var locationManager: LocationManager
-    private val recorder: ActivityRecorder get() = (application as AverynApplication).recorder
+    private val app: AverynApplication get() = application as AverynApplication
+    private val recorder: ActivityRecorder get() = app.recorder
+    private val hrAdapter: BleHrAdapter get() = app.hrAdapter
+
+    /** Coroutine scope for best-effort HR sensor connection; cancelled when the service stops. */
+    private val hrScope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
+    private var hrActive = false
 
     // Recovery after a kill/reboot replays the whole stored file: do it off the service's main thread
     // to avoid blocking onStartCommand (ANR risk on long activities, S11).
@@ -92,6 +104,14 @@ class TrackingService : Service() {
             override fun onLocationChanged(location: Location) {
                 if (recorder.currentState == ActivityState.PREPARING) {
                     recorder.gpsReady(SystemClock.elapsedRealtime(), System.currentTimeMillis())
+                    // Wire the HR adapter callbacks once we know there is an activity to feed.
+                    hrAdapter.onSample = { app.feedHeartRate(it) }
+                    hrAdapter.onRrInterval = { app.feedRrInterval(it) }
+                    if (hrAdapter.isAvailable && !hrActive) {
+                        // Fire-and-forget: HR is best-effort; a missing strap never stops GPS tracking.
+                        hrActive = true
+                        hrScope.launch { hrAdapter.start(recorder.currentActivityId ?: "") }
+                    }
                 }
                 // Always forward the fix: ActivityRecorder.onSample stores it in every non-terminal state
                 // (F5) and only feeds live metrics while RECORDING — gating the call itself here would
@@ -130,6 +150,12 @@ class TrackingService : Service() {
         super.onCreate()
         locationManager = getSystemService(LocationManager::class.java)
         createNotificationChannel()
+        // Stop the HR sensor when the activity reaches a terminal state (stop/fail initiated from the UI).
+        val previousListener = recorder.listener
+        recorder.listener = { snapshot ->
+            if (snapshot.state.isTerminal) stopHr()
+            previousListener?.invoke(snapshot)
+        }
     }
 
     override fun onStartCommand(
@@ -206,7 +232,16 @@ class TrackingService : Service() {
     override fun onDestroy() {
         locationManager.removeUpdates(listener)
         watchdogHandler.removeCallbacks(watchdogRunnable)
+        stopHr()
+        hrScope.coroutineContext[Job]?.cancel()
         super.onDestroy()
+    }
+
+    /** Stops the HR sensor and clears the flag so a new activity can start it again. */
+    private fun stopHr() {
+        if (!hrActive) return
+        hrActive = false
+        hrScope.launch { hrAdapter.stop() }
     }
 
     private fun hasPreciseLocation() =
@@ -241,6 +276,7 @@ class TrackingService : Service() {
      * while fixes are being thrown away. */
     private fun interruptAndStop(reason: Reason) {
         interrupt(reason)
+        stopHr()
         stopSelf()
         NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID)
     }

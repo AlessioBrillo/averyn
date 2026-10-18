@@ -28,11 +28,8 @@ import javax.sql.DataSource
  * Revocation answers 204 even when nothing was granted: idempotent, and the caller can't distinguish "never
  * granted" from "revoked" (no enumeration of which scopes a user considered).
  */
-fun Application.consent(
-    db: DataSource,
-    consentStore: ConsentStore = ConsentStore(db),
-) {
-    val store = consentStore
+fun Application.consent(db: DataSource): ConsentStore {
+    val store = ConsentStore(db)
 
     routing {
         authenticate(OIDC_AUTH) {
@@ -82,6 +79,7 @@ fun Application.consent(
             }
         }
     }
+    return store
 }
 
 /** Scopes Averyn currently grants consent for (ADR-0021). `hrv_analysis` is reserved for hrv-v1. */

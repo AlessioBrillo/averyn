@@ -42,6 +42,7 @@ fun Application.module() {
     observability(isReady = db::isReachable)
     auth(oidc)
     clientConfig(oidc, mapStyleUrl)
+    val consentStore = consent(db)
     activities(
         db,
         raw,
@@ -50,8 +51,8 @@ fun Application.module() {
         requestsPerMinute =
             cfg.propertyOrNull("averyn.limits.requestsPerMinute")?.getString()?.toInt()
                 ?: DEFAULT_REQUESTS_PER_MINUTE,
+        consentStore = consentStore,
     )
-    consent(db)
 }
 
 /**

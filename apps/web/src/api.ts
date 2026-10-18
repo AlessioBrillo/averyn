@@ -24,6 +24,9 @@ export interface ActivitySummary {
   metricsAlgorithmVersion: string
   qualityAlgorithmVersion: string
   visibility: string
+  avgHrBpm: number
+  maxHrBpm: number
+  hrSource: string
 }
 
 export interface ActivityPage {
@@ -80,3 +83,16 @@ export function listActivities(cursor?: string): Promise<ActivityPage> {
 export const getActivity = (id: string) => get<ActivitySummary>(`/v1/activities/${encodeURIComponent(id)}`)
 
 export const getTrack = (id: string) => get<Track>(`/v1/activities/${encodeURIComponent(id)}/track`)
+
+export interface ConsentGrant {
+  scope: string
+  grantedAt: string
+  revokedAt: string | null
+}
+
+/** The user's consent grants (ADR-0021). */
+export const getConsents = () => get<ConsentGrant[]>('/v1/consents')
+
+/** Revoke a consent scope (ADR-0021). */
+export const revokeConsent = (scope: string) =>
+  request(`/v1/consents/${encodeURIComponent(scope)}`, 'DELETE')

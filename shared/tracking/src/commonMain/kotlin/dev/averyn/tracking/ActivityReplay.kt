@@ -76,7 +76,7 @@ fun replay(
     store: ActivityStore,
     activityId: String,
     onMeteredSample: (LocationSample) -> Unit = {},
-    onHeartRate: (HeartRateSample) -> Unit = {},
+    onHeartRate: (HeartRateSample, ActivityState) -> Unit = { _, _ -> },
 ): ReplayResult {
     val metadata =
         store.metadataOf(activityId)
@@ -151,7 +151,7 @@ fun replay(
             is ActivityRecord.HeartRate -> {
                 // Heart-rate records don't affect GPS state/metrics; they're reported to the caller
                 // (backend computes hr-v1 from them, same as GPS samples from onMeteredSample).
-                onHeartRate(record.sample)
+                onHeartRate(record.sample, lastState)
                 hasHeartRate = true
             }
         }

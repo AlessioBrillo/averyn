@@ -36,6 +36,8 @@ Setup common to all: fully charged unless the scenario says otherwise, location 
 | S12 | Sync ([TDD-0002](../design/TDD-0002-activity-sync.md)): finish offline, reconnect | Needs the backend reachable over TLS from the phone | Reaches `READY`; one row server-side; same distance as the phone |
 | S13 | Sync: kill the app mid-upload | Throttle the network, kill during upload, relaunch | Retries; no duplicate row; one object |
 | S14 | Sync: expired / revoked sign-in | Revoke the session at the IdP | `FAILED_RETRYABLE (AUTH)`; signing in again uploads it |
+| S15 | Heart rate vs reference strap | Record ≥ 10 min with a BLE HR strap; compare `avgHrBpm`/`maxHrBpm` in the exported diagnostics with the strap's own app | HR present, within 5 bpm of the strap reference, no dropouts > 30 s |
+| S16 | Consent revocation mid-activity | Grant `rr_recording`, record with RR, revoke consent in Account, continue recording | RR sidecar stops immediately; re-upload of the sidecar gets `410`; the activity file itself is intact |
 
 ### Recovery loss (S5/S6)
 
