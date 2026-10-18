@@ -113,6 +113,9 @@ export function ActivityDetail({
     [rate.label, rate.value],
     ['GPS quality', activity.qualityGrade.toLowerCase()],
     ['Unreadable records', String(activity.droppedRecords)],
+    ...(activity.avgHrBpm > 0
+      ? [['Heart rate', `${activity.avgHrBpm} bpm avg · ${activity.maxHrBpm} bpm max`] as [string, string]]
+      : [] as [string, string][]),
   ]
 
   return (

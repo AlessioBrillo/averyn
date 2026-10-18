@@ -5,6 +5,8 @@ import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Reason
 import dev.averyn.domain.Sport
 import dev.averyn.domain.StateEvent
+import dev.averyn.sensors.HeartRateSample
+import dev.averyn.sensors.RrInterval
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
@@ -131,5 +133,73 @@ class ActivityStoreTest {
         store.create(ActivityMetadata("a1", Sport.RUN, 0))
         store.delete("a1")
         assertTrue(store.list().isEmpty())
+    }
+
+    @Test
+    fun metadataDefaultsToFormatVersion1AndRoundTripsWith2() {
+        // Old-style metadata without formatVersion decodes to 1.
+        store.create(ActivityMetadata("a1", Sport.RUN, 0))
+        assertEquals(1, store.metadataOf("a1")!!.formatVersion)
+
+        // New-style metadata is written and read back with formatVersion 2.
+        store.create(ActivityMetadata("a2", Sport.RIDE, 1_000, formatVersion = 2))
+        assertEquals(2, store.metadataOf("a2")!!.formatVersion)
+    }
+
+    @Test
+    fun heartRateRecordsRoundTripThroughForEachRecord() {
+        store.create(ActivityMetadata("a1", Sport.RUN, 0, formatVersion = 2))
+        store.appendHeartRate("a1", HeartRateSample(1000, 1000, 137, true))
+        store.appendHeartRate("a1", HeartRateSample(2000, 2000, 142, false))
+
+        val hrSamples = mutableListOf<HeartRateSample>()
+        val losses = mutableListOf<RecordLossReason>()
+        store.forEachRecord("a1", onLoss = { losses += it }) { record ->
+            if (record is ActivityRecord.HeartRate) hrSamples += record.sample
+        }
+
+        assertEquals(listOf(HeartRateSample(1000, 1000, 137, true), HeartRateSample(2000, 2000, 142, false)), hrSamples)
+        assertTrue(losses.isEmpty())
+    }
+
+    @Test
+    fun unknownRecordKindIsCountedAsLossNotACrash() {
+        store.create(ActivityMetadata("a1", Sport.RUN, 0))
+        val path = Path(dir.toString(), "a1.jsonl")
+        SystemFileSystem.sink(path, append = true).buffered().use {
+            it.writeString("HR {\"bogus\":true}\n") // not a valid HeartRateSample JSON
+        }
+
+        val losses = mutableListOf<RecordLossReason>()
+        store.forEachRecord("a1", onLoss = { losses += it }) { }
+
+        assertEquals(listOf(RecordLossReason.TRUNCATED_RECORD), losses)
+    }
+
+    @Test
+    fun rrSidecarRoundTrip() {
+        store.createRrMetadata("a1")
+        store.appendRrInterval("a1", RrInterval(1000, 1000, 857))
+        store.appendRrInterval("a1", RrInterval(2000, 2000, 800))
+
+        val rrs = mutableListOf<RrInterval>()
+        val losses = mutableListOf<RecordLossReason>()
+        store.forEachRrRecord("a1", onLoss = { losses += it }) { rrs += it }
+
+        assertEquals(listOf(RrInterval(1000, 1000, 857), RrInterval(2000, 2000, 800)), rrs)
+        assertTrue(losses.isEmpty())
+        assertEquals(ActivityMetadata("a1", Sport.RUN, 0, formatVersion = 1), store.rrMetadataOf("a1"))
+    }
+
+    @Test
+    fun rrSidecarIsDeletedIndependently() {
+        store.createRrMetadata("a1")
+        store.appendRrInterval("a1", RrInterval(1000, 1000, 857))
+        store.deleteRr("a1")
+
+        assertEquals(null, store.rrMetadataOf("a1"))
+        // The main activity file is untouched.
+        store.create(ActivityMetadata("a1", Sport.RUN, 0))
+        assertEquals(1, store.metadataOf("a1")!!.formatVersion)
     }
 }

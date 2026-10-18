@@ -8,6 +8,7 @@ kotlin {
         commonMain.dependencies {
             api(project(":shared:domain"))
             api(project(":shared:metrics"))
+            api(project(":shared:sensors"))
             // api: ActivityStore's constructor takes a kotlinx.io Path, so it's part of this module's public API.
             api(libs.kotlinx.io.core)
             implementation(libs.kotlinx.serialization.json)

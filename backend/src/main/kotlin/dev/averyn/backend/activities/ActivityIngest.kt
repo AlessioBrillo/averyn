@@ -6,6 +6,9 @@ import dev.averyn.domain.LocationSample
 import dev.averyn.metrics.DISTANCE_ALGORITHM_VERSION
 import dev.averyn.metrics.SPEED_ALGORITHM_VERSION
 import dev.averyn.metrics.TIME_ALGORITHM_VERSION
+import dev.averyn.sensors.HeartRateMetrics
+import dev.averyn.sensors.HeartRateSample
+import dev.averyn.sensors.HeartRateSnapshot
 import dev.averyn.tracking.ActivityMetadata
 import dev.averyn.tracking.ActivityStore
 import dev.averyn.tracking.ReplayResult
@@ -42,6 +45,12 @@ data class ActivitySummary(
     val metricsAlgorithmVersion: String,
     val qualityAlgorithmVersion: String,
     val visibility: String,
+    /** hr-v1 (docs/metrics/heart-rate.md): mean HR over RECORDING-state samples, 0 when none. */
+    val avgHrBpm: Int,
+    /** hr-v1: max HR over RECORDING-state samples, 0 when none. */
+    val maxHrBpm: Int,
+    /** Which sensor produced the HR values (`ble-hr`, `none`, …). */
+    val hrSource: String,
 )
 
 @Serializable
@@ -129,6 +138,8 @@ class ActivityIngest(
         val track = ArrayList<String>() // "lon lat" of every sample that counted towards the distance
         val metadata: ActivityMetadata
         val replayed: ReplayResult
+        val hrSamples = mutableListOf<Int>()
+        var hrSnapshot: HeartRateSnapshot? = null
         try {
             metadata = store.metadataOf(activityId) ?: return IngestResult.Invalid("no activity metadata line")
             if (!metadata.activityId.equals(clientActivityId.toString(), ignoreCase = true)) {
@@ -138,7 +149,13 @@ class ActivityIngest(
                 replay(
                     store,
                     activityId,
-                ) { sample: LocationSample -> track += "${sample.longitude} ${sample.latitude}" }
+                    onMeteredSample = { sample: LocationSample -> track += "${sample.longitude} ${sample.latitude}" },
+                    onHeartRate = { sample: HeartRateSample, state: ActivityState ->
+                        if (state == ActivityState.RECORDING) hrSamples += sample.bpm
+                    },
+                )
+            val hr = HeartRateMetrics().apply { hrSamples.forEach { onSample(it) } }
+            hrSnapshot = hr.snapshot(replayed.metrics.snapshot().elapsedMs)
         } catch (e: RuntimeException) {
             // A line that parses but violates the model (e.g. latitude out of range) is an invalid upload.
             return IngestResult.Invalid("unreadable activity file")
@@ -166,11 +183,13 @@ class ActivityIngest(
                         INSERT INTO activities (owner_id, client_activity_id, sport, started_at, final_state,
                             raw_object_key, raw_sha256, raw_size_bytes, distance_m, elapsed_ms, moving_ms, paused_ms,
                             average_speed_mps, pace_sec_per_km, quality_grade, dropped_records,
-                            metrics_algorithm_version, quality_algorithm_version, track)
+                            metrics_algorithm_version, quality_algorithm_version, track,
+                            avg_hr_bpm, max_hr_bpm, hr_source)
                         SELECT ?::uuid, ?::uuid, ?::text, ?::timestamptz, ?::text, ?::text, ?::text, ?::bigint,
                             ?::double precision, ?::bigint, ?::bigint, ?::bigint, ?::double precision,
                             ?::double precision, ?::text, ?::integer, ?::text, ?::text,
-                            ST_GeomFromText(?::text, 4326)
+                            ST_GeomFromText(?::text, 4326),
+                            ?::integer, ?::integer, ?::text
                         WHERE NOT EXISTS (SELECT 1 FROM users WHERE id = ?::uuid AND deleted_at IS NOT NULL)
                             AND NOT EXISTS (
                                 SELECT 1 FROM deleted_activities
@@ -200,6 +219,10 @@ class ActivityIngest(
                         stmt.setString(++i, METRICS_ALGORITHM_VERSION)
                         stmt.setString(++i, quality.algorithmVersion)
                         stmt.setString(++i, wkt)
+                        val hrSource = if (hrSamples.isNotEmpty()) "ble-hr" else "none"
+                        stmt.setInt(++i, hrSnapshot.avgHrBpm)
+                        stmt.setInt(++i, hrSnapshot.maxHrBpm)
+                        stmt.setString(++i, hrSource)
                         stmt.setObject(++i, ownerId)
                         stmt.setObject(++i, ownerId)
                         stmt.setObject(++i, clientActivityId)
@@ -345,12 +368,27 @@ class ActivityIngest(
         existing: Existing,
         sha256: String,
     ): IngestResult = if (existing.sha256 == sha256) IngestResult.Existing(existing.summary) else IngestResult.Conflict
+
+    /** True when the RR sidecar for this activity has been tombstoned (consent revocation, ADR-0021). */
+    fun rrDeleted(
+        ownerId: UUID,
+        clientActivityId: UUID,
+    ): Boolean =
+        db.connection.use { conn ->
+            conn
+                .prepareStatement("SELECT 1 FROM deleted_rr WHERE owner_id = ? AND client_activity_id = ?")
+                .use { stmt ->
+                    stmt.setObject(1, ownerId)
+                    stmt.setObject(2, clientActivityId)
+                    stmt.executeQuery().use { it.next() }
+                }
+        }
 }
 
 internal const val SUMMARY_COLUMNS =
     "id, client_activity_id, sport, started_at, final_state, distance_m, elapsed_ms, moving_ms, paused_ms, " +
         "average_speed_mps, pace_sec_per_km, quality_grade, dropped_records, metrics_algorithm_version, " +
-        "quality_algorithm_version, visibility"
+        "quality_algorithm_version, visibility, avg_hr_bpm, max_hr_bpm, hr_source"
 
 internal fun ResultSet.toSummary(columnOffset: Int = 0): ActivitySummary {
     var i = columnOffset
@@ -371,5 +409,8 @@ internal fun ResultSet.toSummary(columnOffset: Int = 0): ActivitySummary {
         metricsAlgorithmVersion = getString(++i),
         qualityAlgorithmVersion = getString(++i),
         visibility = getString(++i),
+        avgHrBpm = getInt(++i),
+        maxHrBpm = getInt(++i),
+        hrSource = getString(++i),
     )
 }

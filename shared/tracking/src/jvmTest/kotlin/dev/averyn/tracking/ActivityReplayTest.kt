@@ -75,7 +75,7 @@ class ActivityReplayTest {
         recordFinishedActivity(ActivityRecorder(store), "a1")
         val metered = mutableListOf<LocationSample>()
 
-        replay(store, "a1") { metered += it }
+        replay(store, "a1", onMeteredSample = { metered += it })
 
         // 7 raw samples were recorded while RECORDING; the duplicate and the out-of-order one are excluded.
         assertEquals(listOf(0L, 10_000L, 20_000L, 63_000L, 73_000L), metered.map { it.elapsedRealtimeMs })

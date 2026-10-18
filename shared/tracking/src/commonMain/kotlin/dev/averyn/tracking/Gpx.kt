@@ -67,6 +67,9 @@ fun writeGpx(
                     writeTrkpt(sink, record.sample)
                 }
             }
+            is ActivityRecord.HeartRate -> {
+                // Heart rate is not location data: never exported to GPX.
+            }
         }
     }
     closeSegmentIfOpen()

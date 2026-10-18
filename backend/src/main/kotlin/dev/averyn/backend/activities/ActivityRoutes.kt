@@ -3,6 +3,8 @@ package dev.averyn.backend.activities
 import dev.averyn.backend.auth.AccountDeletedException
 import dev.averyn.backend.auth.OIDC_AUTH
 import dev.averyn.backend.auth.userIdFor
+import dev.averyn.backend.consent.ConsentScope
+import dev.averyn.backend.consent.ConsentStore
 import dev.averyn.backend.storage.RawObjectStore
 import io.ktor.http.ContentDisposition
 import io.ktor.http.ContentType
@@ -78,6 +80,7 @@ fun Application.activities(
     exportSlots: Semaphore = Semaphore(MAX_CONCURRENT_EXPORTS),
     quotaBytes: Long = DEFAULT_USER_QUOTA_BYTES,
     requestsPerMinute: Int = DEFAULT_REQUESTS_PER_MINUTE,
+    consentStore: ConsentStore = ConsentStore(db),
 ) {
     val ingest = ActivityIngest(db, raw, quotaBytes)
     val userData = UserData(db, raw)
@@ -154,6 +157,64 @@ fun Application.activities(
                                 HttpStatusCode.UnprocessableEntity,
                                 errorBody(result.reason),
                             )
+                    }
+                }
+
+                // RR sidecar (Health class, ADR-0020/0021): uploaded as a separate object next to the
+                // activity, consent-gated, tombstoned independently on consent revocation.
+                put("/v1/activities/{clientActivityId}/rr") {
+                    val clientId =
+                        call.parameters["clientActivityId"]?.toUuidOrNull()
+                            ?: return@put call.respond(HttpStatusCode.BadRequest, errorBody("malformed activity id"))
+                    val owner = call.owner(db) ?: return@put
+                    if (!withContext(Dispatchers.IO) { consentStore.isGranted(owner, ConsentScope.RR_RECORDING) }) {
+                        return@put call.respond(
+                            HttpStatusCode.Forbidden,
+                            errorBody("rr_recording consent not granted"),
+                        )
+                    }
+                    if (withContext(Dispatchers.IO) { ingest.rrDeleted(owner, clientId) }) {
+                        return@put call.respond(
+                            HttpStatusCode.Gone,
+                            errorBody("rr data was deleted"),
+                        )
+                    }
+                    val declared = call.request.contentLength()
+                    if (declared != null && declared > maxBytes) {
+                        return@put call.respond(
+                            HttpStatusCode.PayloadTooLarge,
+                            errorBody("rr file too large"),
+                        )
+                    }
+                    if (!uploadSlots.tryAcquire()) {
+                        call.response.header(HttpHeaders.RetryAfter, "5")
+                        return@put call.respond(
+                            HttpStatusCode.ServiceUnavailable,
+                            errorBody("too many uploads, retry later"),
+                        )
+                    }
+                    try {
+                        withContext(Dispatchers.IO) {
+                            val dir = Files.createTempDirectory("averyn-ingest-rr-")
+                            try {
+                                val file = dir.resolve("$clientId.jsonl")
+                                val sha256 = call.receiveToFile(file, maxBytes)
+                                if (sha256 == null) {
+                                    call.respond(
+                                        HttpStatusCode.PayloadTooLarge,
+                                        errorBody("rr file too large"),
+                                    )
+                                    return@withContext
+                                }
+                                val key = "raw/$owner/$clientId/rr/$sha256.jsonl"
+                                raw.put(key, file)
+                                call.respond(HttpStatusCode.Created)
+                            } finally {
+                                dir.toFile().deleteRecursively()
+                            }
+                        }
+                    } finally {
+                        uploadSlots.release()
                     }
                 }
 

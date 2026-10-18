@@ -50,6 +50,7 @@ dependencies {
     implementation(project(":shared:domain"))
     implementation(project(":shared:tracking"))
     implementation(project(":shared:metrics"))
+    implementation(project(":shared:sensors"))
     implementation(project(":shared:sync"))
 
     implementation(platform(libs.androidx.compose.bom))

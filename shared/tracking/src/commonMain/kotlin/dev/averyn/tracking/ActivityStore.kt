@@ -4,6 +4,8 @@ import dev.averyn.domain.ActivityState
 import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Sport
 import dev.averyn.domain.StateEvent
+import dev.averyn.sensors.HeartRateSample
+import dev.averyn.sensors.RrInterval
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
@@ -20,6 +22,8 @@ data class ActivityMetadata(
     val activityId: String,
     val sport: Sport,
     val startedAtMs: Long,
+    /** 1 = GPS only (old files, absent field decodes to 1); 2 = GPS + `HR ` records (ADR-0020). */
+    val formatVersion: Int = 1,
 )
 
 /** Why a stored line wasn't usable (TDD-0001 F5: every drop is counted with a reason, never silent). */
@@ -39,11 +43,17 @@ sealed interface ActivityRecord {
     data class Event(
         val event: StateEvent,
     ) : ActivityRecord
+
+    /** Heart-rate sample written alongside GPS samples (formatVersion 2, ADR-0020). */
+    data class HeartRate(
+        val sample: HeartRateSample,
+    ) : ActivityRecord
 }
 
 private const val META_PREFIX = "META "
 private const val SAMPLE_PREFIX = "SAMPLE "
 private const val EVENT_PREFIX = "EVENT "
+private const val HR_PREFIX = "HR "
 
 /**
  * Durable, append-only local store (ADR-0015): one JSON Lines file per activity (`<activityId>.jsonl` under
@@ -78,6 +88,9 @@ class ActivityStore(
          * callable from Swift, but a companion object member is.
          */
         fun open(directoryPath: String): ActivityStore = ActivityStore(Path(directoryPath))
+
+        /** Record-type prefix for RR intervals in the sidecar `<id>.rr.jsonl` (ADR-0020/0021). */
+        private const val RR_PREFIX = "RR "
     }
 
     private fun pathFor(activityId: String) = Path(directory, "$activityId.jsonl")
@@ -97,6 +110,12 @@ class ActivityStore(
         activityId: String,
         event: StateEvent,
     ) = appendLine(activityId, EVENT_PREFIX + json.encodeToString(StateEvent.serializer(), event))
+
+    /** Appends a heart-rate sample written alongside GPS (formatVersion 2, flushed before return — F3). */
+    fun appendHeartRate(
+        activityId: String,
+        sample: HeartRateSample,
+    ) = appendLine(activityId, HR_PREFIX + json.encodeToString(HeartRateSample.serializer(), sample))
 
     private fun appendLine(
         activityId: String,
@@ -181,6 +200,12 @@ class ActivityStore(
                             json.decodeFromString(StateEvent.serializer(), line.removePrefix(EVENT_PREFIX)),
                         ),
                     )
+                line.startsWith(HR_PREFIX) ->
+                    DecodeResult.Ok(
+                        ActivityRecord.HeartRate(
+                            json.decodeFromString(HeartRateSample.serializer(), line.removePrefix(HR_PREFIX)),
+                        ),
+                    )
                 else -> DecodeResult.Loss(RecordLossReason.UNKNOWN_RECORD_TYPE)
             }
         } catch (e: SerializationException) {
@@ -229,6 +254,94 @@ class ActivityStore(
 
     fun delete(activityId: String) {
         val path = pathFor(activityId)
+        if (SystemFileSystem.exists(path)) SystemFileSystem.delete(path)
+    }
+
+    // --- Heart-rate sidecar (ADR-0020/0021): `<id>.rr.jsonl`, own lifecycle (consent-gated, independently deletable).
+
+    private fun pathForRr(activityId: String) = Path(directory, "$activityId.rr.jsonl")
+
+    /** Creates the sidecar's META line (formatVersion 1). Called once when the first RR interval arrives. */
+    fun createRrMetadata(activityId: String) {
+        SystemFileSystem.sink(pathForRr(activityId), append = false).buffered().use { sink ->
+            sink.writeString(
+                META_PREFIX +
+                    json.encodeToString(
+                        ActivityMetadata.serializer(),
+                        ActivityMetadata(
+                            activityId = activityId,
+                            sport = Sport.RUN,
+                            startedAtMs = 0,
+                            formatVersion = 1,
+                        ),
+                    ) +
+                    "\n",
+            )
+        }
+    }
+
+    /** Appends one raw RR interval to the sidecar (flushed before return — F3). */
+    fun appendRrInterval(
+        activityId: String,
+        rr: RrInterval,
+    ) = appendLineRr(activityId, RR_PREFIX + json.encodeToString(RrInterval.serializer(), rr))
+
+    private fun appendLineRr(
+        activityId: String,
+        line: String,
+    ) {
+        SystemFileSystem.sink(pathForRr(activityId), append = true).buffered().use { sink ->
+            sink.writeString(line)
+            sink.writeString("\n")
+        }
+    }
+
+    /** Sidecar metadata, or null when no sidecar exists. `formatVersion` absent decodes to 1. */
+    fun rrMetadataOf(activityId: String): ActivityMetadata? {
+        val path = pathForRr(activityId)
+        if (!SystemFileSystem.exists(path)) return null
+        return SystemFileSystem.source(path).buffered().use { source ->
+            val line = source.readLine() ?: return@use null
+            if (!line.startsWith(META_PREFIX)) return@use null
+            try {
+                json.decodeFromString(ActivityMetadata.serializer(), line.removePrefix(META_PREFIX))
+            } catch (e: SerializationException) {
+                null
+            }
+        }
+    }
+
+    /** The whole sidecar of [activityId], exactly as stored: what sync uploads for RR. */
+    fun readRrRaw(activityId: String): ByteArray =
+        SystemFileSystem.source(pathForRr(activityId)).buffered().use { it.readByteArray() }
+
+    /** Streams every record of the sidecar after the META line, in file order; bounded memory. */
+    fun forEachRrRecord(
+        activityId: String,
+        onLoss: (RecordLossReason) -> Unit = {},
+        action: (RrInterval) -> Unit,
+    ) {
+        val path = pathForRr(activityId)
+        if (!SystemFileSystem.exists(path)) return
+        SystemFileSystem.source(path).buffered().use { source ->
+            source.readLine() // META line
+            while (true) {
+                val line = source.readLine() ?: break
+                if (!line.startsWith(RR_PREFIX)) {
+                    onLoss(RecordLossReason.UNKNOWN_RECORD_TYPE)
+                    continue
+                }
+                runCatching {
+                    json.decodeFromString(RrInterval.serializer(), line.removePrefix(RR_PREFIX))
+                }.onFailure { onLoss(RecordLossReason.TRUNCATED_RECORD) }
+                    .onSuccess { action(it) }
+            }
+        }
+    }
+
+    /** Deletes the RR sidecar (consent revocation, ADR-0021). No-op when absent. */
+    fun deleteRr(activityId: String) {
+        val path = pathForRr(activityId)
         if (SystemFileSystem.exists(path)) SystemFileSystem.delete(path)
     }
 }
