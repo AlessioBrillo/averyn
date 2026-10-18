@@ -16,7 +16,10 @@ import android.content.Intent
  * ~10 s broadcast budget.
  */
 class BootReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
+    override fun onReceive(
+        context: Context,
+        intent: Intent,
+    ) {
         val action = intent.action
         if (action != Intent.ACTION_BOOT_COMPLETED &&
             action != Intent.ACTION_MY_PACKAGE_REPLACED
@@ -26,8 +29,10 @@ class BootReceiver : BroadcastReceiver() {
         val app = context.applicationContext as AverynApplication
         // Off the broadcast thread: listing + replaying every interrupted activity can take seconds
         // for long runs (S11), well inside the 10 s broadcast budget only if we don't block it.
-        java.lang.Thread({
-            if (app.store.interrupted().isNotEmpty()) postInterruptedNotification(context)
-        }).start()
+        java.lang
+            .Thread({
+                if (app.store.interrupted().isNotEmpty()) postInterruptedNotification(context)
+            })
+            .start()
     }
 }

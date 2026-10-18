@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -13,7 +14,6 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Binder
 import android.os.Bundle
-import android.app.PendingIntent
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -22,8 +22,6 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
-import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicBoolean
 import dev.averyn.domain.ActivityState
 import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Reason
@@ -33,18 +31,20 @@ import dev.averyn.tracking.RecoveryResult
 import dev.averyn.tracking.ResumeAction
 import dev.averyn.tracking.finishOlderInterrupted
 import dev.averyn.tracking.resumeDecision
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 private const val NOTIFICATION_CHANNEL_ID = "tracking"
 private const val NOTIFICATION_ID = 1
 private const val LOCATION_INTERVAL_MS = 1_000L
 
 /**
- * Foreground service driving the shared [ActivityRecorder] (TDD-0001 §5.1: native code is thin, it only
+ * Foreground service driving the shared [ActivityRecorder] (TDD-0001 section 5.1: native code is thin, it only
  * converts platform callbacks to [LocationSample] and calls into shared/). Uses the platform
  * [LocationManager] directly — no Google Play Services dependency, so the app works on de-Googled devices.
  *
  * START_STICKY means the system recreates this service after the process was killed, with a fresh, IDLE
- * recorder and no intent. That is the recovery path (TDD-0006 §5.1): it resumes the interrupted activity by
+ * recorder and no intent. That is the recovery path (TDD-0006 section 5.1): it resumes the interrupted activity by
  * itself when the interruption is recent and precise location is granted, and otherwise asks the user with a
  * notification. It never leaves a "Recording" notification up while fixes are being thrown away.
  */
@@ -55,28 +55,33 @@ class TrackingService : Service() {
 
     // Recovery after a kill/reboot replays the whole stored file: do it off the service's main thread
     // to avoid blocking onStartCommand (ANR risk on long activities, S11).
-    private val recoveryExecutor = Executors.newSingleThreadExecutor { r ->
-        Thread(r, "TrackingService-recovery").apply { isDaemon = true }
-    }
+    private val recoveryExecutor =
+        Executors.newSingleThreadExecutor { r ->
+            Thread(r, "TrackingService-recovery").apply { isDaemon = true }
+        }
     private val recovering = AtomicBoolean(false)
     private val mainHandler = Handler(Looper.getMainLooper())
 
     // Watchdog: if RECORDING but no fix arrives for too long, surface it instead of staying silent (S5).
     private val watchdogHandler = Handler(Looper.getMainLooper())
     private var lastFixMs: Long = 0
-    private val WATCHDOG_GAP_MS = 5L * 60 * 1000 // no fix for 5 minutes while recording
-    private val WATCHDOG_CHECK_INTERVAL_MS = 2L * 60 * 1000 // check every 2 minutes
 
-    private val watchdogRunnable: Runnable = Runnable {
-        if (recorder.currentState == ActivityState.RECORDING && lastFixMs > 0) {
-            val now = SystemClock.elapsedRealtime()
-            if (now - lastFixMs > WATCHDOG_GAP_MS) {
-                interruptAndStop(Reason.PROVIDER_DISABLED)
-                return@Runnable
-            }
-        }
-        watchdogHandler.postDelayed(watchdogRunnable, WATCHDOG_CHECK_INTERVAL_MS)
+    companion object {
+        private const val WATCHDOG_GAP_MS = 5L * 60 * 1000 // no fix for 5 minutes while recording
+        private const val WATCHDOG_CHECK_INTERVAL_MS = 2L * 60 * 1000 // check every 2 minutes
     }
+
+    private val watchdogRunnable: Runnable =
+        Runnable {
+            if (recorder.currentState == ActivityState.RECORDING && lastFixMs > 0) {
+                val now = SystemClock.elapsedRealtime()
+                if (now - lastFixMs > WATCHDOG_GAP_MS) {
+                    interruptAndStop(Reason.PROVIDER_DISABLED)
+                    return@Runnable
+                }
+            }
+            watchdogHandler.postDelayed(watchdogRunnable, WATCHDOG_CHECK_INTERVAL_MS)
+        }
 
     inner class LocalBinder : Binder() {
         val service: TrackingService get() = this@TrackingService
@@ -292,14 +297,16 @@ class TrackingService : Service() {
             .setContentIntent(open)
             .build()
     }
+}
 
 /**
- * The platform-conversion part of `Location.toSample()`, pulled out as a pure function (no `android.location
- * .Location` dependency) so the accuracy/altitude/speed/bearing fallback logic is unit-testable without
- * Robolectric or an instrumented device (TDD-0001 §8: this component can't be fully verified on this
- * project's dev machine, so what CAN be a plain unit test should be one — see LocationSampleConversionTest).
+ * The platform-conversion part of `Location.toSample()`, pulled out as a pure function (no
+ * `android.location.Location` dependency) so the accuracy/altitude/speed/bearing fallback logic is
+ * unit-testable without Robolectric or an instrumented device (TDD-0001 section 8: this component can't be
+ * fully verified on this project's dev machine, so what CAN be a plain unit test should be one — see
+ * LocationSampleConversionTest).
  */
-internal fun buildLocationSample(
+public fun buildLocationSample(
     timeMs: Long,
     elapsedRealtimeMs: Long,
     latitude: Double,
@@ -319,4 +326,3 @@ internal fun buildLocationSample(
     speedMps = speedMps,
     bearingDeg = bearingDeg,
 )
-}

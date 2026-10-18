@@ -6,12 +6,12 @@ import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
-import kotlinx.coroutines.CancellationException
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import dev.averyn.sync.ActivitySync
 import dev.averyn.sync.SyncRunResult
+import kotlinx.coroutines.CancellationException
 import java.util.concurrent.TimeUnit
 
 private const val SYNC_WORK_NAME = "activity-sync"

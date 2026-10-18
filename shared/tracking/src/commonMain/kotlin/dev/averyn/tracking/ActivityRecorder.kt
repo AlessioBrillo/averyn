@@ -71,6 +71,7 @@ class ActivityRecorder(
 
     private var state: ActivityState = ActivityState.IDLE
     private var activityId: String? = null
+
     /** The id of the activity this recorder currently serves, null when IDLE. Readable from the UI thread. */
     val currentActivityId: String? get() = activityId
     private var sport: Sport? = null

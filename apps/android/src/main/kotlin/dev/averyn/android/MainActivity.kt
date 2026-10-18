@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import dev.averyn.domain.ActivityState
@@ -51,7 +52,6 @@ import dev.averyn.tracking.ResumeAction
 import dev.averyn.tracking.finishOlderInterrupted
 import dev.averyn.tracking.resumeDecision
 import kotlinx.coroutines.Dispatchers
-import androidx.core.app.NotificationManagerCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -149,9 +149,10 @@ private fun RecordScreen(app: AverynApplication) {
             // recover() replays the whole stored file: do it off the main thread so a long activity
             // (S11: ~10 k lines for 3 h) doesn't ANR the launcher. Start the foreground service back
             // on the main thread once IO is done.
-            val result = withContext(Dispatchers.IO) {
-                applyRecovery(decision.metadata, finishNow = false)
-            }
+            val result =
+                withContext(Dispatchers.IO) {
+                    applyRecovery(decision.metadata, finishNow = false)
+                }
             if (result is RecoveryResult.Resumed) {
                 context.startForegroundService(Intent(context, TrackingService::class.java))
             }
@@ -204,9 +205,10 @@ private fun RecordScreen(app: AverynApplication) {
             onResume = {
                 pendingRecovery = null
                 scope.launch {
-                    val result = withContext(Dispatchers.IO) {
-                        applyRecovery(metadata, finishNow = false)
-                    }
+                    val result =
+                        withContext(Dispatchers.IO) {
+                            applyRecovery(metadata, finishNow = false)
+                        }
                     if (result is RecoveryResult.Resumed) {
                         context.startForegroundService(Intent(context, TrackingService::class.java))
                     }
@@ -393,12 +395,13 @@ private fun latestSyncText(app: AverynApplication): String {
     // to activity length).
     val recorder = app.recorder
     if (recorder.currentState != ActivityState.IDLE && recorder.currentActivityId == latest.activityId) {
-        val state = when (recorder.currentState) {
-            ActivityState.RECORDING -> "RECORDING"
-            ActivityState.PAUSED -> "PAUSED"
-            ActivityState.PREPARING -> "PREPARING"
-            else -> recorder.currentState.toString()
-        }
+        val state =
+            when (recorder.currentState) {
+                ActivityState.RECORDING -> "RECORDING"
+                ActivityState.PAUSED -> "PAUSED"
+                ActivityState.PREPARING -> "PREPARING"
+                else -> recorder.currentState.toString()
+            }
         return "Sync: $state (recording)"
     }
     val status = SyncStatusStore(app.store).statusOf(latest.activityId)
