@@ -61,6 +61,8 @@ data class AlgorithmVersions(
     val time: String,
     val speed: String,
     val quality: String,
+    /** `hr-v1` when heart-rate samples were recorded, null otherwise. */
+    val heartRate: String? = null,
 )
 
 /** Why the recorder did not use an input it was handed (F5: counted, never silent). */
@@ -170,6 +172,7 @@ internal fun diagnosticsReport(
     recoveryGaps: List<RecoveryGap>,
     events: List<TimelineEvent>,
     endedAtMs: Long?,
+    heartRate: String? = null,
 ): DiagnosticsReport {
     val hours = metrics.elapsedMs / 3_600_000.0
     val drainPerHour =
@@ -201,6 +204,7 @@ internal fun diagnosticsReport(
                 time = TIME_ALGORITHM_VERSION,
                 speed = SPEED_ALGORITHM_VERSION,
                 quality = QUALITY_ALGORITHM_VERSION,
+                heartRate = heartRate,
             ),
         stationaryMs = metrics.stationaryMs,
         endedAtMs = endedAtMs,

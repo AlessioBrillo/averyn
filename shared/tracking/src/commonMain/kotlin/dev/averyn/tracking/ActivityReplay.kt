@@ -4,6 +4,7 @@ import dev.averyn.domain.ActivityState
 import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Reason
 import dev.averyn.metrics.ActivityMetrics
+import dev.averyn.sensors.HeartRateSample
 
 /**
  * What [replay] rebuilt from one stored activity. The accumulators are the live objects, so a recorder can
@@ -72,6 +73,7 @@ fun replay(
     store: ActivityStore,
     activityId: String,
     onMeteredSample: (LocationSample) -> Unit = {},
+    onHeartRate: (HeartRateSample) -> Unit = {},
 ): ReplayResult {
     val metadata =
         store.metadataOf(activityId)
@@ -141,6 +143,11 @@ fun replay(
                 }
                 lastState = event.state
                 timeline += TimelineEvent(elapsedMs, event.timeMs, event.state, event.reason)
+            }
+            is ActivityRecord.HeartRate -> {
+                // Heart-rate records don't affect GPS state/metrics; they're reported to the caller
+                // (backend computes hr-v1 from them, same as GPS samples from onMeteredSample).
+                onHeartRate(record.sample)
             }
         }
     }

@@ -7,6 +7,7 @@ import dev.averyn.domain.Sport
 import dev.averyn.domain.StateEvent
 import dev.averyn.metrics.ActivityMetrics
 import dev.averyn.metrics.ActivitySnapshot
+import dev.averyn.sensors.HeartRateSample
 import kotlin.math.abs
 
 /**
@@ -226,6 +227,21 @@ class ActivityRecorder(
             recordingSamples++
             ingestSample(sample.onClock(clockOffsetMs), qualityAssessor, qualityAccumulator, metrics)
         }
+        emit()
+    }
+
+    /** A heart-rate sample from the sensor adapter: stored durably (F3), excluded from GPS metrics. */
+    fun onHeartRate(sample: HeartRateSample) {
+        val id = activityId
+        if (id == null) {
+            recordDroppedInput(DroppedInputReason.NO_ACTIVE_ACTIVITY)
+            return
+        }
+        if (state.isTerminal) {
+            recordDroppedInput(DroppedInputReason.ACTIVITY_ENDED)
+            return
+        }
+        store.appendHeartRate(id, sample)
         emit()
     }
 
