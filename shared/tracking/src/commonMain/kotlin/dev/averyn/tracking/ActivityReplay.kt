@@ -4,6 +4,7 @@ import dev.averyn.domain.ActivityState
 import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Reason
 import dev.averyn.metrics.ActivityMetrics
+import dev.averyn.sensors.HR_ALGORITHM_VERSION
 import dev.averyn.sensors.HeartRateSample
 
 /**
@@ -37,6 +38,8 @@ class ReplayResult internal constructor(
     val clockOffsetMs: Long,
     internal val recoveryGaps: RecoveryGapTracker,
     val timeline: List<TimelineEvent>,
+    /** True when at least one `HR ` record was found (diagnostics stamps `hr-v1`). */
+    val hasHeartRate: Boolean = false,
 )
 
 /**
@@ -92,6 +95,7 @@ fun replay(
     var lastElapsedMs = 0L
     var lastTimeMs = 0L
     var offsetMs = 0L
+    var hasHeartRate = false
     val gaps = RecoveryGapTracker()
     val timeline = mutableListOf<TimelineEvent>()
 
@@ -148,6 +152,7 @@ fun replay(
                 // Heart-rate records don't affect GPS state/metrics; they're reported to the caller
                 // (backend computes hr-v1 from them, same as GPS samples from onMeteredSample).
                 onHeartRate(record.sample)
+                hasHeartRate = true
             }
         }
     }
@@ -171,6 +176,7 @@ fun replay(
         clockOffsetMs = offsetMs,
         recoveryGaps = gaps,
         timeline = timeline.toList(),
+        hasHeartRate = hasHeartRate,
     )
 }
 
@@ -199,6 +205,7 @@ fun ActivityStore.diagnosticsOf(activityId: String): DiagnosticsReport? {
         recoveryGaps = replayed.recoveryGaps.snapshot(),
         events = replayed.timeline,
         endedAtMs = replayed.lastKnownTimeMs,
+        heartRate = if (replayed.hasHeartRate) HR_ALGORITHM_VERSION else null,
     )
 }
 

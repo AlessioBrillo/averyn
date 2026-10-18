@@ -7,6 +7,7 @@ import dev.averyn.domain.Sport
 import dev.averyn.domain.StateEvent
 import dev.averyn.metrics.ActivityMetrics
 import dev.averyn.metrics.ActivitySnapshot
+import dev.averyn.sensors.HR_ALGORITHM_VERSION
 import dev.averyn.sensors.HeartRateSample
 import kotlin.math.abs
 
@@ -99,6 +100,9 @@ class ActivityRecorder(
     private var batteryStartPercent: Int? = null
     private var batteryEndPercent: Int? = null
     private var batteryReadingCount = 0
+
+    /** True once at least one HR sample has been stored for this activity (diagnostics stamps hr-v1). */
+    private var hrRecorded = false
 
     private fun resetDiagnosticsCounters() {
         totalSamples = 0
@@ -242,6 +246,7 @@ class ActivityRecorder(
             return
         }
         store.appendHeartRate(id, sample)
+        hrRecorded = true
         emit()
     }
 
@@ -338,6 +343,7 @@ class ActivityRecorder(
             recoveryGaps = recoveryGaps.snapshot(),
             events = timeline.toList(),
             endedAtMs = lastKnownTimeMs,
+            heartRate = if (hrRecorded) HR_ALGORITHM_VERSION else null,
         )
 
     /**
