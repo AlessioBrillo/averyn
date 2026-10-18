@@ -45,7 +45,10 @@ final class RecorderViewModel: ObservableObject {
         snapshot = recorder.snapshot()
         // TDD-0001 F4: whatever the launch did not resume by itself (see AppModel.resumeInterruptedIfRecent) is
         // put to the user once. A recorder that is already recording owns its activity.
-        pendingRecovery = recorder.currentState == .idle ? store.interrupted().first : nil
+        // Pick the newest interrupted activity (file listing order is arbitrary — see m5).
+        pendingRecovery = recorder.currentState == .idle
+            ? store.interrupted().sorted { $0.startedAtMs > $1.startedAtMs }.first
+            : nil
         notice = model.resumedAtLaunch ? "Recording resumed after an interruption" : nil
 
         recorder.listener = { [weak self] newSnapshot in
@@ -58,20 +61,26 @@ final class RecorderViewModel: ObservableObject {
     }
 
     func start(sport: Sport) {
+        // start() is legal from IDLE or a terminal state (it resets terminal to IDLE internally); anything else
+        // would throw IllegalStateException (C3: double-tap / out-of-order tap must not kill the app).
+        guard recorder.currentState == .idle || recorder.currentState.isTerminal else { return }
         let id = UUID().uuidString
         recorder.start(activityId: id, sport: sport, elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs())
         tracker.start()
     }
 
     func pause() {
+        guard recorder.currentState == .recording else { return }
         recorder.pause(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs(), reason: .user)
     }
 
     func resume() {
+        guard recorder.currentState == .paused else { return }
         recorder.resume(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs())
     }
 
     func stop() {
+        guard recorder.currentState == .recording || recorder.currentState == .paused else { return }
         let completed = recorder.stop(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs())
         tracker.stop()
         export(activityId: completed.activityId, diagnostics: completed.diagnostics)
@@ -79,6 +88,7 @@ final class RecorderViewModel: ObservableObject {
 
     /// The user gave up while waiting for the first fix: nothing was recorded, so nothing is kept.
     func cancel() {
+        guard recorder.currentState == .preparing else { return }
         recorder.cancel()
         tracker.stop()
         refreshHistory()

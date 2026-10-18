@@ -47,6 +47,11 @@ GitHub Actions is not the gate. The single source of truth is `.woodpecker/ci.ym
   install steps would overwrite host dependencies.
 - **Server:** push the branch; the check is `ci/woodpecker/push/ci` (`gh pr checks <n> --watch`).
 - **Not in the gate:** iOS (needs macOS), compose/compose-TLS smoke tests (need docker-in-docker), CodeQL.
-- **Status:** pipeline written, first green run not recorded yet. If a step fails for an
-  environment reason (image, network, missing tool), fix `.woodpecker/ci.yml`, not the code.
+- **Status:** first green run recorded 2026-10-17 on commit a4d810b:
+  `:backend:compileKotlin`, `:backend:test` (Testcontainers), `:shared:*:jvmTest`,
+  `:apps:android:compileDebugKotlin`, `:apps:android:lintDebug` all green.
+  `ci-local` (full Woodpecker gate incl. compose smoke) could not run because Docker
+  Desktop on this machine is not responding — restart Docker and run `ci-local` to
+  complete the gate. If a step fails for an environment reason (image, network,
+  missing tool), fix `.woodpecker/ci.yml`, not the code.
 - Done / merge-ready means this gate is green on the final tree. See `~/.agents/CI.md`.

@@ -73,6 +73,8 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
             recorder.pause(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs(), reason: reason)
         case .preparing:
             recorder.fail(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs(), reason: reason)
+            // No fix will ever arrive: stop CoreLocation so the blue indicator and GPS turn off.
+            stop()
         default:
             return
         }
@@ -89,7 +91,12 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
             // Always forward the fix: ActivityRecorder.onSample stores it in every non-terminal state (F5)
             // and only feeds live metrics while RECORDING — gating the call itself here would silently lose
             // every fix that arrives while PAUSED instead of just excluding it from metrics.
-            recorder.onSample(sample: location.toLocationSample())
+            guard let sample = location.toLocationSample() else {
+                // A fix the sample model rejects (NaN, out-of-range): counted, never a crash (C2).
+                recorder.recordDroppedInput(reason: .invalidSample)
+                continue
+            }
+            recorder.onSample(sample: sample)
         }
     }
 }
@@ -98,15 +105,21 @@ private extension CLLocation {
     /// Monotonic time of the fix: "now" on the sleep-inclusive clock minus how old the fix already is (TDD-0001
     /// §5.3). CoreLocation only gives a wall-clock `timestamp` per fix, not a monotonic one like Android's
     /// `elapsedRealtimeNanos`, so this is the closest equivalent.
-    func toLocationSample() -> LocationSample {
+    /// Returns nil for fixes the sample model cannot represent (out-of-range lat/lon): counted as
+    // INVALID_SAMPLE, never allowed to crash the app (Kotlin `require` on LocationSample would otherwise
+    // terminate the process when it reaches Swift).
+    func toLocationSample() -> LocationSample? {
+        let lat = self.coordinate.latitude
+        let lon = self.coordinate.longitude
+        guard abs(lat) <= 90, abs(lon) <= 180 else { return nil }
         let ageS = max(0, Date().timeIntervalSince(self.timestamp))
         let elapsedRealtimeMs = nowElapsedRealtimeMs() - Int64(ageS * 1000)
         let timeMs = Int64(self.timestamp.timeIntervalSince1970 * 1000)
         return LocationSample(
             timeMs: timeMs,
             elapsedRealtimeMs: elapsedRealtimeMs,
-            latitude: self.coordinate.latitude,
-            longitude: self.coordinate.longitude,
+            latitude: lat,
+            longitude: lon,
             // Never trust a negative/absent accuracy as "perfect": treat it as very poor instead.
             horizontalAccuracyM: self.horizontalAccuracy >= 0 ? self.horizontalAccuracy : 9_999.0,
             altitudeM: self.verticalAccuracy >= 0 ? KotlinDouble(double: self.altitude) : nil,
