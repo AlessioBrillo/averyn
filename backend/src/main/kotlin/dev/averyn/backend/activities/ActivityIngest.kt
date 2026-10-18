@@ -138,7 +138,8 @@ class ActivityIngest(
                 replay(
                     store,
                     activityId,
-                ) { sample: LocationSample -> track += "${sample.longitude} ${sample.latitude}" }
+                    onMeteredSample = { sample: LocationSample -> track += "${sample.longitude} ${sample.latitude}" },
+                )
         } catch (e: RuntimeException) {
             // A line that parses but violates the model (e.g. latitude out of range) is an invalid upload.
             return IngestResult.Invalid("unreadable activity file")

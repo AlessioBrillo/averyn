@@ -5,6 +5,7 @@ import dev.averyn.backend.activities.DEFAULT_USER_QUOTA_BYTES
 import dev.averyn.backend.activities.activities
 import dev.averyn.backend.auth.OidcConfig
 import dev.averyn.backend.auth.auth
+import dev.averyn.backend.consent.consent
 import dev.averyn.backend.storage.RawObjectStore
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
@@ -50,6 +51,7 @@ fun Application.module() {
             cfg.propertyOrNull("averyn.limits.requestsPerMinute")?.getString()?.toInt()
                 ?: DEFAULT_REQUESTS_PER_MINUTE,
     )
+    consent(db)
 }
 
 /**
