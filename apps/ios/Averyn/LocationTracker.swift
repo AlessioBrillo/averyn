@@ -120,8 +120,8 @@ private extension CLLocation {
             elapsedRealtimeMs: elapsedRealtimeMs,
             latitude: lat,
             longitude: lon,
-            // Never trust a negative/absent accuracy as "perfect": treat it as very poor instead.
-            horizontalAccuracyM: self.horizontalAccuracy >= 0 ? self.horizontalAccuracy : 9_999.0,
+            // Never trust a negative accuracy as a measurement: it is "not measured", not a number.
+            horizontalAccuracyM: self.horizontalAccuracy >= 0 ? KotlinDouble(double: self.horizontalAccuracy) : nil,
             altitudeM: self.verticalAccuracy >= 0 ? KotlinDouble(double: self.altitude) : nil,
             speedMps: self.speed >= 0 ? KotlinDouble(double: self.speed) : nil,
             bearingDeg: self.course >= 0 ? KotlinDouble(double: self.course) : nil

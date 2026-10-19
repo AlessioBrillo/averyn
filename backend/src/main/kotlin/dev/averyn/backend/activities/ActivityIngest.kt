@@ -12,16 +12,24 @@ import dev.averyn.sensors.HeartRateSnapshot
 import dev.averyn.tracking.ActivityMetadata
 import dev.averyn.tracking.ActivityStore
 import dev.averyn.tracking.ReplayResult
+import dev.averyn.tracking.SUPPORTED_FORMAT_VERSIONS
 import dev.averyn.tracking.replay
 import kotlinx.io.files.Path
 import kotlinx.serialization.Serializable
 import java.nio.file.Files
 import java.sql.ResultSet
+import java.sql.SQLException
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 import javax.sql.DataSource
 import kotlin.io.path.name
+
+/** Where an activity comes from: recorded by a device, or imported from a file (TDD-0008). */
+const val SOURCE_DEVICE = "device"
+
+/** The content type of an imported GPX file in the object store. */
+const val GPX_CONTENT_TYPE = "application/gpx+xml"
 
 /** Metric algorithms an activity row was computed with (a change of any of them is a new version, never an edit). */
 const val METRICS_ALGORITHM_VERSION = "$DISTANCE_ALGORITHM_VERSION,$TIME_ALGORITHM_VERSION,$SPEED_ALGORITHM_VERSION"
@@ -51,6 +59,8 @@ data class ActivitySummary(
     val maxHrBpm: Int,
     /** Which sensor produced the HR values (`ble-hr`, `none`, …). */
     val hrSource: String,
+    /** Where the activity comes from: `device` (recorded) or `gpx` (imported, TDD-0008). */
+    val source: String = "device",
 )
 
 @Serializable
@@ -126,16 +136,55 @@ class ActivityIngest(
         clientActivityId: UUID,
         file: java.nio.file.Path,
         sha256: String,
+    ): IngestResult = ingestInternal(ownerId, clientActivityId, file, sha256, null, null, SOURCE_DEVICE, null)
+
+    /**
+     * The same as [ingest], for a file that was imported (TDD-0008): the canonical file is stored as the raw
+     * activity, the file it was imported from is stored next to it, and the row says where it came from.
+     */
+    fun ingestImported(
+        ownerId: UUID,
+        clientActivityId: UUID,
+        canonicalFile: java.nio.file.Path,
+        canonicalSha256: String,
+        originalFile: java.nio.file.Path,
+        originalSha256: String,
+        source: String,
+        importVersion: String,
+    ): IngestResult =
+        ingestInternal(
+            ownerId,
+            clientActivityId,
+            canonicalFile,
+            canonicalSha256,
+            originalFile,
+            originalSha256,
+            source,
+            importVersion,
+        )
+
+    private fun ingestInternal(
+        ownerId: UUID,
+        clientActivityId: UUID,
+        file: java.nio.file.Path,
+        sha256: String,
+        originalFile: java.nio.file.Path?,
+        originalSha256: String?,
+        source: String,
+        importVersion: String?,
     ): IngestResult {
         if (wasDeleted(ownerId, clientActivityId)) return IngestResult.Gone
         existing(ownerId, clientActivityId)?.let { return resolve(it, sha256) }
         // ponytail: check, then insert, not serialized: one user's concurrent uploads can overshoot the quota by up to
         // MAX_CONCURRENT_UPLOADS files. Lock the user row around put + insert if the quota must ever be exact.
-        if (storedBytes(ownerId) + Files.size(file) > quotaBytes) return IngestResult.QuotaExceeded
+        val sourceBytes = originalFile?.let { Files.size(it) } ?: 0L
+        if (storedBytes(ownerId) + Files.size(file) + sourceBytes > quotaBytes) return IngestResult.QuotaExceeded
 
         val store = ActivityStore(Path(file.parent.toString()))
         val activityId = file.name.removeSuffix(".jsonl")
-        val track = ArrayList<String>() // "lon lat" of every sample that counted towards the distance
+        // One line per continuous recording interval: a pause ends a line, it does not bridge it.
+        val trackSegments = mutableListOf<List<String>>()
+        var currentSegment: MutableList<String>? = null
         val metadata: ActivityMetadata
         val replayed: ReplayResult
         val hrSamples = mutableListOf<Int>()
@@ -145,11 +194,21 @@ class ActivityIngest(
             if (!metadata.activityId.equals(clientActivityId.toString(), ignoreCase = true)) {
                 return IngestResult.Invalid("activity id does not match the file's metadata")
             }
+            if (metadata.formatVersion !in SUPPORTED_FORMAT_VERSIONS) {
+                return IngestResult.Invalid("unsupported activity file format")
+            }
             replayed =
                 replay(
                     store,
                     activityId,
-                    onMeteredSample = { sample: LocationSample -> track += "${sample.longitude} ${sample.latitude}" },
+                    onMeteredSample = { sample: LocationSample ->
+                        currentSegment?.add("${sample.longitude} ${sample.latitude}")
+                    },
+                    onRecordingStart = { currentSegment = mutableListOf() },
+                    onRecordingEnd = {
+                        currentSegment?.let { segment -> if (segment.size >= 2) trackSegments.add(segment.toList()) }
+                        currentSegment = null
+                    },
                     onHeartRate = { sample: HeartRateSample, state: ActivityState ->
                         if (state == ActivityState.RECORDING) hrSamples += sample.bpm
                     },
@@ -168,66 +227,110 @@ class ActivityIngest(
         // The hash in the key means two different uploads of one id can never overwrite each other's bytes.
         val key = "raw/$ownerId/$clientActivityId/$sha256.jsonl"
         raw.put(key, file)
+        val sourceKey =
+            if (originalFile != null && originalSha256 != null) {
+                "raw/$ownerId/$clientActivityId/source/$originalSha256.gpx".also {
+                    raw.put(
+                        it,
+                        originalFile,
+                        GPX_CONTENT_TYPE,
+                    )
+                }
+            } else {
+                null
+            }
 
         val snapshot = replayed.metrics.snapshot()
         val quality = replayed.quality.build()
-        val wkt = if (track.size >= 2) "LINESTRING(${track.joinToString(",")})" else null
+        val wkt =
+            if (trackSegments.isEmpty()) {
+                null
+            } else {
+                "MULTILINESTRING(${trackSegments.joinToString(",") { segment -> "(${segment.joinToString(",")})" }})"
+            }
         val inserted =
-            db.connection.use { conn ->
-                conn
-                    .prepareStatement(
-                        // The two NOT EXISTS make deletion win a race with this upload: the owner's account flag and
-                        // the activity tombstone are read in the same statement that inserts, not once at the start
-                        // of a request that can run for minutes.
-                        """
-                        INSERT INTO activities (owner_id, client_activity_id, sport, started_at, final_state,
-                            raw_object_key, raw_sha256, raw_size_bytes, distance_m, elapsed_ms, moving_ms, paused_ms,
-                            average_speed_mps, pace_sec_per_km, quality_grade, dropped_records,
-                            metrics_algorithm_version, quality_algorithm_version, track,
-                            avg_hr_bpm, max_hr_bpm, hr_source)
-                        SELECT ?::uuid, ?::uuid, ?::text, ?::timestamptz, ?::text, ?::text, ?::text, ?::bigint,
-                            ?::double precision, ?::bigint, ?::bigint, ?::bigint, ?::double precision,
-                            ?::double precision, ?::text, ?::integer, ?::text, ?::text,
-                            ST_GeomFromText(?::text, 4326),
-                            ?::integer, ?::integer, ?::text
-                        WHERE NOT EXISTS (SELECT 1 FROM users WHERE id = ?::uuid AND deleted_at IS NOT NULL)
-                            AND NOT EXISTS (
-                                SELECT 1 FROM deleted_activities
-                                WHERE owner_id = ?::uuid AND client_activity_id = ?::uuid
-                            )
-                        ON CONFLICT (owner_id, client_activity_id) DO NOTHING
-                        RETURNING $SUMMARY_COLUMNS
-                        """.trimIndent(),
-                    ).use { stmt ->
-                        var i = 0
-                        stmt.setObject(++i, ownerId)
-                        stmt.setObject(++i, clientActivityId)
-                        stmt.setString(++i, metadata.sport.name)
-                        stmt.setTimestamp(++i, Timestamp.from(Instant.ofEpochMilli(metadata.startedAtMs)))
-                        stmt.setString(++i, replayed.lastState.name)
-                        stmt.setString(++i, key)
-                        stmt.setString(++i, sha256)
-                        stmt.setLong(++i, Files.size(file))
-                        stmt.setDouble(++i, snapshot.distanceM)
-                        stmt.setLong(++i, snapshot.elapsedMs)
-                        stmt.setLong(++i, snapshot.movingMs)
-                        stmt.setLong(++i, snapshot.pausedMs)
-                        stmt.setDouble(++i, snapshot.averageSpeedMps)
-                        stmt.setObject(++i, snapshot.paceSecPerKm, java.sql.Types.DOUBLE)
-                        stmt.setString(++i, quality.grade.name)
-                        stmt.setInt(++i, replayed.recordLosses.values.sum())
-                        stmt.setString(++i, METRICS_ALGORITHM_VERSION)
-                        stmt.setString(++i, quality.algorithmVersion)
-                        stmt.setString(++i, wkt)
-                        val hrSource = if (hrSamples.isNotEmpty()) "ble-hr" else "none"
-                        stmt.setInt(++i, hrSnapshot.avgHrBpm)
-                        stmt.setInt(++i, hrSnapshot.maxHrBpm)
-                        stmt.setString(++i, hrSource)
-                        stmt.setObject(++i, ownerId)
-                        stmt.setObject(++i, ownerId)
-                        stmt.setObject(++i, clientActivityId)
-                        stmt.executeQuery().use { rs -> if (rs.next()) rs.toSummary() else null }
-                    }
+            try {
+                db.connection.use { conn ->
+                    conn
+                        .prepareStatement(
+                            // The two NOT EXISTS make deletion win a race with this upload: the owner's account flag and
+                            // the activity tombstone are read in the same statement that inserts, not once at the start
+                            // of a request that can run for minutes.
+                            """
+                            INSERT INTO activities (owner_id, client_activity_id, sport, started_at, final_state,
+                                raw_object_key, raw_sha256, raw_size_bytes, distance_m, elapsed_ms, moving_ms, paused_ms,
+                                average_speed_mps, pace_sec_per_km, quality_grade, dropped_records,
+                                metrics_algorithm_version, quality_algorithm_version, track,
+                                avg_hr_bpm, max_hr_bpm, hr_source,
+                                source, source_object_key, source_sha256, source_size_bytes, import_version, imported_at)
+                            SELECT ?::uuid, ?::uuid, ?::text, ?::timestamptz, ?::text, ?::text, ?::text, ?::bigint,
+                                ?::double precision, ?::bigint, ?::bigint, ?::bigint, ?::double precision,
+                                ?::double precision, ?::text, ?::integer, ?::text, ?::text,
+                                ST_GeomFromText(?::text, 4326),
+                                ?::integer, ?::integer, ?::text,
+                                ?::text, ?::text, ?::text, ?::bigint, ?::text, ?::timestamptz
+                            WHERE NOT EXISTS (SELECT 1 FROM users WHERE id = ?::uuid AND deleted_at IS NOT NULL)
+                                AND NOT EXISTS (
+                                    SELECT 1 FROM deleted_activities
+                                    WHERE owner_id = ?::uuid AND client_activity_id = ?::uuid
+                                )
+                            ON CONFLICT (owner_id, client_activity_id) DO NOTHING
+                            RETURNING $SUMMARY_COLUMNS
+                            """.trimIndent(),
+                        ).use { stmt ->
+                            var i = 0
+                            stmt.setObject(++i, ownerId)
+                            stmt.setObject(++i, clientActivityId)
+                            stmt.setString(++i, metadata.sport.name)
+                            stmt.setTimestamp(++i, Timestamp.from(Instant.ofEpochMilli(metadata.startedAtMs)))
+                            stmt.setString(++i, replayed.lastState.name)
+                            stmt.setString(++i, key)
+                            stmt.setString(++i, sha256)
+                            stmt.setLong(++i, Files.size(file))
+                            stmt.setDouble(++i, snapshot.distanceM)
+                            stmt.setLong(++i, snapshot.elapsedMs)
+                            stmt.setLong(++i, snapshot.movingMs)
+                            stmt.setLong(++i, snapshot.pausedMs)
+                            stmt.setDouble(++i, snapshot.averageSpeedMps)
+                            stmt.setObject(++i, snapshot.paceSecPerKm, java.sql.Types.DOUBLE)
+                            stmt.setString(++i, quality.grade.name)
+                            stmt.setInt(++i, replayed.recordLosses.values.sum())
+                            stmt.setString(++i, METRICS_ALGORITHM_VERSION)
+                            stmt.setString(++i, quality.algorithmVersion)
+                            stmt.setString(++i, wkt)
+                            // Which sensor produced the heart rate: the device's BLE strap, or the file the
+                            // activity was imported from (ADR-0014: imported metrics stay imported).
+                            val hrSource =
+                                if (hrSamples.isEmpty()) {
+                                    "none"
+                                } else if (source == SOURCE_DEVICE) {
+                                    "ble-hr"
+                                } else {
+                                    source
+                                }
+                            stmt.setInt(++i, hrSnapshot.avgHrBpm)
+                            stmt.setInt(++i, hrSnapshot.maxHrBpm)
+                            stmt.setString(++i, hrSource)
+                            stmt.setString(++i, source)
+                            stmt.setString(++i, sourceKey)
+                            stmt.setString(++i, originalSha256)
+                            stmt.setLong(++i, sourceBytes)
+                            stmt.setString(++i, importVersion)
+                            stmt.setTimestamp(++i, if (sourceKey == null) null else Timestamp.from(Instant.now()))
+                            stmt.setObject(++i, ownerId)
+                            stmt.setObject(++i, ownerId)
+                            stmt.setObject(++i, clientActivityId)
+                            stmt.executeQuery().use { rs -> if (rs.next()) rs.toSummary() else null }
+                        }
+                }
+            } catch (e: SQLException) {
+                // The same file imported twice at the same time: the unique index on the source hash decided.
+                if (e.sqlState != "23505" || originalSha256 == null) throw e
+                val winner = existingBySource(ownerId, originalSha256)
+                if (winner == null) throw e
+                raw.delete(key)
+                sourceKey?.let { raw.delete(it) }
+                return IngestResult.Existing(winner)
             }
         if (inserted != null) return IngestResult.Created(inserted)
         // No row back: either a concurrent upload of this id won the race between our check and our insert, or the
@@ -235,6 +338,7 @@ class ActivityIngest(
         // can never be referenced by a row, so it goes (an identical concurrent upload would have been `existing`).
         existing(ownerId, clientActivityId)?.let { return resolve(it, sha256) }
         raw.delete(key)
+        sourceKey?.let { raw.delete(it) }
         return if (accountDeleted(ownerId)) IngestResult.AccountDeleted else IngestResult.Gone
     }
 
@@ -248,10 +352,31 @@ class ActivityIngest(
 
     private fun storedBytes(ownerId: UUID): Long =
         db.connection.use { conn ->
-            conn.prepareStatement("SELECT coalesce(sum(raw_size_bytes), 0) FROM activities WHERE owner_id = ?").use {
-                it.setObject(1, ownerId)
-                it.executeQuery().use { rs -> if (rs.next()) rs.getLong(1) else 0 }
-            }
+            conn
+                .prepareStatement(
+                    "SELECT coalesce(sum(raw_size_bytes + coalesce(source_size_bytes, 0)), 0) FROM activities WHERE owner_id = ?",
+                ).use {
+                    it.setObject(1, ownerId)
+                    it.executeQuery().use { rs -> if (rs.next()) rs.getLong(1) else 0 }
+                }
+        }
+
+    /**
+     * The activity imported from the file with this hash, or null. The same file is imported once per owner
+     * (TDD-0008): the second import returns the first one instead of storing it again.
+     */
+    fun existingBySource(
+        ownerId: UUID,
+        sourceSha256: String,
+    ): ActivitySummary? =
+        db.connection.use { conn ->
+            conn
+                .prepareStatement("SELECT $SUMMARY_COLUMNS FROM activities WHERE owner_id = ? AND source_sha256 = ?")
+                .use { stmt ->
+                    stmt.setObject(1, ownerId)
+                    stmt.setString(2, sourceSha256)
+                    stmt.executeQuery().use { rs -> if (rs.next()) rs.toSummary() else null }
+                }
         }
 
     /** The caller's activity by its server id, or null: also when it belongs to someone else (never a 403). */
@@ -383,12 +508,64 @@ class ActivityIngest(
                     stmt.executeQuery().use { it.next() }
                 }
         }
+
+    /** Whether the activity exists and belongs to the owner: an RR sidecar needs an activity to belong to. */
+    fun activityExists(
+        ownerId: UUID,
+        clientActivityId: UUID,
+    ): Boolean =
+        db.connection.use { conn ->
+            conn.prepareStatement("SELECT 1 FROM activities WHERE owner_id = ? AND client_activity_id = ?").use {
+                it.setObject(1, ownerId)
+                it.setObject(2, clientActivityId)
+                it.executeQuery().use { it.next() }
+            }
+        }
+
+    /**
+     * Remembers the stored heart-rate sidecar of an activity, so a consent revocation can delete exactly that
+     * file and an export can include it (ADR-0021). False when the activity is not the caller's.
+     */
+    fun recordRrSidecar(
+        ownerId: UUID,
+        clientActivityId: UUID,
+        key: String,
+        sha256: String,
+        sizeBytes: Long,
+    ): Boolean =
+        db.connection.use { conn ->
+            conn
+                .prepareStatement(
+                    "UPDATE activities SET rr_object_key = ?, rr_sha256 = ?, rr_size_bytes = ? " +
+                        "WHERE owner_id = ? AND client_activity_id = ?",
+                ).use { stmt ->
+                    stmt.setString(1, key)
+                    stmt.setString(2, sha256)
+                    stmt.setLong(3, sizeBytes)
+                    stmt.setObject(4, ownerId)
+                    stmt.setObject(5, clientActivityId)
+                    stmt.executeUpdate() > 0
+                }
+        }
+
+    /** The bytes the owner stores: every canonical file, every imported original, every sidecar. */
+    fun storedBytesOf(ownerId: UUID): Long =
+        db.connection.use { conn ->
+            conn
+                .prepareStatement(
+                    "SELECT coalesce(sum(raw_size_bytes + coalesce(source_size_bytes, 0) " +
+                        "+ coalesce(rr_size_bytes, 0)), 0) FROM activities WHERE owner_id = ?",
+                ).use {
+                    it.setObject(1, ownerId)
+                    it.executeQuery().use { rs -> if (rs.next()) rs.getLong(1) else 0 }
+                }
+        }
 }
 
 internal const val SUMMARY_COLUMNS =
     "id, client_activity_id, sport, started_at, final_state, distance_m, elapsed_ms, moving_ms, paused_ms, " +
         "average_speed_mps, pace_sec_per_km, quality_grade, dropped_records, metrics_algorithm_version, " +
-        "quality_algorithm_version, visibility, avg_hr_bpm, max_hr_bpm, hr_source"
+        "quality_algorithm_version, visibility, avg_hr_bpm, max_hr_bpm, hr_source, source"
 
 internal fun ResultSet.toSummary(columnOffset: Int = 0): ActivitySummary {
     var i = columnOffset
@@ -412,5 +589,6 @@ internal fun ResultSet.toSummary(columnOffset: Int = 0): ActivitySummary {
         avgHrBpm = getInt(++i),
         maxHrBpm = getInt(++i),
         hrSource = getString(++i),
+        source = getString(++i),
     )
 }

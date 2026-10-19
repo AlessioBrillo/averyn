@@ -99,7 +99,11 @@ class ActivitySync internal constructor(
             statuses.write(id, status)
 
             when (status.state) {
-                SyncState.READY -> uploaded++
+                SyncState.READY -> {
+                    uploaded++
+                    // The heart-rate sidecar goes up after the activity it belongs to, and never holds it back.
+                    uploadRrSidecar(id, accessToken)
+                }
                 SyncState.FAILED_PERMANENT -> permanent++
                 else -> retryable++
             }
@@ -124,6 +128,58 @@ class ActivitySync internal constructor(
                 bearerAuth(accessToken)
                 contentType(ContentType("application", "x-ndjson"))
                 setBody(store.readRaw(activityId))
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+
+    /**
+     * Uploads the heart-rate sidecar of an activity, when it has one (ADR-0020/0021).
+     *
+     * The sidecar is a separate object with a separate consent: a refusal is permanent (the consent was
+     * withdrawn or the data was deleted on the server) and the local copy goes with it, because the user
+     * withdrew the consent for exactly that data.
+     */
+    private suspend fun uploadRrSidecar(
+        activityId: String,
+        accessToken: String,
+    ) {
+        if (store.rrMetadataOf(activityId) == null) return
+        val previous = statuses.readRr(activityId)
+        if (previous?.state == SyncState.READY || previous?.state == SyncState.FAILED_PERMANENT) return
+        val attempts = (previous?.attempts ?: 0) + 1
+        statuses.writeRr(activityId, SyncStatus(SyncState.UPLOADING, attempts, previous?.lastError))
+        val response = uploadRrFile(activityId, accessToken)
+        val code = response?.status?.value
+        val status =
+            when (code) {
+                200, 201 -> SyncStatus(SyncState.READY, attempts)
+                401 -> SyncStatus(SyncState.FAILED_RETRYABLE, attempts, "AUTH")
+                null -> SyncStatus(SyncState.FAILED_RETRYABLE, attempts, "NETWORK")
+                403 -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "CONSENT_REVOKED")
+                410 -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "DELETED_ON_SERVER")
+                408, 429, in 500..599 -> SyncStatus(SyncState.FAILED_RETRYABLE, attempts, "HTTP_$code")
+                else -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "HTTP_$code")
+            }
+        statuses.writeRr(activityId, status)
+        // The consent is gone or the server deleted the data: the local copy goes too.
+        if (status.lastError == "CONSENT_REVOKED" || status.lastError == "DELETED_ON_SERVER") {
+            store.deleteRr(activityId)
+        }
+    }
+
+    /** The response, or null if the request could not be completed (no network, timeout, ...). */
+    private suspend fun uploadRrFile(
+        activityId: String,
+        accessToken: String,
+    ): HttpResponse? =
+        try {
+            http.put("$baseUrl/v1/activities/$activityId/rr") {
+                bearerAuth(accessToken)
+                contentType(ContentType("application", "x-ndjson"))
+                setBody(store.readRrRaw(activityId))
             }
         } catch (e: CancellationException) {
             throw e

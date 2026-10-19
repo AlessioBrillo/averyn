@@ -107,8 +107,8 @@ class DiagnosticsTest {
         recorder.onSample(sample(10_000, 45.001))
         val diag = recorder.stop(10_000, 11_000).diagnostics
 
-        assertEquals("diagnostics-v2", diag.formatVersion)
-        assertEquals(AlgorithmVersions("distance-v1", "time-v1", "speed-v1", "quality-v1"), diag.algorithms)
+        assertEquals("diagnostics-v3", diag.formatVersion)
+        assertEquals(AlgorithmVersions("distance-v1", "time-v1", "speed-v1", "quality-v2"), diag.algorithms)
         assertEquals(
             listOf(
                 ActivityState.PREPARING,

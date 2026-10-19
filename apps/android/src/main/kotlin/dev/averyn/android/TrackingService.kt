@@ -13,6 +13,7 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Binder
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
@@ -158,6 +159,24 @@ class TrackingService : Service() {
         }
     }
 
+    /**
+     * The foreground service types this run needs: location always, connected device when the app may talk
+     * to a Bluetooth device (Android 14+ refuses a connectedDevice service without that permission).
+     * The types do not exist before Android 10, where the service has no type at all.
+     */
+    private fun foregroundServiceType(): Int {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return 0
+        val hasBluetooth =
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) ==
+                PackageManager.PERMISSION_GRANTED
+        return if (hasBluetooth) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+        } else {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+        }
+    }
+
     override fun onStartCommand(
         intent: Intent?,
         flags: Int,
@@ -168,15 +187,32 @@ class TrackingService : Service() {
                 this,
                 NOTIFICATION_ID,
                 buildNotification(),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
+                foregroundServiceType(),
             )
         } catch (e: RuntimeException) {
-            // Android 12+ refuses a foreground start from the background (a sticky restart can be one). The
-            // activity stays interrupted in the store; the user is one tap away from resuming it.
-            postInterruptedNotification(this)
-            stopSelf()
-            return START_NOT_STICKY
+            // The connectedDevice type needs the Bluetooth permission the user may have refused: the location
+            // type alone still starts the service, and the strap is then simply not used.
+            try {
+                ServiceCompat.startForeground(
+                    this,
+                    NOTIFICATION_ID,
+                    buildNotification(),
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                    } else {
+                        0
+                    },
+                )
+            } catch (fallback: RuntimeException) {
+                // Android 12+ refuses a foreground start from the background (a sticky restart can be one). The
+                // activity stays interrupted in the store; the user is one tap away from resuming it.
+                postInterruptedNotification(this)
+                stopSelf()
+                return START_NOT_STICKY
+            }
         }
+        // The consent is the server's answer, not the app's: ask before the first interval is recorded.
+        app.refreshConsents()
         // If the recorder already serves an activity (started from the UI), just keep feeding fixes.
         if (recorder.currentState != ActivityState.IDLE) {
             startLocationUpdates()
@@ -356,8 +392,9 @@ public fun buildLocationSample(
     elapsedRealtimeMs = elapsedRealtimeMs,
     latitude = latitude,
     longitude = longitude,
-    // No accuracy reported is treated as very poor (flagged POOR_ACCURACY downstream), never as 0/perfect.
-    horizontalAccuracyM = accuracyM ?: 9_999.0,
+    // No accuracy reported is not "perfect" and not a number: it is unmeasured. The sample keeps that
+    // distinction, and the activity's quality grade is UNKNOWN when nothing was measured (quality-v2).
+    horizontalAccuracyM = accuracyM,
     altitudeM = altitudeM,
     speedMps = speedMps,
     bearingDeg = bearingDeg,

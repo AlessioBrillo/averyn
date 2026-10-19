@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ApiError, listActivities } from './api'
 import type { ActivitySummary } from './api'
-import { formatDistance, formatDuration, formatRate } from './format'
+import { formatDistance, formatDuration, formatQuality, formatRate } from './format'
 
 export function ActivityList({
   open,
   onUnauthorized,
+  onImport,
 }: {
   open: (id: string) => void
   /** Must be stable (useCallback): it is an effect dependency. */
   onUnauthorized: () => void
+  /** Goes to the import page (TDD-0008). */
+  onImport: () => void
 }) {
   const [items, setItems] = useState<ActivitySummary[]>([])
   const [next, setNext] = useState<string | null>(null)
@@ -51,10 +54,20 @@ export function ActivityList({
       </p>
     )
   }
-  if (!loading && items.length === 0) return <p>No activities yet. Record one in the app and it appears here after sync.</p>
+  if (!loading && items.length === 0) {
+    return (
+      <p>
+        No activities yet. Record one in the app and it appears here after sync, or import a GPX file.{' '}
+        <button onClick={onImport}>Import a GPX file</button>
+      </p>
+    )
+  }
 
   return (
     <>
+      <p>
+        <button onClick={onImport}>Import a GPX file</button>
+      </p>
       <table>
         <thead>
           <tr>
@@ -85,7 +98,7 @@ export function ActivityList({
               <td>{formatDistance(a.distanceM)}</td>
               <td>{formatDuration(a.movingMs)}</td>
               <td>{formatRate(a.sport, a).value}</td>
-              <td>{a.qualityGrade.toLowerCase()}</td>
+              <td>{formatQuality(a.qualityGrade)}</td>
             </tr>
           ))}
         </tbody>

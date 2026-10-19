@@ -20,6 +20,18 @@ import java.util.UUID
 import javax.sql.DataSource
 
 /**
+ * Deletes the data a revoked scope covers (ADR-0021): the heart-rate sidecar objects and their tombstones.
+ * The activities package owns those files, so the caller wires the deletion in and this package stays free of
+ * it.
+ */
+fun interface ConsentDataDeletion {
+    fun delete(
+        ownerId: UUID,
+        scope: String,
+    )
+}
+
+/**
  * Consent API (ADR-0021): `GET /v1/consents` lists the caller's grants; `POST /v1/consents/{scope}` grants;
  * `DELETE /v1/consents/{scope}` revokes. All authenticated, owner-only. The device-side adapter checks the
  * grant before streaming RR (fail-closed), and revocation deletes the covered data via the deleted_rr
@@ -28,7 +40,10 @@ import javax.sql.DataSource
  * Revocation answers 204 even when nothing was granted: idempotent, and the caller can't distinguish "never
  * granted" from "revoked" (no enumeration of which scopes a user considered).
  */
-fun Application.consent(db: DataSource): ConsentStore {
+fun Application.consent(
+    db: DataSource,
+    deletion: ConsentDataDeletion,
+): ConsentStore {
     val store = ConsentStore(db)
 
     routing {
@@ -75,6 +90,9 @@ fun Application.consent(db: DataSource): ConsentStore {
                 }
                 val owner = call.owner(db) ?: return@delete
                 withContext(Dispatchers.IO) { store.revoke(owner, scope) }
+                // Revoking really deletes the data it covers: the grant is off, so nothing new comes in, and
+                // what was stored for it goes away (ADR-0021).
+                withContext(Dispatchers.IO) { deletion.delete(owner, scope) }
                 call.respond(HttpStatusCode.NoContent)
             }
         }

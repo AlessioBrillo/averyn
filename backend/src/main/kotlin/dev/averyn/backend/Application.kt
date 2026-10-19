@@ -2,10 +2,13 @@ package dev.averyn.backend
 
 import dev.averyn.backend.activities.DEFAULT_REQUESTS_PER_MINUTE
 import dev.averyn.backend.activities.DEFAULT_USER_QUOTA_BYTES
+import dev.averyn.backend.activities.UserData
 import dev.averyn.backend.activities.activities
 import dev.averyn.backend.auth.OidcConfig
 import dev.averyn.backend.auth.auth
+import dev.averyn.backend.consent.ConsentScope
 import dev.averyn.backend.consent.consent
+import dev.averyn.backend.imports.imports
 import dev.averyn.backend.storage.RawObjectStore
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
@@ -42,17 +45,25 @@ fun Application.module() {
     observability(isReady = db::isReachable)
     auth(oidc)
     clientConfig(oidc, mapStyleUrl)
-    val consentStore = consent(db)
+    val quotaBytes =
+        cfg.propertyOrNull("averyn.limits.quotaBytes")?.getString()?.toLong() ?: DEFAULT_USER_QUOTA_BYTES
+    val userData = UserData(db, raw)
+    val consentStore =
+        consent(db) { ownerId, scope ->
+            // Revoking the recording consent really deletes the data it covers (ADR-0021).
+            if (scope == ConsentScope.RR_RECORDING) userData.deleteRrData(ownerId)
+        }
     activities(
         db,
         raw,
-        quotaBytes =
-            cfg.propertyOrNull("averyn.limits.quotaBytes")?.getString()?.toLong() ?: DEFAULT_USER_QUOTA_BYTES,
+        quotaBytes = quotaBytes,
         requestsPerMinute =
             cfg.propertyOrNull("averyn.limits.requestsPerMinute")?.getString()?.toInt()
                 ?: DEFAULT_REQUESTS_PER_MINUTE,
         consentStore = consentStore,
+        userData = userData,
     )
+    imports(db, raw, quotaBytes = quotaBytes)
 }
 
 /**

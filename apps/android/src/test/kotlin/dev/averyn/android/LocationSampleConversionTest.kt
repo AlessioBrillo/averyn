@@ -22,8 +22,8 @@ class LocationSampleConversionTest {
     )
 
     @Test
-    fun missingAccuracyBecomesVeryPoorNeverZero() {
-        assertEquals(9_999.0, sample(accuracyM = null).horizontalAccuracyM)
+    fun missingAccuracyStaysUnmeasuredNeverZero() {
+        assertNull(sample(accuracyM = null).horizontalAccuracyM)
     }
 
     @Test

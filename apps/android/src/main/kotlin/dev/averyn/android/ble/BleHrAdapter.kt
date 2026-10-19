@@ -1,5 +1,7 @@
 package dev.averyn.android.ble
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
@@ -13,7 +15,10 @@ import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.ParcelUuid
+import androidx.core.content.ContextCompat
 import dev.averyn.sensors.HeartRateSample
 import dev.averyn.sensors.ParseResult
 import dev.averyn.sensors.RrInterval
@@ -52,7 +57,12 @@ private val RECONNECT_BACKOFF_MS = longArrayOf(1_000, 2_000, 4_000, 8_000)
  * Platform BLE is touch-only here: `shared/` receives already-parsed [HeartRateSample]/[RrInterval]
  * values. [recordRrIntervals] gates whether RR intervals (Health class, consent-gated, ADR-0021) are
  * forwarded — the caller sets it from the cached consent before [start] (fail-closed: default false).
+ *
+ * The Bluetooth permissions are runtime permissions on Android 12+: they are checked in
+ * [hasBluetoothPermission] before anything is scanned or connected, and the calls that can still be
+ * refused are wrapped, so a refused permission means "no strap", never a crash.
  */
+@SuppressLint("MissingPermission")
 class BleHrAdapter(
     private val context: Context,
 ) : SensorAdapter {
@@ -68,7 +78,7 @@ class BleHrAdapter(
         get() = true // this adapter can produce RR intervals (Health class); consent gates them.
 
     override val isAvailable: Boolean
-        get() = bluetoothAdapter != null && bluetoothAdapter.isEnabled
+        get() = bluetoothAdapter != null && bluetoothAdapter.isEnabled && hasBluetoothPermission()
 
     override var onSample: ((HeartRateSample) -> Unit)? = null
     override var onRrInterval: ((RrInterval) -> Unit)? = null
@@ -80,12 +90,22 @@ class BleHrAdapter(
     /** Last device we connected to, so a restart after kill can reconnect to the same strap. */
     private var lastDeviceAddress: String? = null
 
+    /** The callback the running scan was started with: only that one stops it. */
+    private var scanCallback: ScanCallback? = null
+
     private var currentGatt: BluetoothGatt? = null
 
     override suspend fun start(sessionId: String) {
         withContext(Dispatchers.Default) {
             if (connectJob?.isActive == true) return@withContext
-            val device = findHeartRateDevice() ?: return@withContext
+            val device =
+                try {
+                    findHeartRateDevice()
+                } catch (e: IllegalStateException) {
+                    // No sensor found, or the Bluetooth permissions are missing: the strap is optional, the
+                    // recording continues without it.
+                    null
+                } ?: return@withContext
             lastDeviceAddress = device.address
             connectJob = scope.launch { connectAndStream(device) }
         }
@@ -112,6 +132,7 @@ class BleHrAdapter(
         }
 
         if (scanner == null) return null
+        if (!hasBluetoothPermission()) return null
         val deviceResult = CompletableDeferred<BluetoothDevice>()
         val filter =
             ScanFilter
@@ -135,6 +156,9 @@ class BleHrAdapter(
                     if (!deviceResult.isCompleted) deviceResult.complete(result.device)
                 }
             }
+        // The callback the scan was started with is the one that stops it: stopScan() with another one does
+        // nothing, and the scanner would keep running in the background.
+        scanCallback = callback
         scanner.startScan(listOf(filter), settings, callback)
         scope.launch {
             delay(SCAN_TIMEOUT_MS)
@@ -147,7 +171,31 @@ class BleHrAdapter(
     }
 
     private fun stopScanning() {
-        scanner?.stopScan(object : ScanCallback() {})
+        val callback = scanCallback ?: return
+        scanCallback = null
+        runCatching { scanner?.stopScan(callback) }
+    }
+
+    /**
+     * Whether the app may use Bluetooth right now. On Android 12+ the permissions are asked at runtime; without
+     * them the scan throws, so the sensor is reported as unavailable instead of crashing the recording.
+     */
+    private fun hasBluetoothPermission(): Boolean {
+        val scan =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) ==
+                    PackageManager.PERMISSION_GRANTED
+            } else {
+                true
+            }
+        val connect =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
+                    PackageManager.PERMISSION_GRANTED
+            } else {
+                true
+            }
+        return scan && connect
     }
 
     private fun resultHasHeartRateService(result: ScanResult): Boolean =

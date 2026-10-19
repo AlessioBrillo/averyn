@@ -15,8 +15,14 @@ data class LocationSample(
     val elapsedRealtimeMs: Long,
     val latitude: Double,
     val longitude: Double,
-    /** Platform-reported horizontal accuracy radius in meters. */
-    val horizontalAccuracyM: Double,
+    /**
+     * Platform-reported horizontal accuracy radius in meters; null when the source has none.
+     *
+     * A recorded fix always has one. An imported file may not: a GPX track carries no accuracy, and inventing
+     * a number (a sentinel like 9999) would later be read as a real measurement. Null means "not measurable",
+     * and the quality grade of such an activity is [dev.averyn.tracking.QualityGrade.UNKNOWN].
+     */
+    val horizontalAccuracyM: Double?,
     val altitudeM: Double? = null,
     val speedMps: Double? = null,
     val bearingDeg: Double? = null,
@@ -24,6 +30,8 @@ data class LocationSample(
     init {
         require(latitude in -90.0..90.0) { "latitude out of range: $latitude" }
         require(longitude in -180.0..180.0) { "longitude out of range: $longitude" }
-        require(horizontalAccuracyM >= 0.0) { "horizontalAccuracyM must be >= 0: $horizontalAccuracyM" }
+        require(horizontalAccuracyM == null || horizontalAccuracyM >= 0.0) {
+            "horizontalAccuracyM must be null or >= 0: $horizontalAccuracyM"
+        }
     }
 }

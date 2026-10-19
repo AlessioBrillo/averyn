@@ -24,8 +24,9 @@ A signed-in user can delete one activity, delete their account's data, and downl
 | D2 | A later `PUT` of a deleted `clientActivityId` by the same owner answers `410`; the tombstone contains no activity data |
 | D3 | `DELETE /v1/me` removes every object under the owner's prefix, all activities and tombstones, and marks the user deleted; it is idempotent and is the only call a deleted account may still make |
 | D4 | Any other call by a deleted account answers `403` |
-| D5 | `GET /v1/me/export` returns a ZIP: `activities.json` (summaries, the dropped-line counts), `raw/<clientActivityId>.jsonl` byte-for-byte, `gpx/<clientActivityId>.gpx` |
+| D5 | `GET /v1/me/export` returns a ZIP: `activities.json` (summaries, the dropped-line counts), `raw/<clientActivityId>.jsonl` byte-for-byte, `gpx/<clientActivityId>.gpx`, plus `original/<clientActivityId>.gpx` (the file an activity was imported from), `rr/<clientActivityId>.rr.jsonl` (the heart-rate sidecar) and `consents.json` |
 | D6 | Export and deletion never log coordinates or tokens; a corrupt line skipped by the GPX writer is counted in `activities.json`, not silently dropped (TDD-0001 F5) |
+| D7 | Deleting one activity removes everything it owns: the canonical file, the file it was imported from and its heart-rate sidecar (TDD-0008, ADR-0021) |
 
 ## 4. Non-functional requirements
 
@@ -52,8 +53,8 @@ CREATE TABLE deleted_activities (
 
 | Operation | Steps |
 |---|---|
-| Delete activity | find the row by `(owner, id)` → delete the object → in one transaction delete the row and insert the tombstone (`ON CONFLICT DO NOTHING`). Failure after step 2 leaves a row without a file; repeating the call completes it. |
-| Delete account | set `users.deleted_at` first (new requests stop at once, D4) → delete all objects under `raw/{ownerId}/` (listing is paged; also removes orphans of failed ingests) → in one transaction delete activities and tombstones. A crash leaves a deleted but not yet purged account; repeating `DELETE /v1/me` finishes. |
+| Delete activity | find the row by `(owner, id)` → delete the whole per-activity prefix (`raw/{ownerId}/{clientActivityId}/`: the canonical file, the file it was imported from, the heart-rate sidecar) → in one transaction delete the row and insert the tombstones (`deleted_activities`, `deleted_rr`). Failure after step 2 leaves a row without a file; repeating the call completes it. |
+| Delete account | set `users.deleted_at` first (new requests stop at once, D4) → delete all objects under `raw/{ownerId}/` (listing is paged; also removes orphans of failed ingests) → in one transaction delete activities, tombstones and consents. A crash leaves a deleted but not yet purged account; repeating `DELETE /v1/me` finishes. |
 | Upload | the tombstone check comes before the "already uploaded" check. An upload racing with an account deletion can leave one orphan object under the prefix; the repeated `DELETE /v1/me` removes it. |
 
 ### 5.3 Export
@@ -67,9 +68,10 @@ sequenceDiagram
     B->>B: list owner's activities (paged)
     loop each activity
         B->>S: get raw object
-        B-->>W: zip entries raw/<id>.jsonl and gpx/<id>.gpx
+        B->>S: get the imported original and the heart-rate sidecar, when they exist
+        B-->>W: zip entries raw/<id>.jsonl, original/<id>.gpx, rr/<id>.rr.jsonl and gpx/<id>.gpx
     end
-    B-->>W: activities.json (last entry)
+    B-->>W: consents.json and activities.json (last entries)
 ```
 
 The GPX is produced with the same shared writer the apps use (`ActivityStore.exportGpxToFile`), from the raw file written to a temporary directory that is removed afterwards. `activities.json` is the last entry because it carries the per-activity skipped-line counts, known only after the GPX is written. The browser downloads it with a `fetch` carrying the bearer token (a plain link cannot).

@@ -1,6 +1,6 @@
 # Threat model (STRIDE, MVP-1 sync)
 
-Status: v0.2, scope = account identity, activity sync ([TDD-0002](../design/TDD-0002-activity-sync.md)), web app and self-host edge ([TDD-0005](../design/TDD-0005-self-host-hardening.md)). Extend when new data flows are added. Classes refer to [data classification](data-classification.md).
+Status: v0.3, scope = account identity, activity sync ([TDD-0002](../design/TDD-0002-activity-sync.md)), web app and self-host edge ([TDD-0005](../design/TDD-0005-self-host-hardening.md)), sensor channels and consent ([ADR-0021](../adr/0021-consent-health-data.md)) and the import path ([TDD-0008](../design/TDD-0008-gpx-import.md)). Extend when new data flows are added. Classes refer to [data classification](data-classification.md).
 
 ## Assets
 
@@ -28,10 +28,15 @@ Device / browser ↔ edge proxy (internet, TLS, [ADR-0018](../adr/0018-tls-edge-
 | **I** | Injected script in the web app reads the session token from `sessionStorage` | Content-Security-Policy `script-src 'self'`, `connect-src` limited to the API, the IdP and the map hosts, `frame-ancestors 'none'` ([TDD-0005 §5.3](../design/TDD-0005-self-host-hardening.md)) | CI header check; browser run without violations |
 | **I** | Raw objects exposed through the storage endpoint | S3 not published to the host in Compose; backend is the only client | compose review |
 | **D**enial of service | Oversized or endless body | 32 MB limit enforced while streaming (`413`, also without `Content-Length`); idle read timeout of 60 s on the server | ingest tests; checked on a real connection |
+| **D** | An imported file costs the server minutes of CPU | 200 000 points, 10 000 segments, 1 000 tracks per file; at most 2 imports at a time, the rest get `503` + `Retry-After` | import test: limits |
 | **D** | Many concurrent uploads exhaust threads / temp disk | At most 8 uploads processed at once, the rest get `503` + `Retry-After`; JWKS lookups fail fast while the IdP is down, so a down IdP cannot tie up request threads | ingest test (slots), auth test (IdP unreachable → 401) |
 | **D** | Request capacity exhausted by one user | Per-user token bucket on every authenticated `/v1` route, `429` + `Retry-After` (TDD-0005 §5.4) | backend test: limit + 1 → 429, other user 200 |
 | **D** | Storage filled by one user | Per-user quota on raw files, checked in the ingest transaction; `507`, nothing stored (TDD-0005 §5.5) | integration test: over quota → 507, no row, no object |
 | **E**levation of privilege | Token for another audience accepted | `aud` verified; client id and audience configured explicitly | auth test: wrong audience |
+| **T**ampering | An uploaded file makes the server read its own files | The XML parser has no DTD and no external entities; a file with a DOCTYPE is refused | import test: XXE file → 422 |
+| **T** | An imported file smuggles a different activity in | The uploaded file is the source of truth: it is kept byte-for-byte and the canonical file is derived from it, never the other way round | import test: the original is in the export unchanged |
+| **I** | The coordinates of an imported file leak into a log or an error message | The parser's errors carry a code and a message, never a coordinate; the file is never logged | import test: the answer carries no coordinate |
+| **R**epudiation | An imported activity cannot be traced to its file | The row keeps the SHA-256 of the file it was imported from and the version of the importer | — (design rule) |
 
 ## Open items
 

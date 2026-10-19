@@ -195,6 +195,13 @@ private fun RecordScreen(app: AverynApplication) {
                 add(Manifest.permission.ACCESS_FINE_LOCATION)
                 add(Manifest.permission.ACCESS_COARSE_LOCATION)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
+                // The heart-rate strap needs the Bluetooth permissions on Android 12+ (ADR-0020). They are
+                // asked together with the location ones: refusing them only means the strap is not used, the
+                // recording continues with GPS.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    add(Manifest.permission.BLUETOOTH_SCAN)
+                    add(Manifest.permission.BLUETOOTH_CONNECT)
+                }
             }
         permissionLauncher.launch(wanted.toTypedArray())
     }
@@ -456,7 +463,8 @@ private fun DiagnosticsSummary(diagnostics: DiagnosticsReport) {
     Text("Quality: ${diagnostics.quality.grade} (${diagnostics.quality.algorithmVersion})")
     Text("Samples: ${diagnostics.recordingSamples}/${diagnostics.totalSamples}, losses: ${diagnostics.recordLosses}")
     Text("Longest gap: ${diagnostics.quality.longestGapMs / 1000} s")
-    Text("Accuracy ≤ 20 m: %.0f%%".format(diagnostics.quality.accuracyWithin20mPercent))
+    val accuracy = diagnostics.quality.accuracyWithin20mPercent
+    Text(if (accuracy == null) "Accuracy ≤ 20 m: not measured" else "Accuracy ≤ 20 m: %.0f%%".format(accuracy))
     val drain = diagnostics.batteryDrainPercentPerHour
     Text(
         "Battery: ${diagnostics.batteryStartPercent ?: "—"}% → ${diagnostics.batteryEndPercent ?: "—"}%" +

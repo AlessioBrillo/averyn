@@ -69,6 +69,8 @@ internal fun ingestSample(
  * `ActivityRecorder.stop` left. An unfinished one (RECORDING/PAUSED/STOPPING) is returned as it stood;
  * finishing it is the caller's call.
  * [onMeteredSample] sees every RECORDING-state sample that counted towards the metrics, in order.
+ * [onRecordingStart] / [onRecordingEnd] bracket every continuous RECORDING interval, so a caller that draws
+ * the track (the backend, TDD-0008) gets one line per interval instead of a line straight across a pause.
  *
  * @throws IllegalStateException if [activityId] has no readable metadata line.
  */
@@ -77,6 +79,8 @@ fun replay(
     activityId: String,
     onMeteredSample: (LocationSample) -> Unit = {},
     onHeartRate: (HeartRateSample, ActivityState) -> Unit = { _, _ -> },
+    onRecordingStart: (Long) -> Unit = {},
+    onRecordingEnd: (Long) -> Unit = {},
 ): ReplayResult {
     val metadata =
         store.metadataOf(activityId)
@@ -137,6 +141,13 @@ fun replay(
                 // so it neither opens a pause nor moves "the last thing that happened" to the relaunch time.
                 val marker = recovered && event.state == lastState
                 if (!marker) {
+                    // The continuous RECORDING intervals bracket the track: a pause (or the end) closes the
+                    // current line, a resume opens the next one.
+                    if (event.state == ActivityState.RECORDING && lastState != ActivityState.RECORDING) {
+                        onRecordingStart(elapsedMs)
+                    } else if (event.state != ActivityState.RECORDING && lastState == ActivityState.RECORDING) {
+                        onRecordingEnd(elapsedMs)
+                    }
                     when (event.state) {
                         ActivityState.PAUSED -> metrics.onPause(elapsedMs)
                         ActivityState.RECORDING -> if (lastState == ActivityState.PAUSED) metrics.onResume(elapsedMs)

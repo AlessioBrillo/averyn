@@ -5,6 +5,8 @@ import dev.averyn.backend.auth.TestIssuer
 import dev.averyn.backend.auth.auth
 import dev.averyn.backend.auth.userIdFor
 import dev.averyn.backend.connectAndMigrate
+import dev.averyn.backend.consent.ConsentScope
+import dev.averyn.backend.consent.consent
 import dev.averyn.backend.content
 import dev.averyn.backend.storage.RawObjectStore
 import dev.averyn.domain.LocationSample
@@ -17,6 +19,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
+import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
@@ -146,7 +149,22 @@ class ActivityIngestTest {
         application {
             content()
             auth(idp.config, idp.jwks)
-            activities(db, raw, maxBytes, uploadSlots, exportSlots, quotaBytes)
+            val userData = UserData(db, raw)
+            val consentStore =
+                consent(db) { ownerId, scope ->
+                    // Revoking the recording consent really deletes the data it covers (ADR-0021).
+                    if (scope == ConsentScope.RR_RECORDING) userData.deleteRrData(ownerId)
+                }
+            activities(
+                db,
+                raw,
+                maxBytes,
+                uploadSlots,
+                exportSlots,
+                quotaBytes,
+                consentStore = consentStore,
+                userData = userData,
+            )
         }
         client.block()
     }
@@ -418,8 +436,13 @@ class ActivityIngestTest {
                     .jsonObject
                     .getValue("geometry")
                     .jsonObject
-            assertEquals("LineString", geometry.getValue("type").jsonPrimitive.content)
-            assertEquals(6, geometry.getValue("coordinates").jsonArray.size)
+            // One line per continuous recording interval: the recorded run has a pause, so it has two lines
+            // and the map does not draw a straight line through the gap.
+            assertEquals("MultiLineString", geometry.getValue("type").jsonPrimitive.content)
+            val lines = geometry.getValue("coordinates").jsonArray
+            assertEquals(2, lines.size)
+            assertEquals(3, lines[0].jsonArray.size)
+            assertEquals(3, lines[1].jsonArray.size)
 
             assertEquals(HttpStatusCode.NotFound, get("/v1/activities/${created.id}/track") { bearerAuth(bob) }.status)
             assertEquals(
@@ -587,7 +610,7 @@ class ActivityIngestTest {
             assertEquals("application/zip", response.contentType()?.withoutParameters().toString())
             assertTrue(response.headers[HttpHeaders.ContentDisposition]!!.contains("averyn-export.zip"))
             val files = unzip(response.readRawBytes())
-            assertEquals(5, files.size, files.keys.toString()) // 2 raw + 2 gpx + activities.json
+            assertEquals(6, files.size, files.keys.toString()) // 2 raw + 2 gpx + consents.json + activities.json
             for (rec in listOf(a, b)) {
                 assertContentEquals(rec.bytes, files.getValue("raw/${rec.id}.jsonl"))
                 val gpx = String(files.getValue("gpx/${rec.id}.gpx"))
@@ -626,6 +649,74 @@ class ActivityIngestTest {
             assertEquals("5", response.headers[HttpHeaders.RetryAfter])
         }
     }
+
+    @Test
+    fun revokingTheConsentDeletesTheStoredSidecarAndRefusesItAgain() =
+        app {
+            val rec = record()
+            upload(rec.id, rec.bytes)
+            assertEquals(
+                HttpStatusCode.Created,
+                post("/v1/consents/${ConsentScope.RR_RECORDING}") { bearerAuth(alice) }.status,
+            )
+
+            val sidecar =
+                "META {\"activityId\":\"${rec.id}\",\"sport\":\"RUN\",\"startedAtMs\":0,\"formatVersion\":1}\n" +
+                    "RR {\"timeMs\":1000,\"elapsedRealtimeMs\":1000,\"rrMs\":857}\n"
+            val uploadRr: suspend () -> HttpResponse = {
+                put("/v1/activities/${rec.id}/rr") {
+                    bearerAuth(alice)
+                    setBody(sidecar.toByteArray())
+                }
+            }
+            assertEquals(HttpStatusCode.Created, uploadRr().status)
+            val key = scalar("SELECT rr_object_key FROM activities WHERE client_activity_id = '${rec.id}'")
+            assertTrue(rawFileExists(key as String))
+
+            // The export holds the sidecar: it is the user's data until the consent is withdrawn.
+            val exported = unzip(get("/v1/me/export") { bearerAuth(alice) }.readRawBytes())
+            assertContentEquals(sidecar.toByteArray(), exported.getValue("rr/${rec.id}.rr.jsonl"))
+
+            // Withdrawing the consent really deletes the data it covers.
+            assertEquals(
+                HttpStatusCode.NoContent,
+                delete("/v1/consents/${ConsentScope.RR_RECORDING}") { bearerAuth(alice) }.status,
+            )
+            assertTrue(!rawFileExists(key as String), "the sidecar must be gone after the consent was withdrawn")
+            // Without the consent the health data is not accepted at all.
+            assertEquals(HttpStatusCode.Forbidden, uploadRr().status)
+            // And even with the consent again, the data that was deleted does not come back.
+            post("/v1/consents/${ConsentScope.RR_RECORDING}") { bearerAuth(alice) }
+            assertEquals(HttpStatusCode.Gone, uploadRr().status)
+        }
+
+    @Test
+    fun aSidecarWithoutTheConsentOrWithoutAnActivityIsRefused() =
+        app {
+            val rec = record()
+            upload(rec.id, rec.bytes)
+            val sidecar =
+                "META {\"activityId\":\"${rec.id}\",\"sport\":\"RUN\",\"startedAtMs\":0,\"formatVersion\":1}\n"
+
+            // No consent: the health data is not accepted.
+            assertEquals(
+                HttpStatusCode.Forbidden,
+                put("/v1/activities/${rec.id}/rr") {
+                    bearerAuth(alice)
+                    setBody(sidecar.toByteArray())
+                }.status,
+            )
+
+            // With the consent but without an activity to belong to.
+            post("/v1/consents/${ConsentScope.RR_RECORDING}") { bearerAuth(alice) }
+            assertEquals(
+                HttpStatusCode.NotFound,
+                put("/v1/activities/${UUID.randomUUID()}/rr") {
+                    bearerAuth(alice)
+                    setBody(sidecar.toByteArray())
+                }.status,
+            )
+        }
 
     @Test
     fun anUploadThatReachesTheInsertAfterTheAccountWasDeletedIsRefusedAndLeavesNothingBehind() =

@@ -10,8 +10,11 @@ import dev.averyn.metrics.TIME_ALGORITHM_VERSION
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-/** Format version stamped on every [DiagnosticsReport]. TDD-0001 F8/§5.4, Q5; v2 adds the TDD-0006 §5.5 fields. */
-const val DIAGNOSTICS_FORMAT_VERSION = "diagnostics-v2"
+/**
+ * Format version stamped on every [DiagnosticsReport]. TDD-0001 F8/§5.4, Q5; v2 adds the TDD-0006 §5.5 fields;
+ * v3 lets the accuracy percentage be null (quality-v2: an accuracy that was never measured).
+ */
+const val DIAGNOSTICS_FORMAT_VERSION = "diagnostics-v3"
 
 /**
  * Aggregate quality/battery report for one completed activity (TDD-0001 F8), built by [ActivityRecorder]

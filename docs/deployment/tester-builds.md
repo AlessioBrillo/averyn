@@ -38,4 +38,4 @@ A CI job for this is deliberately not written yet: it cannot be tested without t
 
 ## After installing
 
-Run the scenarios of the device matrix. In the app, **History** exports the GPX, the `diagnostics-v2` report and the raw file of any stored activity; attach the diagnostics to the results row together with its `buildId`.
+Run the scenarios of the device matrix. In the app, **History** exports the GPX, the `diagnostics-v3` report and the raw file of any stored activity; attach the diagnostics to the results row together with its `buildId`.

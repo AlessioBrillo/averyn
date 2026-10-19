@@ -155,12 +155,129 @@ paths:
           description: A GeoJSON Feature; geometry is null when fewer than two samples counted towards the distance
           content:
             application/geo+json:
-              schema: { type: object }
+              schema:
+                type: object
+                properties:
+                  type: { type: string, enum: [Feature] }
+                  properties: { type: object, additionalProperties: true }
+                  geometry:
+                    type: [object, "null"]
+                    description: A MultiLineString: one line per continuous recording interval, so a pause is not a straight line through the gap
         "400": { description: Malformed activity id }
         "401": { description: Missing or invalid token }
         "403": { description: The account was deleted (ADR-0017) }
         "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
         "404": { description: Not found, or not owned by the caller }
+  /v1/activities/{clientActivityId}/rr:
+    put:
+      summary: Upload the heart-rate sidecar of an activity (consent-gated, ADR-0021)
+      description: >
+        The sidecar is a separate object with its own lifecycle: it needs the `rr_recording` consent, it is
+        deleted when that consent is withdrawn, and it is not part of the activity file. It must start with
+        its own META line, and the activity must exist.
+      security: [{ oidc: [] }]
+      parameters:
+        - name: clientActivityId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        description: The sidecar's JSON Lines file, max 32 MB.
+        content:
+          application/x-ndjson:
+            schema: { type: string, format: binary }
+      responses:
+        "201": { description: Stored }
+        "400": { description: Malformed activity id }
+        "401": { description: Missing or invalid token }
+        "403": { description: The `rr_recording` consent is not granted }
+        "404": { description: The activity does not exist or is not owned by the caller }
+        "410": { description: The sidecar was deleted (consent withdrawn) and is not accepted again }
+        "413": { description: Body over the size limit }
+        "422": { description: The file has no metadata line }
+        "503": { description: Too many uploads in progress, retry after the Retry-After seconds }
+        "507": { description: "Storing this file would exceed the caller's storage quota; nothing was stored" }
+  /v1/imports/gpx:
+    post:
+      summary: Import a GPX file as an activity (TDD-0008)
+      description: >
+        The body is the file itself, not a form. The sport is explicit: a GPX `<type>` is free text and
+        guessing it would label the activity with the wrong sport. The same file is imported once per owner:
+        the second import answers 200 with the activity that exists. The uploaded file is kept byte-for-byte
+        next to the canonical activity file.
+      security: [{ oidc: [] }]
+      parameters:
+        - name: sport
+          in: query
+          required: true
+          schema: { type: string, enum: [RUN, RIDE, WALK, HIKE] }
+      requestBody:
+        required: true
+        description: The GPX file, max 32 MB.
+        content:
+          application/gpx+xml:
+            schema: { type: string, format: binary }
+          application/xml:
+            schema: { type: string, format: binary }
+      responses:
+        "200":
+          description: This exact file was already imported; the activity that exists is returned
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportResponse" }
+        "201":
+          description: Stored and summarised
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportResponse" }
+        "400": { description: Missing or unknown sport }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted (ADR-0017) }
+        "413": { description: Body over the size limit }
+        "415": { description: The body is not a GPX file }
+        "422": { description: The file is not a track this importer can read; the code says why }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+        "503": { description: Too many imports in progress, retry after the Retry-After seconds }
+        "507": { description: "Storing this file would exceed the caller's storage quota; nothing was stored" }
+  /v1/consents:
+    get:
+      summary: The caller's consent grants, granted and revoked (ADR-0021)
+      security: [{ oidc: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ConsentGrant" }
+        "401": { description: Missing or invalid token }
+  /v1/consents/{scope}:
+    post:
+      summary: Grant a consent scope (idempotent; ADR-0021)
+      security: [{ oidc: [] }]
+      parameters:
+        - name: scope
+          in: path
+          required: true
+          schema: { type: string, enum: [rr_recording, hrv_analysis] }
+      responses:
+        "201": { description: Granted }
+        "400": { description: Missing or unknown scope }
+        "401": { description: Missing or invalid token }
+    delete:
+      summary: Revoke a consent scope and delete the data it covers (ADR-0021)
+      security: [{ oidc: [] }]
+      parameters:
+        - name: scope
+          in: path
+          required: true
+          schema: { type: string, enum: [rr_recording, hrv_analysis] }
+      responses:
+        "204": { description: Revoked; the data it covered is deleted }
+        "400": { description: Missing or unknown scope }
+        "401": { description: Missing or invalid token }
   /v1/me:
     delete:
       summary: Delete all of the caller's data held by Averyn (idempotent; the identity at the IdP is not touched, ADR-0017)
@@ -173,8 +290,10 @@ paths:
     get:
       summary: Download all of the caller's data as a ZIP (TDD-0004)
       description: >
-        Entries: raw/{clientActivityId}.jsonl (byte-for-byte), gpx/{clientActivityId}.gpx, activities.json
-        (summaries and skipped-line counts, written last). Streamed.
+        Entries: raw/{clientActivityId}.jsonl (byte-for-byte), original/{clientActivityId}.gpx (the file an
+        imported activity was imported from), rr/{clientActivityId}.rr.jsonl (the heart-rate sidecar),
+        gpx/{clientActivityId}.gpx, consents.json and activities.json (summaries and skipped-line counts,
+        written last). Streamed.
       security: [{ oidc: [] }]
       responses:
         "200":
@@ -217,11 +336,38 @@ components:
         pausedMs: { type: integer, format: int64 }
         averageSpeedMps: { type: number, description: "speed-v1: distance over moving time; 0 while nothing moved" }
         paceSecPerKm: { type: [number, "null"], description: "speed-v1: 1000 / averageSpeedMps; null when the average speed is 0" }
-        qualityGrade: { type: string, enum: [GOOD, FAIR, POOR] }
+        qualityGrade: { type: string, enum: [GOOD, FAIR, POOR, UNKNOWN], description: "UNKNOWN when the accuracy was never measured (an imported file, TDD-0008)" }
         droppedRecords: { type: integer, description: Stored lines that could not be read (counted, never silently dropped) }
         metricsAlgorithmVersion: { type: string, description: "Comma-separated, e.g. distance-v1,time-v1,speed-v1" }
         qualityAlgorithmVersion: { type: string }
         visibility: { type: string, enum: [private, followers, public, link] }
+        avgHrBpm: { type: integer, description: "hr-v1: mean heart rate over the recording; 0 when there is none" }
+        maxHrBpm: { type: integer, description: "hr-v1: maximum heart rate; 0 when there is none" }
+        hrSource: { type: string, description: "Which sensor produced the heart rate (ble-hr, none, ...)" }
+        source: { type: string, enum: [device, gpx, fit, tcx], description: "Where the activity comes from: recorded or imported (TDD-0008)" }
+    ImportResponse:
+      type: object
+      required: [activity, import]
+      properties:
+        activity: { $ref: "#/components/schemas/ActivitySummary" }
+        import: { $ref: "#/components/schemas/ImportReport" }
+    ImportReport:
+      type: object
+      required: [source, duplicate, ignoredExtensions, parserVersion]
+      properties:
+        source: { type: string, description: "The format that was imported" }
+        duplicate: { type: boolean, description: "True when this exact file was already imported" }
+        segments: { type: [integer, "null"], description: "The number of track segments; null when the file was not parsed (a duplicate)" }
+        points: { type: [integer, "null"], description: "The number of track points; null when the file was not parsed (a duplicate)" }
+        ignoredExtensions: { type: object, additionalProperties: { type: integer }, description: "The extensions found in the file and not imported, by name" }
+        parserVersion: { type: string }
+    ConsentGrant:
+      type: object
+      required: [scope, grantedAt, revokedAt]
+      properties:
+        scope: { type: string }
+        grantedAt: { type: string, format: date-time }
+        revokedAt: { type: [string, "null"], format: date-time }
     ActivityPage:
       type: object
       required: [items, nextCursor]

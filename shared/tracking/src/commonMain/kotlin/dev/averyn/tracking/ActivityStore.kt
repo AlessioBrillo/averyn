@@ -16,13 +16,31 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 
+/**
+ * The format version new activity files are written with (ADR-0020): GPS samples plus optional `HR ` records.
+ * Version 1 is only for files written before the heart-rate channel existed.
+ */
+const val CURRENT_FORMAT_VERSION = 2
+
+/**
+ * The format version of a canonical file produced by the GPX importer (TDD-0008): the same records as version
+ * 2, but with a nullable `horizontalAccuracyM`, because a GPX track carries no accuracy.
+ */
+const val IMPORT_FORMAT_VERSION = 3
+
+/** The format versions this build can read: 1 (GPS only), 2 (GPS + heart rate), 3 (imported). */
+val SUPPORTED_FORMAT_VERSIONS = setOf(1, CURRENT_FORMAT_VERSION, IMPORT_FORMAT_VERSION)
+
 /** Static metadata for one activity: the first line of its store file (ADR-0015). */
 @Serializable
 data class ActivityMetadata(
     val activityId: String,
     val sport: Sport,
     val startedAtMs: Long,
-    /** 1 = GPS only (old files, absent field decodes to 1); 2 = GPS + `HR ` records (ADR-0020). */
+    /**
+     * 1 = GPS only (old files, absent field decodes to 1); 2 = GPS + optional `HR ` records (ADR-0020);
+     * 3 = an imported canonical file, whose accuracy is null because the source has none (TDD-0008).
+     */
     val formatVersion: Int = 1,
 )
 
@@ -55,6 +73,47 @@ private const val SAMPLE_PREFIX = "SAMPLE "
 private const val EVENT_PREFIX = "EVENT "
 private const val HR_PREFIX = "HR "
 
+/** The file name suffix of the heart-rate sidecar: it ends in `.jsonl` but it is not an activity file. */
+private const val RR_FILE_SUFFIX = ".rr.jsonl"
+
+// NaN/Infinity in an optional field (altitude, speed, bearing) is stored as the platform reported it rather than
+// crashing the recording thread: raw samples are immutable and never silently lost (F5).
+private val storeJson =
+    Json {
+        ignoreUnknownKeys = true
+        allowSpecialFloatingPointValues = true
+    }
+
+/**
+ * Writes a whole activity file in one pass: the `META` line and every record after it, in order, with a single
+ * open file.
+ *
+ * The importer (TDD-0008) canonicalizes a whole parsed track at once; going through [ActivityStore]'s
+ * append-one-line-at-a-time API would open and close the file once per sample, which is fine for a device
+ * recording at 1 Hz and wasteful for a 10-hour import.
+ */
+fun writeActivityFile(
+    path: Path,
+    metadata: ActivityMetadata,
+    records: Iterable<ActivityRecord>,
+) {
+    SystemFileSystem.sink(path, append = false).buffered().use { sink ->
+        sink.writeString(META_PREFIX + storeJson.encodeToString(ActivityMetadata.serializer(), metadata) + "\n")
+        for (record in records) {
+            val line =
+                when (record) {
+                    is ActivityRecord.Sample ->
+                        SAMPLE_PREFIX + storeJson.encodeToString(LocationSample.serializer(), record.sample)
+                    is ActivityRecord.Event ->
+                        EVENT_PREFIX + storeJson.encodeToString(StateEvent.serializer(), record.event)
+                    is ActivityRecord.HeartRate ->
+                        HR_PREFIX + storeJson.encodeToString(HeartRateSample.serializer(), record.sample)
+                }
+            sink.writeString(line + "\n")
+        }
+    }
+}
+
 /**
  * Durable, append-only local store (ADR-0015): one JSON Lines file per activity (`<activityId>.jsonl` under
  * [directory]), first line `META <ActivityMetadata>`, then one `SAMPLE`/`EVENT` record per line. Every
@@ -70,11 +129,7 @@ class ActivityStore(
 ) {
     // NaN/Infinity in an optional field (altitude, speed, bearing) is stored as the platform reported it rather than
     // crashing the recording thread: raw samples are immutable and never silently lost (F5).
-    private val json =
-        Json {
-            ignoreUnknownKeys = true
-            allowSpecialFloatingPointValues = true
-        }
+    private val json = storeJson
 
     init {
         if (!SystemFileSystem.exists(directory)) SystemFileSystem.createDirectories(directory)
@@ -215,7 +270,8 @@ class ActivityStore(
     fun list(): List<ActivityMetadata> =
         SystemFileSystem
             .list(directory)
-            .filter { it.name.endsWith(".jsonl") }
+            // The heart-rate sidecar (`<id>.rr.jsonl`) is not an activity of its own: it belongs to one.
+            .filter { it.name.endsWith(".jsonl") && !it.name.endsWith(RR_FILE_SUFFIX) }
             .mapNotNull { metadataOf(it.name.removeSuffix(".jsonl")) }
 
     /**
@@ -259,25 +315,35 @@ class ActivityStore(
 
     // --- Heart-rate sidecar (ADR-0020/0021): `<id>.rr.jsonl`, own lifecycle (consent-gated, independently deletable).
 
-    private fun pathForRr(activityId: String) = Path(directory, "$activityId.rr.jsonl")
+    private fun pathForRr(activityId: String) = Path(directory, "$activityId$RR_FILE_SUFFIX")
 
-    /** Creates the sidecar's META line (formatVersion 1). Called once when the first RR interval arrives. */
-    fun createRrMetadata(activityId: String) {
-        SystemFileSystem.sink(pathForRr(activityId), append = false).buffered().use { sink ->
+    /**
+     * Creates the sidecar's META line (formatVersion 1) from the activity's own metadata, so the sidecar
+     * says which activity it belongs to (ADR-0020). Overwrites an existing sidecar's META: the sidecar's
+     * lifecycle is separate, but its header is always the activity it was recorded with.
+     */
+    fun createRrMetadata(metadata: ActivityMetadata) {
+        SystemFileSystem.sink(pathForRr(metadata.activityId), append = false).buffered().use { sink ->
             sink.writeString(
                 META_PREFIX +
                     json.encodeToString(
                         ActivityMetadata.serializer(),
-                        ActivityMetadata(
-                            activityId = activityId,
-                            sport = Sport.RUN,
-                            startedAtMs = 0,
-                            formatVersion = 1,
-                        ),
+                        metadata.copy(formatVersion = 1),
                     ) +
                     "\n",
             )
         }
+    }
+
+    /**
+     * Creates the sidecar's META line only when the sidecar does not have one yet: the first RR interval of
+     * an activity must not land in a file without a header (the reader would not know what it belongs to).
+     * Returns true when the header was written.
+     */
+    fun ensureRrMetadata(metadata: ActivityMetadata): Boolean {
+        if (rrMetadataOf(metadata.activityId) != null) return false
+        createRrMetadata(metadata)
+        return true
     }
 
     /** Appends one raw RR interval to the sidecar (flushed before return — F3). */

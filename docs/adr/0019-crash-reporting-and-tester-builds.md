@@ -16,7 +16,7 @@
 
 ## Decision
 
-We choose **option 2 for tester builds**. No crash SDK, no remote telemetry code in the apps. The on-device `diagnostics-v2` report ([TDD-0006 §5.5](../design/TDD-0006-field-readiness.md)) stays the primary artifact: it is exported by the tester, contains no coordinates, and carries the build id (version, commit) so that a store crash report and a matrix row can be matched.
+We choose **option 2 for tester builds**. No crash SDK, no remote telemetry code in the apps. The on-device `diagnostics-v3` report ([TDD-0006 §5.5](../design/TDD-0006-field-readiness.md)) stays the primary artifact: it is exported by the tester, contains no coordinates, and carries the build id (version, commit) so that a store crash report and a matrix row can be matched.
 
 Tester builds:
 

@@ -6,7 +6,7 @@ import kotlinx.serialization.Serializable
 import kotlin.math.abs
 
 /** Algorithm version stamped on every [QualityReport]. Spec: docs/metrics/gps-quality.md. */
-const val QUALITY_ALGORITHM_VERSION = "quality-v1"
+const val QUALITY_ALGORITHM_VERSION = "quality-v2"
 
 /** Per-sample quality flags (TDD-0001 §5.4). A sample may carry several. Raw data is never dropped for these. */
 enum class QualityFlag {
@@ -36,7 +36,11 @@ class QualityAssessor {
 
     fun assess(sample: LocationSample): Set<QualityFlag> {
         val flags = mutableSetOf<QualityFlag>()
-        if (sample.horizontalAccuracyM > POOR_ACCURACY_THRESHOLD_M) flags += QualityFlag.POOR_ACCURACY
+        // A sample without a reported accuracy is not a badly-accurate sample: the criterion cannot be
+        // evaluated, so it is not flagged (an imported GPX carries no accuracy at all).
+        sample.horizontalAccuracyM?.let { accuracy ->
+            if (accuracy > POOR_ACCURACY_THRESHOLD_M) flags += QualityFlag.POOR_ACCURACY
+        }
 
         val previous = lastAccepted
         if (previous != null) {
@@ -86,7 +90,14 @@ private fun bucketFor(intervalMs: Long): IntervalBucket =
         else -> IntervalBucket.OVER_60S
     }
 
-enum class QualityGrade { GOOD, FAIR, POOR }
+/**
+ * How good the GPS signal of an activity was.
+ *
+ * [UNKNOWN] is not a third of "bad": it means the accuracy criterion could not be evaluated at all, because no
+ * sample of the activity carries a reported accuracy (an imported GPX, TDD-0008). The flag counts, the longest
+ * gap and the interval distribution are still reported for such an activity.
+ */
+enum class QualityGrade { GOOD, FAIR, POOR, UNKNOWN }
 
 @Serializable
 data class QualityReport(
@@ -94,7 +105,8 @@ data class QualityReport(
     val flagCounts: Map<QualityFlag, Int>,
     val longestGapMs: Long,
     val intervalDistribution: Map<IntervalBucket, Int>,
-    val accuracyWithin20mPercent: Double,
+    /** Share of the measured time with an accuracy of 20 m or better; null when no sample had an accuracy. */
+    val accuracyWithin20mPercent: Double?,
     val grade: QualityGrade,
 )
 
@@ -109,6 +121,11 @@ class QualityReportAccumulator {
     private var flaggedSampleCount = 0
     private var longestGapMs = 0L
     private val intervalDistribution = IntervalBucket.entries.associateWith { 0 }.toMutableMap()
+
+    /** Time covered by an interval whose previous sample had a reported accuracy. */
+    private var accuracyKnownDurationMs = 0L
+
+    /** Time covered by an interval whose previous sample had an accuracy of 20 m or better. */
     private var accurateDurationMs = 0L
     private var totalDurationMs = 0L
     private var lastAccepted: LocationSample? = null
@@ -130,16 +147,24 @@ class QualityReportAccumulator {
             val bucket = bucketFor(intervalMs)
             intervalDistribution[bucket] = intervalDistribution.getValue(bucket) + 1
             totalDurationMs += intervalMs
-            if (previous.horizontalAccuracyM <= 20.0) accurateDurationMs += intervalMs
+            // Only intervals whose previous sample had a reported accuracy can say anything about accuracy.
+            previous.horizontalAccuracyM?.let { accuracy ->
+                accuracyKnownDurationMs += intervalMs
+                if (accuracy <= 20.0) accurateDurationMs += intervalMs
+            }
         }
         lastAccepted = sample
     }
 
     fun build(): QualityReport {
-        val accuracyWithin20mPercent = if (totalDurationMs > 0) 100.0 * accurateDurationMs / totalDurationMs else 0.0
+        val accuracyWithin20mPercent =
+            if (accuracyKnownDurationMs > 0) 100.0 * accurateDurationMs / accuracyKnownDurationMs else null
         val flaggedRatio = if (totalSamples > 0) flaggedSampleCount.toDouble() / totalSamples else 0.0
         val grade =
             when {
+                // No accuracy anywhere: the accuracy criterion cannot be evaluated, so the activity is not graded
+                // GOOD or POOR on a number nobody measured (gps-quality.md).
+                accuracyWithin20mPercent == null -> QualityGrade.UNKNOWN
                 flaggedRatio > 0.20 || accuracyWithin20mPercent < 50.0 -> QualityGrade.POOR
                 flaggedRatio <= 0.05 && accuracyWithin20mPercent >= 90.0 -> QualityGrade.GOOD
                 else -> QualityGrade.FAIR
