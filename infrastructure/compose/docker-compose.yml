@@ -96,7 +96,7 @@ services:
 
   # One-shot: Zitadel (uid 1000) and idp-init (curl_user, uid 100) run as non-root, a fresh named volume is root-owned.
   idp-perms:
-    image: curlimages/curl:8.22.0
+    image: curlimages/curl:8.23.0
     user: root
     entrypoint: ["/bin/sh", "-c", "chown 1000:1000 /bootstrap && chown 100:101 /oidc"]
     volumes:
@@ -106,7 +106,7 @@ services:
   # One-shot, idempotent: creates the Averyn project and its public (PKCE) OIDC app in Zitadel, then writes
   # the generated ids to oidc.env for the backend. The PAT volume is not mounted anywhere else.
   idp-init:
-    image: curlimages/curl:8.22.0
+    image: curlimages/curl:8.23.0
     depends_on:
       idp:
         condition: service_healthy
