@@ -48,8 +48,8 @@ export function ImportGpx({
   onImported,
 }: {
   onUnauthorized: () => void
-  /** Called with the activity that was created, or that already existed. */
-  onImported: (id: string, duplicate: boolean) => void
+  /** Called with the activity that was created; a duplicate stays on the page. */
+  onImported: (id: string) => void
 }) {
   const [file, setFile] = useState<File | null>(null)
   const [sport, setSport] = useState<string>('')
@@ -80,7 +80,7 @@ export function ImportGpx({
         setResult(response)
         // A new import opens the activity; a duplicate stays here and says so, with a link to the activity
         // that already exists.
-        if (!response.import.duplicate) onImported(response.activity.id, false)
+        if (!response.import.duplicate) onImported(response.activity.id)
       },
       (e: unknown) => {
         setBusy(false)
