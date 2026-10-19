@@ -129,6 +129,9 @@ jobs:
         with:
           args: --no-progress --offline --include-fragments './**/*.md'
           fail: true
+      # The API contract is a YAML file: a colon in a description is enough to make it unreadable, and
+      # nothing else in the pipeline would notice.
+      - run: npx --yes js-yaml docs/api/openapi.yaml > /dev/null
 
   compose:
     name: Compose stack smoke test

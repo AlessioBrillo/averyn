@@ -92,4 +92,33 @@ class SyncStatusStore(
         }
         SystemFileSystem.atomicMove(temp, target)
     }
+
+    /**
+     * The status of the heart-rate sidecar of an activity, in its own file: the sidecar has its own lifecycle
+     * (its own consent, its own tombstone) and its own failures must not hold the activity back (ADR-0020).
+     */
+    fun readRr(activityId: String): SyncStatus? {
+        val path = Path(directory, "$activityId.rr.sync.json")
+        if (!SystemFileSystem.exists(path)) return null
+        return try {
+            json.decodeFromString(
+                SyncStatus.serializer(),
+                SystemFileSystem.source(path).buffered().use { it.readString() },
+            )
+        } catch (e: SerializationException) {
+            null
+        }
+    }
+
+    fun writeRr(
+        activityId: String,
+        status: SyncStatus,
+    ) {
+        val target = Path(directory, "$activityId.rr.sync.json")
+        val temp = Path(directory, "$activityId.rr.sync.json.tmp")
+        SystemFileSystem.sink(temp, append = false).buffered().use {
+            it.writeString(json.encodeToString(SyncStatus.serializer(), status))
+        }
+        SystemFileSystem.atomicMove(temp, target)
+    }
 }

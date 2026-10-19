@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { GeoJSONSourceSpecification, Map as MapLibreMap } from 'maplibre-gl'
 import { ApiError, deleteActivity, getActivity, getTrack } from './api'
 import type { ActivitySummary, Track } from './api'
-import { formatDistance, formatDuration, formatRate } from './format'
+import { formatDistance, formatDuration, formatQuality, formatRate } from './format'
 
 type Loaded = { activity: ActivitySummary; track: Track }
 
@@ -42,8 +42,8 @@ export function ActivityDetail({
     if (!loaded || !line || !mapElement.current) return
     let map: MapLibreMap | undefined
     let disposed = false
-    const lons = line.coordinates.map((c) => c[0])
-    const lats = line.coordinates.map((c) => c[1])
+    const lons = line.coordinates.flatMap((segment) => segment.map((point) => point[0]))
+    const lats = line.coordinates.flatMap((segment) => segment.map((point) => point[1]))
     // maplibre-gl needs a browser (WebGL): load it on demand, which also keeps it out of the first bundle.
     // Its worker is a separate module that a bundler does not emit by itself: ship it as one file and point at it.
     void Promise.all([import('maplibre-gl'), import('maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url')]).then(
@@ -111,7 +111,7 @@ export function ActivityDetail({
     ['Elapsed time', formatDuration(activity.elapsedMs)],
     ['Paused', formatDuration(activity.pausedMs)],
     [rate.label, rate.value],
-    ['GPS quality', activity.qualityGrade.toLowerCase()],
+    ['GPS quality', formatQuality(activity.qualityGrade)],
     ['Unreadable records', String(activity.droppedRecords)],
     ...(activity.avgHrBpm > 0
       ? [['Heart rate', `${activity.avgHrBpm} bpm avg · ${activity.maxHrBpm} bpm max`] as [string, string]]
@@ -123,6 +123,9 @@ export function ActivityDetail({
       <h2>
         {new Date(activity.startedAt).toLocaleString()} · {activity.sport.toLowerCase()}
       </h2>
+      {activity.source !== 'device' && (
+        <p role="status">Imported from a {activity.source.toUpperCase()} file. The file is kept as it was uploaded.</p>
+      )}
       {activity.finalState === 'FAILED' && (
         <p role="status">Recording ended unexpectedly; this is what was captured before it stopped.</p>
       )}

@@ -76,6 +76,17 @@ class ActivityRecorder(
 
     /** The id of the activity this recorder currently serves, null when IDLE. Readable from the UI thread. */
     val currentActivityId: String? get() = activityId
+
+    /**
+     * The metadata of the activity this recorder currently serves, or null when IDLE. The heart-rate sidecar
+     * carries the same activity id, sport and start time as the activity it belongs to (ADR-0020).
+     */
+    fun currentMetadata(): ActivityMetadata? {
+        val id = activityId ?: return null
+        val currentSport = sport ?: return null
+        return ActivityMetadata(id, currentSport, startedAtMs, formatVersion = CURRENT_FORMAT_VERSION)
+    }
+
     private var sport: Sport? = null
     private var startedAtMs: Long = 0
     private var qualityAssessor = QualityAssessor()
@@ -179,7 +190,9 @@ class ActivityRecorder(
         metrics = ActivityMetrics()
         resetDiagnosticsCounters()
         trackLastKnown(elapsedRealtimeMs, timeMs)
-        store.create(ActivityMetadata(activityId, sport, timeMs))
+        // New files are always format version 2 (ADR-0020): the reader accepts `HR ` records, whether or not
+        // this particular activity ends up having any. Version 1 is only for files written before that.
+        store.create(ActivityMetadata(activityId, sport, timeMs, formatVersion = CURRENT_FORMAT_VERSION))
         logEvent(elapsedRealtimeMs, timeMs, ActivityState.PREPARING, Reason.USER)
         emit()
     }

@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { formatDistance, formatDuration, formatPace, formatRate, formatSpeed } from './format'
+import { formatDistance, formatDuration, formatPace, formatQuality, formatRate, formatSpeed } from './format'
 
 test('distance in km with two decimals', () => {
   expect(formatDistance(0)).toBe('0.00 km')
@@ -28,4 +28,10 @@ test('rides show speed, foot sports show pace', () => {
   expect(formatRate('RIDE', rate)).toEqual({ label: 'Average speed', value: '36.0 km/h' })
   expect(formatRate('RUN', rate)).toEqual({ label: 'Average pace', value: '1:40 /km' })
   expect(formatRate('HIKE', { averageSpeedMps: 0, paceSecPerKm: null }).value).toBe('—')
+})
+
+test('an unmeasured quality says so instead of showing a bare word', () => {
+  expect(formatQuality('GOOD')).toBe('good')
+  expect(formatQuality('POOR')).toBe('poor')
+  expect(formatQuality('UNKNOWN')).toContain('not measured')
 })

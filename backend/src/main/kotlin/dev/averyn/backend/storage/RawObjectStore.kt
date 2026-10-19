@@ -81,8 +81,12 @@ class RawObjectStore(
     fun put(
         key: String,
         file: Path,
+        contentType: String = "application/x-ndjson",
     ) {
-        s3.putObject({ it.bucket(bucket).key(key).contentType("application/x-ndjson") }, RequestBody.fromFile(file))
+        s3.putObject(
+            { it.bucket(bucket).key(key).contentType(contentType) },
+            RequestBody.fromFile(file),
+        )
     }
 
     /** Deleting a key that is not there succeeds (S3 semantics), so a retried deletion is harmless. */

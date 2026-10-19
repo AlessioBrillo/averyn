@@ -50,8 +50,13 @@ GitHub Actions is not the gate. The single source of truth is `.woodpecker/ci.ym
 - **Status:** first green run recorded 2026-10-17 on commit a4d810b:
   `:backend:compileKotlin`, `:backend:test` (Testcontainers), `:shared:*:jvmTest`,
   `:apps:android:compileDebugKotlin`, `:apps:android:lintDebug` all green.
-  `ci-local` (full Woodpecker gate incl. compose smoke) could not run because Docker
-  Desktop on this machine is not responding — restart Docker and run `ci-local` to
-  complete the gate. If a step fails for an environment reason (image, network,
-  missing tool), fix `.woodpecker/ci.yml`, not the code.
+  `ci-local` on this machine (Windows) fails in the Android Gradle Plugin tasks with
+  "Cannot access output property ... Could not read directory path
+  `/woodpecker/src/apps/android/build/...`": the pipeline bind-mounts a Windows path
+  into a Linux container and the AGP tasks that create directories under it fail.
+  It fails the same way on a pristine `main`, so it is the environment, not the tree.
+  The way to run the gate on this machine is the GitHub Actions pipeline
+  (`.github/workflows/ci.yml`), which runs the same commands plus the compose smoke
+  tests, and `gh pr checks <n> --watch`. If a step fails for an environment reason
+  (image, network, missing tool), fix `.woodpecker/ci.yml`, not the code.
 - Done / merge-ready means this gate is green on the final tree. See `~/.agents/CI.md`.

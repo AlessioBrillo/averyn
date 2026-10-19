@@ -1,6 +1,6 @@
 # ADR-0021: Consent for health-adjacent sensor data — server-authoritative, fail-closed device cache
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-10-18
 - **Deciders:** @AlessioBrillo
 

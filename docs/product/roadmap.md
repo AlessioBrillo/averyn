@@ -7,6 +7,8 @@ Rule: **vertical slices, GPS validated on real devices first.** The biggest risk
 | **MVP-0** Tracking PoC | Prove native tracking is reliable | Record ≥ 3 h outdoor activities on ≥ 2 real Android and ≥ 2 real iOS devices with screen locked; force-kill and reboot recovery loses ≤ 1 sample interval; GPX export validates; diagnostics report shows quality; results logged in the device matrix |
 | **MVP-1** Core | Account, sync, backend, web detail page | Activity recorded offline syncs idempotently and is visible on the web with map + basic metrics; self-host via Compose works from a clean machine |
 | **MVP-2** Analysis & interop | Import/export and analysis | GPX/FIT/TCX import with duplicate detection; charts, elevation, laps, PRs; BLE HR; HealthKit / Health Connect; versioned metrics |
+
+MVP-2 is delivered as several vertical slices, not as one increment: the import formats are separate (GPX first, then FIT, then TCX), and the analysis (splits, elevation, charts) comes after the first format, so each slice is usable on its own. What is done: **GPX import** ([TDD-0008](../design/TDD-0008-gpx-import.md) / [ADR-0022](../adr/0022-imported-activity-provenance.md)), the web import page, the import provenance (the uploaded file is kept next to the canonical one), and the sensor P0 (the heart-rate sidecar, the consent round trip and the deletion it implies). What is next: the analysis of the imported data, then FIT, then TCX.
 | **MVP-3** Maps & navigation | Route editor, offline maps | Pilot-region routing, offline track following, deviation alerts |
 | **MVP-4** Social & segments | Community | Profiles, follow, feed, privacy zones, segments, leaderboards, moderation |
 

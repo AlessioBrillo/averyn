@@ -19,7 +19,8 @@ export interface ActivitySummary {
   pausedMs: number
   averageSpeedMps: number
   paceSecPerKm: number | null
-  qualityGrade: 'GOOD' | 'FAIR' | 'POOR'
+  /** `UNKNOWN` when the activity has no measured accuracy (an imported file, TDD-0008). */
+  qualityGrade: 'GOOD' | 'FAIR' | 'POOR' | 'UNKNOWN'
   droppedRecords: number
   metricsAlgorithmVersion: string
   qualityAlgorithmVersion: string
@@ -27,6 +28,8 @@ export interface ActivitySummary {
   avgHrBpm: number
   maxHrBpm: number
   hrSource: string
+  /** `device` (recorded) or `gpx` (imported, TDD-0008). */
+  source: string
 }
 
 export interface ActivityPage {
@@ -38,24 +41,63 @@ export interface ActivityPage {
 export interface Track {
   type: 'Feature'
   properties: Record<string, unknown> | null
-  geometry: { type: 'LineString'; coordinates: [number, number][] } | null
+  /** One line per continuous recording interval: a pause ends a line instead of being bridged. */
+  geometry: { type: 'MultiLineString'; coordinates: [number, number][][] } | null
+}
+
+/** What the importer read out of the file (TDD-0008). */
+export interface ImportReport {
+  source: string
+  duplicate: boolean
+  segments: number | null
+  points: number | null
+  ignoredExtensions: Record<string, number>
+  parserVersion: string
+}
+
+export interface ImportResponse {
+  activity: ActivitySummary
+  import: ImportReport
 }
 
 export class ApiError extends Error {
   status: number
-  constructor(status: number) {
-    super(`HTTP ${status}`)
+  /** The stable code the server sent (`invalid_time`, `invalid_sport`, …), when there is one. */
+  code: string | null
+  /** The server's message, when there is one. */
+  detail: string | null
+  constructor(status: number, code: string | null = null, detail: string | null = null) {
+    super(detail ?? `HTTP ${status}`)
     this.status = status
+    this.code = code
+    this.detail = detail
   }
 }
 
 /** An authenticated request. A missing or expired token is a 401 like the server's: the UI offers sign-in again. */
-async function request(path: string, method = 'GET'): Promise<Response> {
+async function request(
+  path: string,
+  method = 'GET',
+  body?: BodyInit,
+  contentType?: string,
+): Promise<Response> {
   const token = await currentToken()
   if (!token) throw new ApiError(401)
-  const response = await fetch(path, { method, headers: { Authorization: `Bearer ${token}` } })
-  if (!response.ok) throw new ApiError(response.status)
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
+  if (contentType) headers['Content-Type'] = contentType
+  const response = await fetch(path, { method, headers, body })
+  if (!response.ok) throw await toApiError(response)
   return response
+}
+
+/** The error the server sent, with its code: the UI shows a different message for each. */
+async function toApiError(response: Response): Promise<ApiError> {
+  try {
+    const body = (await response.json()) as { error?: string; message?: string }
+    return new ApiError(response.status, body.error ?? null, body.message ?? null)
+  } catch {
+    return new ApiError(response.status)
+  }
 }
 
 async function get<T>(path: string): Promise<T> {
@@ -84,6 +126,20 @@ export const getActivity = (id: string) => get<ActivitySummary>(`/v1/activities/
 
 export const getTrack = (id: string) => get<Track>(`/v1/activities/${encodeURIComponent(id)}/track`)
 
+/**
+ * Imports a GPX file as an activity (TDD-0008). The file is sent as it is; the server parses it, keeps it and
+ * computes the numbers. The same file imported twice answers with the activity that already exists.
+ */
+export const importGpx = async (file: File, sport: string): Promise<ImportResponse> => {
+  const response = await request(
+    `/v1/imports/gpx?sport=${encodeURIComponent(sport)}`,
+    'POST',
+    file,
+    'application/gpx+xml',
+  )
+  return (await response.json()) as ImportResponse
+}
+
 export interface ConsentGrant {
   scope: string
   grantedAt: string
@@ -96,3 +152,7 @@ export const getConsents = () => get<ConsentGrant[]>('/v1/consents')
 /** Revoke a consent scope (ADR-0021). */
 export const revokeConsent = (scope: string) =>
   request(`/v1/consents/${encodeURIComponent(scope)}`, 'DELETE')
+
+/** Grant a consent scope (ADR-0021): without it the device never records the data it covers. */
+export const grantConsent = (scope: string) =>
+  request(`/v1/consents/${encodeURIComponent(scope)}`, 'POST')

@@ -26,7 +26,7 @@ MVP-0 and MVP-1 are implemented but unproven: the device matrix is empty. A code
 | R4 | For any activity, live numbers, numbers after `recover()` and `replay()` results are equal, including recovery from PAUSED/STOPPING and "Finish now" |
 | R5 | A GPX export is complete (flushed), uses plain decimal numbers and validates against the GPX 1.1 schema |
 | R6 | Every dropped input is counted with a reason: samples with no active activity, samples that violate the model |
-| R7 | Diagnostics (`diagnostics-v2`) contain what the matrix needs: per-recovery gaps, the event timeline with reasons, algorithm versions, permission and power state, real device model, build id |
+| R7 | Diagnostics (`diagnostics-v3`) contain what the matrix needs: per-recovery gaps, the event timeline with reasons, algorithm versions, permission and power state, real device model, build id |
 | R8 | The apps list past activities and export GPX, diagnostics and the raw file of each; the exports survive a restart |
 | R9 | Android requests precise location, notification permission and explains battery optimisation; a reduced-accuracy grant on either platform moves the activity to a defined state (F9) |
 | R10 | Tester builds are distributed through Play internal testing and TestFlight; each build identifies itself (version, commit) in diagnostics |

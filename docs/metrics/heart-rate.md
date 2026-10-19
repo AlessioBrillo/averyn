@@ -13,7 +13,7 @@ Beats per minute (bpm), integer platform values.
 
 ## Formula / method
 
-`hr-v1`: over every `HR ` record whose enclosing state interval is `RECORDING` (same ordering rule as `distance-v1`, docs/metrics/distance.md):
+`hr-v1`: over every `HR` record whose enclosing state interval is `RECORDING` (same ordering rule as `distance-v1`, docs/metrics/distance.md):
 
 - `avg_hr_bpm = mean(bpm)` over qualifying samples; `0` when none
 - `max_hr_bpm = max(bpm)`; `0` when none
@@ -25,7 +25,7 @@ No interpolation across gaps; no smoothing; zones/time-in-zone require a user pr
 
 ## Required inputs
 
-`HR ` records (`bpm`, optional `contact`) with their `elapsedRealtimeMs`, plus pause/resume state boundaries from the activity's `EVENT` records.
+`HR` records (`bpm`, optional `contact`) with their `elapsedRealtimeMs`, plus pause/resume state boundaries from the activity's `EVENT` records.
 
 ## Minimum quality requirements
 

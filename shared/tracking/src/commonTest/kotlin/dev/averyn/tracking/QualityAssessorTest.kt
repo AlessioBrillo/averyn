@@ -3,6 +3,7 @@ package dev.averyn.tracking
 import dev.averyn.domain.LocationSample
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class QualityAssessorTest {
@@ -10,7 +11,7 @@ class QualityAssessorTest {
         elapsedMs: Long,
         lat: Double,
         lon: Double,
-        accuracyM: Double = 5.0,
+        accuracyM: Double? = 5.0,
         timeMs: Long = elapsedMs,
         altitudeM: Double? = null,
     ) = LocationSample(timeMs, elapsedMs, lat, lon, accuracyM, altitudeM)
@@ -25,6 +26,41 @@ class QualityAssessorTest {
     fun goodAccuracyIsUnflagged() {
         val assessor = QualityAssessor()
         assertTrue(assessor.assess(sample(0, 0.0, 0.0, accuracyM = 5.0)).isEmpty())
+    }
+
+    @Test
+    fun aSampleWithoutAccuracyIsUnflagged() {
+        // The accuracy criterion cannot be evaluated, so the sample is not "badly accurate", it is unmeasured.
+        val assessor = QualityAssessor()
+        assertTrue(assessor.assess(sample(0, 0.0, 0.0, accuracyM = null)).isEmpty())
+    }
+
+    @Test
+    fun anActivityWithoutAnyAccuracyIsUnknownNotPoor() {
+        val report =
+            buildQualityReport(
+                listOf(
+                    sample(0, 45.0, 9.0, accuracyM = null) to emptySet(),
+                    sample(1_000, 45.001, 9.0, accuracyM = null) to emptySet(),
+                ),
+            )
+
+        assertEquals(QualityGrade.UNKNOWN, report.grade)
+        assertNull(report.accuracyWithin20mPercent)
+    }
+
+    @Test
+    fun anActivityWithAccuracyIsStillGraded() {
+        val report =
+            buildQualityReport(
+                listOf(
+                    sample(0, 45.0, 9.0, accuracyM = 5.0) to emptySet(),
+                    sample(1_000, 45.001, 9.0, accuracyM = 5.0) to emptySet(),
+                ),
+            )
+
+        assertEquals(QualityGrade.GOOD, report.grade)
+        assertEquals(100.0, report.accuracyWithin20mPercent)
     }
 
     @Test

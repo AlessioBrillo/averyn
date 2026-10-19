@@ -46,3 +46,6 @@ steps:
     image: node:24
     commands:
       - npx --yes markdownlint-cli2 "**/*.md" "!docs/product/reference-report-v0.1.md" "!docs/strategy/00-visione-strategica-completa.md" "!docs/strategy/01-synapse24-restructure-plan.md" "!docs/strategy/02-averyn-synapse-integration.md" "!docs/strategy/03-synapse-cloud-adr.md" "!docs/strategy/04-synapse-device-sdk-spec.md" "!docs/strategy/05-master-index.md" "!LICENSE" "!**/node_modules/**"
+      # The API contract is a YAML file: a colon in a description is enough to make it unreadable, and
+      # nothing else in the pipeline would notice.
+      - npx --yes js-yaml docs/api/openapi.yaml > /dev/null

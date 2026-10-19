@@ -1,5 +1,7 @@
 package dev.averyn.sensors
 
+import kotlin.math.roundToInt
+
 /** Algorithm version for heart-rate metrics. Spec: docs/metrics/heart-rate.md. */
 const val HR_ALGORITHM_VERSION = "hr-v1"
 
@@ -40,11 +42,11 @@ class HeartRateMetrics {
     fun snapshot(durationMs: Long): HeartRateSnapshot {
         val expected = expectedIntervals(durationMs)
         if (values.isEmpty()) {
-            return HeartRateSnapshot(0, 0, 0, 0.0, expected.toInt(), artifactCount.toInt())
+            return HeartRateSnapshot(0, 0, 0, 0.0, expected.toInt(), artifactCount)
         }
         val coverage = 100.0 * values.size / expected.coerceAtLeast(1)
         return HeartRateSnapshot(
-            avgHrBpm = Math.round(values.average()).toInt(),
+            avgHrBpm = values.average().roundToInt(),
             maxHrBpm = values.maxOrNull() ?: 0,
             minHrBpm = values.minOrNull() ?: 0,
             coveragePercent = coverage.coerceIn(0.0, 100.0),

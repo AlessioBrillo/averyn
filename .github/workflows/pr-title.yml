@@ -28,4 +28,5 @@ jobs:
             docs
             deps
             ci
+            import
           requireScope: false

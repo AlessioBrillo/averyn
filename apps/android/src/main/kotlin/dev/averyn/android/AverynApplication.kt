@@ -4,10 +4,15 @@ import android.app.Application
 import android.os.BatteryManager
 import dev.averyn.android.auth.AuthManager
 import dev.averyn.android.ble.BleHrAdapter
+import dev.averyn.android.consent.ConsentClient
 import dev.averyn.sensors.HeartRateSample
 import dev.averyn.sensors.RrInterval
 import dev.averyn.tracking.ActivityRecorder
 import dev.averyn.tracking.ActivityStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.io.files.Path
 
 class AverynApplication : Application() {
@@ -38,10 +43,35 @@ class AverynApplication : Application() {
         hrAdapter.recordRrIntervals = granted
     }
 
+    /** The scope the heart-rate sidecar needs: without it the raw intervals are never recorded. */
+    private val rrConsentScope = "rr_recording"
+
+    private val consentClient by lazy { ConsentClient(auth) { auth.serverUrl } }
+
+    /** Work that outlives an activity: the consent refresh runs here. */
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * Asks the server which consents the user has and caches them (ADR-0021). The server is authoritative:
+     * a revocation there stops the recording here at the next refresh.
+     */
+    fun refreshConsents() {
+        appScope.launch {
+            try {
+                val granted = consentClient.grantedScopes()
+                setRrConsent(granted.contains(rrConsentScope))
+            } catch (e: Exception) {
+                // The answer is the server's; without it nothing is granted, and the app keeps recording.
+                setRrConsent(false)
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         // Anything finished earlier and not uploaded yet (offline, killed, signed out) goes up now.
         if (auth.serverUrl != null) enqueueSync(this)
+        refreshConsents()
     }
 }
 
@@ -53,5 +83,11 @@ fun AverynApplication.feedHeartRate(sample: HeartRateSample) {
 
 fun AverynApplication.feedRrInterval(rr: RrInterval) {
     if (!hasRrConsent) return
-    recorder.currentActivityId?.let { store.appendRrInterval(it, rr) }
+    val activityId = recorder.currentActivityId ?: return
+    // The sidecar gets its own header before the first interval: a file without one has no activity to
+    // belong to (ADR-0020). The check is a file existence test, not a read of the file, for every interval.
+    if (!store.hasRr(activityId)) {
+        recorder.currentMetadata()?.let { store.createRrMetadata(it) }
+    }
+    store.appendRrInterval(activityId, rr)
 }

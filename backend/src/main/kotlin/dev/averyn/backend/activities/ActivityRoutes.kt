@@ -57,7 +57,8 @@ const val MAX_CONCURRENT_EXPORTS = 2
 /** Authenticated requests per user and minute (TDD-0005 §5.4); a sync of 30 activities needs about 30. */
 const val DEFAULT_REQUESTS_PER_MINUTE = 120
 
-private val PER_USER = RateLimitName("per-user")
+/** The rate limit every authenticated call shares, whatever it does. */
+internal val PER_USER = RateLimitName("per-user")
 
 /**
  * `PUT /v1/activities/{clientActivityId}`, `GET /v1/activities` (list), `GET /v1/activities/{id}` and
@@ -81,9 +82,9 @@ fun Application.activities(
     quotaBytes: Long = DEFAULT_USER_QUOTA_BYTES,
     requestsPerMinute: Int = DEFAULT_REQUESTS_PER_MINUTE,
     consentStore: ConsentStore = ConsentStore(db),
+    userData: UserData = UserData(db, raw),
 ) {
     val ingest = ActivityIngest(db, raw, quotaBytes)
-    val userData = UserData(db, raw)
     install(RateLimit) {
         register(PER_USER) {
             rateLimiter(limit = requestsPerMinute, refillPeriod = 1.minutes)
@@ -179,6 +180,14 @@ fun Application.activities(
                             errorBody("rr data was deleted"),
                         )
                     }
+                    // A sidecar belongs to an activity: without one there is nothing to attach it to, and the
+                    // file would sit in the store forever with no way to delete it.
+                    if (!withContext(Dispatchers.IO) { ingest.activityExists(owner, clientId) }) {
+                        return@put call.respond(
+                            HttpStatusCode.NotFound,
+                            errorBody("the activity does not exist"),
+                        )
+                    }
                     val declared = call.request.contentLength()
                     if (declared != null && declared > maxBytes) {
                         return@put call.respond(
@@ -197,7 +206,7 @@ fun Application.activities(
                         withContext(Dispatchers.IO) {
                             val dir = Files.createTempDirectory("averyn-ingest-rr-")
                             try {
-                                val file = dir.resolve("$clientId.jsonl")
+                                val file = dir.resolve("$clientId.rr.jsonl")
                                 val sha256 = call.receiveToFile(file, maxBytes)
                                 if (sha256 == null) {
                                     call.respond(
@@ -206,8 +215,37 @@ fun Application.activities(
                                     )
                                     return@withContext
                                 }
+                                // The sidecar is a store file: it starts with its own META line, so a reader
+                                // knows which activity it belongs to (ADR-0020).
+                                val header = Files.newBufferedReader(file).use { reader -> reader.readLine() }
+                                if (header == null || !header.startsWith("META ")) {
+                                    call.respond(
+                                        HttpStatusCode.UnprocessableEntity,
+                                        errorBody("the sidecar has no metadata line"),
+                                    )
+                                    return@withContext
+                                }
+                                if (withContext(Dispatchers.IO) {
+                                        ingest.storedBytesOf(owner) + Files.size(file) > quotaBytes
+                                    }
+                                ) {
+                                    call.respond(
+                                        HttpStatusCode.InsufficientStorage,
+                                        errorBody("storage quota exceeded"),
+                                    )
+                                    return@withContext
+                                }
                                 val key = "raw/$owner/$clientId/rr/$sha256.jsonl"
                                 raw.put(key, file)
+                                if (!withContext(Dispatchers.IO) {
+                                        ingest.recordRrSidecar(owner, clientId, key, sha256, Files.size(file))
+                                    }
+                                ) {
+                                    // The activity is not the caller's after all: the file goes with it.
+                                    raw.delete(key)
+                                    call.respond(HttpStatusCode.NotFound, errorBody("the activity does not exist"))
+                                    return@withContext
+                                }
                                 call.respond(HttpStatusCode.Created)
                             } finally {
                                 dir.toFile().deleteRecursively()
@@ -319,7 +357,7 @@ fun Application.activities(
 /**
  * The caller's Averyn user id, or null after answering `403` because the account was deleted (ADR-0017).
  */
-private suspend fun ApplicationCall.owner(
+internal suspend fun ApplicationCall.owner(
     db: DataSource,
     allowDeleted: Boolean = false,
 ): UUID? {
@@ -332,7 +370,7 @@ private suspend fun ApplicationCall.owner(
     }
 }
 
-private fun errorBody(message: String) = mapOf("error" to message)
+internal fun errorBody(message: String) = mapOf("error" to message)
 
 private fun String.toUuidOrNull(): UUID? = runCatching { UUID.fromString(this) }.getOrNull()
 
@@ -340,7 +378,7 @@ private fun String.toUuidOrNull(): UUID? = runCatching { UUID.fromString(this) }
  * Streams the request body to [target], hashing as it goes. Returns the lower-case hex SHA-256, or null as soon
  * as more than [maxBytes] have arrived (the rest is not read).
  */
-private suspend fun ApplicationCall.receiveToFile(
+internal suspend fun ApplicationCall.receiveToFile(
     target: Path,
     maxBytes: Long,
 ): String? {

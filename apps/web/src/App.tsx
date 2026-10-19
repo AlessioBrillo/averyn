@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Account } from './Account'
 import { ActivityDetail } from './ActivityDetail'
 import { ActivityList } from './ActivityList'
+import { ImportGpx } from './ImportGpx'
 import { signIn, signOut, start } from './auth'
 import type { Session } from './auth'
 
@@ -52,6 +53,15 @@ export function App() {
         {state.status === 'ready' && state.session.signedIn && (
           <nav>
             <a
+              href="/import"
+              onClick={(e) => {
+                e.preventDefault()
+                navigate('/import')
+              }}
+            >
+              Import
+            </a>{' '}
+            <a
               href="/account"
               onClick={(e) => {
                 e.preventDefault()
@@ -73,6 +83,11 @@ export function App() {
           </p>
         ) : path === '/account' ? (
           <Account onUnauthorized={expired} />
+        ) : path === '/import' ? (
+          <ImportGpx
+            onUnauthorized={expired}
+            onImported={(id) => navigate(`/activities/${id}`)}
+          />
         ) : detail ? (
           <ActivityDetail
             id={detail[1]}
@@ -81,7 +96,11 @@ export function App() {
             onDeleted={() => navigate('/')}
           />
         ) : (
-          <ActivityList open={(id) => navigate(`/activities/${id}`)} onUnauthorized={expired} />
+          <ActivityList
+            open={(id) => navigate(`/activities/${id}`)}
+            onUnauthorized={expired}
+            onImport={() => navigate('/import')}
+          />
         ))}
     </main>
   )

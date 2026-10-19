@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
-import { ApiError, deleteAccount, downloadExport, getConsents, revokeConsent } from './api'
+import { ApiError, deleteAccount, downloadExport, getConsents, grantConsent, revokeConsent } from './api'
 import { signOut } from './auth'
+
+/** The scope the user can grant here: the one the devices ask for (ADR-0021). */
+const GRANTABLE_SCOPE = 'rr_recording'
 
 /** The user's data: download everything, or delete it (TDD-0004). Consent for health-adjacent sensor data is
  *  server-authoritative and revocable here (ADR-0021). */
@@ -44,6 +47,16 @@ export function Account({ onUnauthorized }: { onUnauthorized: () => void }) {
         ),
       )
     }, 'Could not revoke that consent. Try again.')
+
+  const grant = (scope: string) =>
+    run(async () => {
+      await grantConsent(scope)
+      setConsents((previous) => {
+        const now = new Date().toISOString()
+        const others = previous.filter((g) => g.scope !== scope)
+        return [...others, { scope, grantedAt: now, revokedAt: null }]
+      })
+    }, 'Could not grant that consent. Try again.')
 
   const download = () =>
     run(async () => {
@@ -124,6 +137,18 @@ export function Account({ onUnauthorized }: { onUnauthorized: () => void }) {
                   </td>
                 </tr>
               ))}
+              {!consents.some((g) => g.scope === GRANTABLE_SCOPE) && (
+                <tr>
+                  <td>{GRANTABLE_SCOPE}</td>
+                  <td>—</td>
+                  <td>—</td>
+                  <td>
+                    <button onClick={() => grant(GRANTABLE_SCOPE)} disabled={busy}>
+                      Grant
+                    </button>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         ) : (

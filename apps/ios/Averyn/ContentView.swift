@@ -56,7 +56,11 @@ struct ContentView: View {
             Text("Quality: \(diagnostics.quality.grade) (\(diagnostics.quality.algorithmVersion))")
             Text("Samples: \(diagnostics.recordingSamples)/\(diagnostics.totalSamples), losses: \(diagnostics.recordLosses)")
             Text("Longest gap: \(diagnostics.quality.longestGapMs / 1000) s")
-            Text(String(format: "Accuracy ≤ 20 m: %.0f%%", diagnostics.quality.accuracyWithin20mPercent))
+            if let accuracy = diagnostics.quality.accuracyWithin20mPercent {
+                Text(String(format: "Accuracy ≤ 20 m: %.0f%%", accuracy.doubleValue))
+            } else {
+                Text("Accuracy ≤ 20 m: not measured")
+            }
             if let start = diagnostics.batteryStartPercent, let end = diagnostics.batteryEndPercent {
                 let drainText = diagnostics.batteryDrainPercentPerHour.map { String(format: " (%.1f%%/h)", $0.doubleValue) } ?? ""
                 Text("Battery: \(start.intValue)% → \(end.intValue)%\(drainText)")

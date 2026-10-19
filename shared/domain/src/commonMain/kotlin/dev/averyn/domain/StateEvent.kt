@@ -22,6 +22,9 @@ enum class Reason {
     /** The activity was found interrupted on launch and recovered (F4). */
     RECOVERED,
 
+    /** The transition comes from an imported file, not from a live recording (TDD-0008). */
+    IMPORTED,
+
     /** An unrecoverable error moved the activity to FAILED. */
     ERROR,
 }

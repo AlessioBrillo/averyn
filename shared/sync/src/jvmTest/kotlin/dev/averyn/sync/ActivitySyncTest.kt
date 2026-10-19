@@ -3,6 +3,8 @@ package dev.averyn.sync
 import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Reason
 import dev.averyn.domain.Sport
+import dev.averyn.sensors.RrInterval
+import dev.averyn.tracking.ActivityMetadata
 import dev.averyn.tracking.ActivityRecorder
 import dev.averyn.tracking.ActivityStore
 import io.ktor.client.HttpClient
@@ -125,6 +127,52 @@ class ActivitySyncTest {
 
             assertEquals(0, result.uploaded)
             assertTrue(requests.isEmpty())
+        }
+
+    @Test
+    fun theHeartRateSidecarGoesUpAfterItsActivity() =
+        runBlocking {
+            finishedActivity("a1")
+            store.ensureRrMetadata(ActivityMetadata("a1", Sport.RUN, 1_000))
+            store.appendRrInterval("a1", RrInterval(1_000, 1_000, 857))
+
+            sync(created).syncPending("tok")
+
+            val sidecar = requests.last()
+            assertEquals("https://server.test/v1/activities/a1/rr", sidecar.url.toString())
+            assertEquals(
+                SyncStatus(SyncState.READY, attempts = 1),
+                statuses.readRr("a1"),
+            )
+        }
+
+    @Test
+    fun aRefusedSidecarIsNotUploadedAgainAndTheLocalCopyGoes() =
+        runBlocking {
+            finishedActivity("a1")
+            store.ensureRrMetadata(ActivityMetadata("a1", Sport.RUN, 1_000))
+            store.appendRrInterval("a1", RrInterval(1_000, 1_000, 857))
+
+            // The consent was withdrawn: the server refuses the health data and it must not come back.
+            val result =
+                sync { request ->
+                    if (request.url.toString().endsWith("/rr")) {
+                        respond("", HttpStatusCode.Forbidden)
+                    } else {
+                        respond(
+                            """{"id":"srv-1"}""",
+                            HttpStatusCode.Created,
+                            headersOf(HttpHeaders.ContentType, "application/json"),
+                        )
+                    }
+                }.syncPending("tok")
+
+            assertEquals(1, result.uploaded)
+            assertEquals(
+                SyncStatus(SyncState.FAILED_PERMANENT, attempts = 1, lastError = "CONSENT_REVOKED"),
+                statuses.readRr("a1"),
+            )
+            assertNull(store.rrMetadataOf("a1"))
         }
 
     @Test

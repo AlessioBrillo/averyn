@@ -33,3 +33,11 @@ export function formatRate(
     ? { label: 'Average speed', value: formatSpeed(rate.averageSpeedMps) }
     : { label: 'Average pace', value: formatPace(rate.paceSecPerKm) }
 }
+
+/**
+ * The quality grade as it is shown. `UNKNOWN` is not a bad grade: it means the accuracy was never measured
+ * (an imported file carries none), and the app says so instead of showing a bare word (TDD-0008).
+ */
+export function formatQuality(grade: string): string {
+  return grade === 'UNKNOWN' ? 'unknown (accuracy not measured)' : grade.toLowerCase()
+}

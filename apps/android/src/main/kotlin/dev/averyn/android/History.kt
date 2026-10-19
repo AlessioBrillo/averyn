@@ -36,7 +36,7 @@ private data class HistoryRow(
 private enum class ExportKind { GPX, DIAGNOSTICS, RAW }
 
 /**
- * Past activities with their exports (TDD-0006 R8): the GPX, the `diagnostics-v2` report and the raw file of any
+ * Past activities with their exports (TDD-0006 R8): the GPX, the `diagnostics-v3` report and the raw file of any
  * stored activity, not only the one just finished, so a tester can still export after the app was restarted.
  * [refreshKey] changes when something was recorded or finished, which reloads the list.
  */

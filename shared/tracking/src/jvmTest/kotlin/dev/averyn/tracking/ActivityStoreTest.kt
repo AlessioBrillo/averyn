@@ -16,6 +16,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ActivityStoreTest {
@@ -178,7 +179,7 @@ class ActivityStoreTest {
 
     @Test
     fun rrSidecarRoundTrip() {
-        store.createRrMetadata("a1")
+        store.createRrMetadata(ActivityMetadata("a1", Sport.RUN, 0))
         store.appendRrInterval("a1", RrInterval(1000, 1000, 857))
         store.appendRrInterval("a1", RrInterval(2000, 2000, 800))
 
@@ -192,8 +193,42 @@ class ActivityStoreTest {
     }
 
     @Test
+    fun rrSidecarHeaderIsTheActivityItBelongsTo() {
+        val metadata = ActivityMetadata("a1", Sport.RIDE, 12_345, formatVersion = 2)
+        store.createRrMetadata(metadata)
+
+        // The sidecar's own format version is 1, but it says which activity it was recorded with.
+        assertEquals(ActivityMetadata("a1", Sport.RIDE, 12_345, formatVersion = 1), store.rrMetadataOf("a1"))
+    }
+
+    @Test
+    fun ensureRrMetadataWritesTheHeaderOnlyOnce() {
+        val metadata = ActivityMetadata("a1", Sport.RUN, 0)
+
+        assertTrue(store.ensureRrMetadata(metadata))
+        assertFalse(store.ensureRrMetadata(metadata))
+
+        store.appendRrInterval("a1", RrInterval(1000, 1000, 857))
+        val rrs = mutableListOf<RrInterval>()
+        store.forEachRrRecord("a1") { rrs += it }
+
+        assertEquals(listOf(RrInterval(1000, 1000, 857)), rrs)
+        assertEquals(ActivityMetadata("a1", Sport.RUN, 0, formatVersion = 1), store.rrMetadataOf("a1"))
+    }
+
+    @Test
+    fun theSidecarIsNotAnActivityOfItsOwn() {
+        store.create(ActivityMetadata("a1", Sport.RUN, 0))
+        store.createRrMetadata(ActivityMetadata("a1", Sport.RUN, 0))
+        store.appendRrInterval("a1", RrInterval(1000, 1000, 857))
+
+        // The sidecar is a file of the activity, not another activity: the list holds it once.
+        assertEquals(listOf("a1"), store.list().map { it.activityId })
+    }
+
+    @Test
     fun rrSidecarIsDeletedIndependently() {
-        store.createRrMetadata("a1")
+        store.createRrMetadata(ActivityMetadata("a1", Sport.RUN, 0))
         store.appendRrInterval("a1", RrInterval(1000, 1000, 857))
         store.deleteRr("a1")
 

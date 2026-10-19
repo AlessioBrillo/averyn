@@ -53,7 +53,7 @@ xmllint --noout --schema gpx-1.1.xsd activity.gpx
 
 ## Filling a row
 
-After each run, use the history list in the app: export **diagnostics** (JSON, `diagnostics-v2`, [TDD-0006 §5.5](../design/TDD-0006-field-readiness.md)), **GPX** and, for S5/S6/S10, the **raw file**. Diagnostics hold everything **Samples lost** and **Battery Δ/h** need (`droppedInputs`, `recordLosses`, `batteryDrainPercentPerHour`) and the quality grade for **Notes**. Keep the exported files with the run in a private folder, not in this repository (test artifacts, not fixtures; raw files contain coordinates).
+After each run, use the history list in the app: export **diagnostics** (JSON, `diagnostics-v3`, [TDD-0006 §5.5](../design/TDD-0006-field-readiness.md)), **GPX** and, for S5/S6/S10, the **raw file**. Diagnostics hold everything **Samples lost** and **Battery Δ/h** need (`droppedInputs`, `recordLosses`, `batteryDrainPercentPerHour`) and the quality grade for **Notes**. Keep the exported files with the run in a private folder, not in this repository (test artifacts, not fixtures; raw files contain coordinates).
 
 ## Results
 
