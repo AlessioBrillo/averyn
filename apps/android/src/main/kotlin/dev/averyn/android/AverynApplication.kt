@@ -57,8 +57,13 @@ class AverynApplication : Application() {
      */
     fun refreshConsents() {
         appScope.launch {
-            val granted = consentClient.grantedScopes()
-            setRrConsent(granted.contains(rrConsentScope))
+            try {
+                val granted = consentClient.grantedScopes()
+                setRrConsent(granted.contains(rrConsentScope))
+            } catch (e: Exception) {
+                // The answer is the server's; without it nothing is granted, and the app keeps recording.
+                setRrConsent(false)
+            }
         }
     }
 

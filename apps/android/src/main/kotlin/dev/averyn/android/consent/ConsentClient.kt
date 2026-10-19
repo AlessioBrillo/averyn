@@ -20,7 +20,14 @@ class ConsentClient(
     /** The scopes the user has granted and not revoked. Empty when the server cannot be reached. */
     suspend fun grantedScopes(): Set<String> {
         val server = serverUrl()?.takeIf { it.isNotEmpty() } ?: return emptySet()
-        val token = auth.freshAccessToken() ?: return emptySet()
+        // A token that cannot be refreshed (no network, the identity provider is down) is not a grant: the
+        // caller must not crash on it, and the answer is "nothing is granted".
+        val token =
+            try {
+                auth.freshAccessToken()
+            } catch (e: Exception) {
+                null
+            } ?: return emptySet()
         return withContext(Dispatchers.IO) {
             val connection = URL("$server/v1/consents").openConnection() as HttpURLConnection
             connection.connectTimeout = 10_000
