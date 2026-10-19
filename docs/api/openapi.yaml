@@ -162,7 +162,7 @@ paths:
                   properties: { type: object, additionalProperties: true }
                   geometry:
                     type: [object, "null"]
-                    description: A MultiLineString: one line per continuous recording interval, so a pause is not a straight line through the gap
+                    description: "A MultiLineString: one line per continuous recording interval, so a pause is not a straight line through the gap"
         "400": { description: Malformed activity id }
         "401": { description: Missing or invalid token }
         "403": { description: The account was deleted (ADR-0017) }
