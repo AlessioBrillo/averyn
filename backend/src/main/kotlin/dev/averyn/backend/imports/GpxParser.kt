@@ -82,6 +82,10 @@ class GpxParser(
         var point: MutablePoint? = null
         var capture: Capture? = null
         val text = StringBuilder()
+        // The depth of the element being read and the depth of the track point it belongs to: only the direct
+        // children of a point carry its time and its elevation, an extension with a `time` of its own does not.
+        var depth = 0
+        var pointDepth = -1
 
         val reader =
             try {
@@ -94,6 +98,8 @@ class GpxParser(
             while (reader.hasNext()) {
                 when (reader.next()) {
                     XMLStreamConstants.START_ELEMENT -> {
+                        val elementDepth = depth
+                        depth++
                         when (reader.localName) {
                             "trk" -> {
                                 trackCount++
@@ -145,9 +151,10 @@ class GpxParser(
                                     )
                                 }
                                 point = MutablePoint(latitude, longitude)
+                                pointDepth = elementDepth
                             }
-                            "ele" -> if (point != null) capture = Capture.ELEVATION
-                            "time" -> if (point != null) capture = Capture.TIME
+                            "ele" -> if (point != null && elementDepth == pointDepth + 1) capture = Capture.ELEVATION
+                            "time" -> if (point != null && elementDepth == pointDepth + 1) capture = Capture.TIME
                             "extensions" -> inExtensions = true
                             else -> if (inExtensions) ignored.merge(reader.localName, 1, Int::plus)
                         }
@@ -156,6 +163,8 @@ class GpxParser(
                         if (capture != null) text.append(reader.text)
                     }
                     XMLStreamConstants.END_ELEMENT -> {
+                        val elementDepth = depth - 1
+                        depth--
                         when (reader.localName) {
                             "trkpt" -> {
                                 val currentPoint =
@@ -165,6 +174,7 @@ class GpxParser(
                                             "a track point could not be read",
                                         )
                                 point = null
+                                pointDepth = -1
                                 capture = null
                                 val timeMs =
                                     parseTime(currentPoint.timeText)
@@ -215,13 +225,17 @@ class GpxParser(
                             }
                             "trk" -> inTrack = false
                             "ele" -> {
+                                if (point != null && elementDepth == pointDepth + 1) {
+                                    point?.elevationText = text.toString().trim().ifEmpty { null }
+                                }
                                 capture = null
-                                point?.elevationText = text.toString().trim().ifEmpty { null }
                                 text.setLength(0)
                             }
                             "time" -> {
+                                if (point != null && elementDepth == pointDepth + 1) {
+                                    point?.timeText = text.toString().trim().ifEmpty { null }
+                                }
                                 capture = null
-                                point?.timeText = text.toString().trim().ifEmpty { null }
                                 text.setLength(0)
                             }
                             "extensions" -> inExtensions = false

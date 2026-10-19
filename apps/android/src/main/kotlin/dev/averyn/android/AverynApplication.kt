@@ -80,7 +80,9 @@ fun AverynApplication.feedRrInterval(rr: RrInterval) {
     if (!hasRrConsent) return
     val activityId = recorder.currentActivityId ?: return
     // The sidecar gets its own header before the first interval: a file without one has no activity to
-    // belong to (ADR-0020).
-    recorder.currentMetadata()?.let { store.ensureRrMetadata(it) }
+    // belong to (ADR-0020). The check is a file existence test, not a read of the file, for every interval.
+    if (!store.hasRr(activityId)) {
+        recorder.currentMetadata()?.let { store.createRrMetadata(it) }
+    }
     store.appendRrInterval(activityId, rr)
 }

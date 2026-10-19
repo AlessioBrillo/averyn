@@ -346,6 +346,9 @@ class ActivityStore(
         return true
     }
 
+    /** Whether the sidecar of [activityId] exists: the caller writes its header before the first interval. */
+    fun hasRr(activityId: String): Boolean = SystemFileSystem.exists(pathForRr(activityId))
+
     /** Appends one raw RR interval to the sidecar (flushed before return — F3). */
     fun appendRrInterval(
         activityId: String,

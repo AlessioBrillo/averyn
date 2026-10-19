@@ -78,7 +78,9 @@ export function ImportGpx({
       (response) => {
         setBusy(false)
         setResult(response)
-        onImported(response.activity.id, response.import.duplicate)
+        // A new import opens the activity; a duplicate stays here and says so, with a link to the activity
+        // that already exists.
+        if (!response.import.duplicate) onImported(response.activity.id, false)
       },
       (e: unknown) => {
         setBusy(false)
@@ -128,9 +130,14 @@ export function ImportGpx({
       {failed && <p role="alert">{failed}</p>}
       {result && (
         <p role="status">
-          {result.import.duplicate
-            ? 'This file was already imported: opening the activity that exists.'
-            : 'Imported.'}
+          {result.import.duplicate ? (
+            <>
+              This file was already imported.{' '}
+              <a href={`/activities/${result.activity.id}`}>Open the activity that exists</a>.
+            </>
+          ) : (
+            'Imported.'
+          )}
           {result.import.segments !== null && ` ${result.import.points} points in ${result.import.segments} segments.`}
           {Object.keys(ignored).length > 0 &&
             ` Not imported: ${Object.keys(ignored).join(', ')} (the original file is kept).`}

@@ -93,6 +93,13 @@ class TrackingService : Service() {
                     return@Runnable
                 }
             }
+            // The consent is the server's answer: ask again while recording, so a consent withdrawn in the
+            // meantime stops the heart-rate intervals within a couple of minutes (ADR-0021).
+            if (recorder.currentState == ActivityState.RECORDING ||
+                recorder.currentState == ActivityState.PREPARING
+            ) {
+                app.refreshConsents()
+            }
             watchdogHandler.postDelayed(watchdogRunnable, WATCHDOG_CHECK_INTERVAL_MS)
         }
 

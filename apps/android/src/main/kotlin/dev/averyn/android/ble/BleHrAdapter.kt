@@ -105,6 +105,9 @@ class BleHrAdapter(
                     // No sensor found, or the Bluetooth permissions are missing: the strap is optional, the
                     // recording continues without it.
                     null
+                } catch (e: SecurityException) {
+                    // The permission was refused between the check and the call.
+                    null
                 } ?: return@withContext
             lastDeviceAddress = device.address
             connectJob = scope.launch { connectAndStream(device) }

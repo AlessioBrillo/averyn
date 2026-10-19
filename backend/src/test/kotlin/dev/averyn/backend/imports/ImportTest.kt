@@ -362,6 +362,44 @@ class ImportTest {
         }
 
     @Test
+    fun anExtensionWithATimeOfItsOwnDoesNotMoveThePoint() =
+        app {
+            val gpx =
+                """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1"
+                     xmlns:gpxx="http://www.garmin.com/xmlschemas/GpxExtensions/v3">
+                  <trk><trkseg>
+                    <trkpt lat="45.0" lon="9.0">
+                      <ele>120.0</ele>
+                      <time>2026-10-19T08:00:00Z</time>
+                      <extensions><gpxx:TrackExtension><gpxx:DisplayColor>Red</gpxx:DisplayColor>
+                        <gpxx:Time>2026-10-19T09:00:00Z</gpxx:Time></gpxx:TrackExtension></extensions>
+                    </trkpt>
+                    <trkpt lat="45.001" lon="9.0">
+                      <ele>121.0</ele>
+                      <time>2026-10-19T08:00:01Z</time>
+                    </trkpt>
+                  </trkseg></trk>
+                </gpx>
+                """.trimIndent()
+
+            val response = importGpx(gpx, "extension")
+
+            assertEquals(HttpStatusCode.Created, response.status)
+            // The point kept its own time: the activity starts at 08:00, not at the extension's 09:00.
+            val body = json.parseToJsonElement(response.bodyAsText()).jsonObject
+            val activity = body.getValue("activity").jsonObject
+            assertEquals(
+                1_000L,
+                activity
+                    .getValue("elapsedMs")
+                    .jsonPrimitive.content
+                    .toLong(),
+            )
+        }
+
+    @Test
     fun theSportIsExplicit() =
         app {
             assertEquals(HttpStatusCode.BadRequest, importGpx(twoSegments, "sport", sport = null).status)
