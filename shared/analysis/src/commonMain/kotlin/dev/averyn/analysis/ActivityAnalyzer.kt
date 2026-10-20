@@ -36,6 +36,8 @@ private class Point(
     val segment: Int,
     val distanceM: Double,
     val elapsedMs: Long,
+    /** The altitude of the sample, null when it has none (or when it is not a number). */
+    val altitudeM: Double?,
 )
 
 /** One stretch between two accepted samples: the unit the distance and the time are counted in. */
@@ -100,6 +102,9 @@ fun analyzeActivity(
                     segment = index,
                     distanceM = distance,
                     elapsedMs = (sample.elapsedRealtimeMs - origin).coerceAtLeast(0),
+                    // An altitude that is not a number is not an altitude: the store accepts it (a platform
+                    // can report it), and a NaN in the profile would break the whole analysis.
+                    altitudeM = sample.altitudeM?.takeIf { it.isFinite() },
                 )
             if (previous != null) {
                 val legMs = point.elapsedMs - previous.elapsedMs
@@ -120,7 +125,10 @@ fun analyzeActivity(
         }
     }
 
-    val smoothed = segments.flatMap { segment -> smoothMedian(segment.map { it.altitudeM }) }
+    val smoothed =
+        segments.flatMap { segment ->
+            smoothMedian(segment.map { it.altitudeM?.takeIf { altitude -> altitude.isFinite() } })
+        }
     val builders = buildSplits(legs, splitLength, points.firstOrNull()?.elapsedMs ?: 0L)
     val elevation = buildElevation(segments, points, smoothed, builders)
     val heartRateSummary = buildHeartRate(heartRate, totals)
@@ -251,7 +259,10 @@ private fun buildElevation(
         var reference: Double? = null
         for (position in segment.indices) {
             val altitude = smoothed[index + position]
-            if (altitude != null) {
+            if (altitude == null) {
+                // A hole in the altitude breaks the count too: what was not measured is not a climb.
+                reference = null
+            } else {
                 val current = reference
                 if (current == null) {
                     reference = altitude
@@ -403,15 +414,25 @@ private fun buildHeartRateSeries(
     val elapsed = mutableListOf<Long>()
     val bpm = mutableListOf<Int>()
     val segment = mutableListOf<Int>()
+    // The budget of every stretch: the first and the last point of a stretch are what keeps the shape of it,
+    // and what is left of the bound goes to the stretches that have more samples. The sum never exceeds the
+    // bound, and a stretch is never decimated together with another one.
+    val perStretch = if (groups.size * 2 <= MAX_HEART_RATE_POINTS) 2 else 1
+    val extra = MAX_HEART_RATE_POINTS - groups.size * perStretch
     groups.forEachIndexed { index, group ->
-        val budget = maxOf(2, MAX_HEART_RATE_POINTS * group.size / usable.size)
+        val budget = (perStretch + extra * group.size / usable.size).coerceIn(1, group.size)
         val kept =
-            if (group.size <= budget) {
-                group.indices.toList()
-            } else {
-                val xs = DoubleArray(group.size) { group[it].elapsedRealtimeMs.toDouble() }
-                val ys = DoubleArray(group.size) { group[it].bpm.toDouble() }
-                decimateLttb(xs, ys, budget).toList()
+            when {
+                group.size <= budget -> group.indices.toList()
+                // One point for the stretch: the first one, so that the series starts where the activity
+                // starts. The last stretch keeps its last point, so that the series ends where it ends.
+                budget == 1 ->
+                    if (index == groups.lastIndex) listOf(group.lastIndex) else listOf(0)
+                else -> {
+                    val xs = DoubleArray(group.size) { group[it].elapsedRealtimeMs.toDouble() }
+                    val ys = DoubleArray(group.size) { group[it].bpm.toDouble() }
+                    decimateLttb(xs, ys, budget).toList()
+                }
             }
         kept.forEach { position ->
             elapsed.add((group[position].elapsedRealtimeMs - origin).coerceAtLeast(0))
@@ -419,31 +440,28 @@ private fun buildHeartRateSeries(
             segment.add(index)
         }
     }
-    if (elapsed.size <= MAX_HEART_RATE_POINTS) {
-        return AnalysisHeartRateSeries(elapsedMs = elapsed, bpm = bpm, segment = segment)
-    }
-    // More points than the bound: the stretches are decimated once more, all together. The stretch of every
-    // kept point travels with it, so the line still breaks where the sensor was silent.
-    val xs = DoubleArray(elapsed.size) { elapsed[it].toDouble() }
-    val ys = DoubleArray(bpm.size) { bpm[it].toDouble() }
-    val kept = decimateLttb(xs, ys, MAX_HEART_RATE_POINTS)
-    return AnalysisHeartRateSeries(
-        elapsedMs = kept.map { elapsed[it] },
-        bpm = kept.map { bpm[it] },
-        segment = kept.map { segment[it] },
-    )
+    return AnalysisHeartRateSeries(elapsedMs = elapsed, bpm = bpm, segment = segment)
 }
 
-/** The median of the altitude over a window of five points: one wrong altitude does not move the profile. */
+/**
+ * The median of the altitude over a window of five points: one wrong altitude does not move the profile.
+ *
+ * A point that has no altitude keeps none: the median of the window would fill a hole that was never measured,
+ * and the profile would show an altitude where there is none.
+ */
 private fun smoothMedian(altitudes: List<Double?>): List<Double?> {
     val n = altitudes.size
     if (n == 0) return emptyList()
     val half = ELEVATION_WINDOW / 2
     return List(n) { index ->
-        val from = (index - half).coerceAtLeast(0)
-        val to = (index + half).coerceAtMost(n - 1)
-        val window = altitudes.subList(from, to + 1).filterNotNull()
-        if (window.isEmpty()) null else median(window)
+        if (altitudes[index] == null) {
+            null
+        } else {
+            val from = (index - half).coerceAtLeast(0)
+            val to = (index + half).coerceAtMost(n - 1)
+            val window = altitudes.subList(from, to + 1).filterNotNull()
+            if (window.isEmpty()) null else median(window)
+        }
     }
 }
 

@@ -46,12 +46,10 @@ fun main() {
             val file = dir.resolve("${activity.clientActivityId}.jsonl")
             raw.getToFile(activity.rawObjectKey, file)
             val analysis =
-                ActivityAnalyzer.analyze(ActivityStore(Path(dir.toString())), activity.clientActivityId.toString())
-            if (analysis == null) {
-                failed++
-                println("activity ${activity.id}: the file cannot be read")
-                continue
-            }
+                ActivityAnalyzer.analyze(
+                    ActivityStore(Path(dir.toString())),
+                    activity.clientActivityId.toString(),
+                )
             store.save(activity.id, analysis)
             done++
         } catch (e: Exception) {

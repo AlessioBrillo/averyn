@@ -8,10 +8,14 @@ import org.slf4j.LoggerFactory
 import java.nio.file.Files
 import java.util.UUID
 import java.util.concurrent.Semaphore
+import java.util.concurrent.TimeUnit
 import javax.sql.DataSource
 
 /** How many analyses are computed at the same time: each one replays a whole activity file. */
 const val MAX_CONCURRENT_ANALYSES = 2
+
+/** How long the export waits for an analysis slot before it goes without that analysis. */
+private const val EXPORT_WAIT_SECONDS = 30L
 
 /** What the analysis of an activity can be. */
 sealed interface AnalysisOutcome {
@@ -59,9 +63,7 @@ class AnalysisService(
             // A request does not wait: the caller is told to come back later, like for an upload.
             if (!slots.tryAcquire()) return AnalysisOutcome.Busy
             try {
-                val analysis =
-                    computeAndStore(activityId, activity.first, activity.second)
-                        ?: return AnalysisOutcome.Failed
+                val analysis = computeAndStore(activityId, activity.first, activity.second)
                 AnalysisOutcome.Ready(analysis)
             } finally {
                 slots.release()
@@ -84,7 +86,12 @@ class AnalysisService(
             val activity = activityOf(ownerId, activityId) ?: return null
             val stored = analysisStore.find(ownerId, activityId)
             if (stored != null && analysisStore.isCurrent(activityId)) return stored
-            slots.acquire()
+            // The export waits, but not forever: an export that hangs is worse than an export without one
+            // analysis.
+            if (!slots.tryAcquire(EXPORT_WAIT_SECONDS, TimeUnit.SECONDS)) {
+                log.warn("the analysis of activity {} waited too long: the export goes without it", activityId)
+                return null
+            }
             try {
                 computeAndStore(activityId, activity.first, activity.second)
             } finally {
@@ -123,14 +130,12 @@ class AnalysisService(
         activityId: UUID,
         clientActivityId: UUID,
         rawKey: String,
-    ): ActivityAnalysis? {
+    ): ActivityAnalysis {
         val dir = Files.createTempDirectory("averyn-analysis-")
         try {
             val file = dir.resolve("$clientActivityId.jsonl")
             raw.getToFile(rawKey, file)
-            val analysis =
-                ActivityAnalyzer.analyze(ActivityStore(Path(dir.toString())), clientActivityId.toString())
-                    ?: return null
+            val analysis = ActivityAnalyzer.analyze(ActivityStore(Path(dir.toString())), clientActivityId.toString())
             analysisStore.save(activityId, analysis)
             return analysis
         } finally {

@@ -52,11 +52,14 @@ class AnalysisInput {
  * (TDD-0009). The device and the server therefore never disagree about an activity.
  */
 object ActivityAnalyzer {
-    /** The analysis of the activity in the store, or null when the file cannot be read. */
+    /**
+     * The analysis of the activity in the store. It throws when the file cannot be replayed: the caller decides
+     * what to do with an activity it cannot read.
+     */
     fun analyze(
         store: ActivityStore,
         activityId: String,
-    ): ActivityAnalysis? {
+    ): ActivityAnalysis {
         val input = AnalysisInput()
         val replayed =
             replay(

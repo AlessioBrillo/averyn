@@ -28,6 +28,8 @@ CREATE TABLE activity_analyses (
     elevation_coverage_percent double precision,
     hr_algorithm_version       text,
     hr_min_bpm                 integer,
+    hr_avg_bpm                 integer,
+    hr_max_bpm                 integer,
     hr_coverage_percent        double precision,
     hr_dropouts                integer,
     hr_artifacts               integer,

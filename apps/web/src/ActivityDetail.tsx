@@ -7,6 +7,14 @@ import { formatDistance, formatDuration, formatQuality, formatRate } from './for
 
 type Loaded = { activity: ActivitySummary; track: Track }
 
+/**
+ * The analysis of the activity that is open. It carries the id of the activity it belongs to: the state of a
+ * previous activity must never show up under the next one.
+ */
+type AnalysisState =
+  | { id: string; value: ActivityAnalysis }
+  | { id: string; error: 'busy' | 'unavailable' }
+
 /** `onUnauthorized` must be stable (useCallback): it is an effect dependency. */
 export function ActivityDetail({
   id,
@@ -23,8 +31,7 @@ export function ActivityDetail({
   const [error, setError] = useState<'notFound' | 'failed' | null>(null)
   const [deleteFailed, setDeleteFailed] = useState(false)
   // The analysis is a separate call: an activity without an analysis is still an activity.
-  const [analysis, setAnalysis] = useState<ActivityAnalysis | null>(null)
-  const [analysisFailed, setAnalysisFailed] = useState(false)
+  const [analysisState, setAnalysisState] = useState<AnalysisState | null>(null)
   const mapElement = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -43,18 +50,36 @@ export function ActivityDetail({
 
   useEffect(() => {
     let current = true
-    getAnalysis(id).then(
-      (value) => current && setAnalysis(value),
-      (e: unknown) => {
-        if (!current) return
-        if (e instanceof ApiError && e.status === 401) onUnauthorized()
-        else setAnalysisFailed(true)
-      },
-    )
+    // The analysis of an activity that was stored before the analysis existed is computed by the server when it
+    // is read, and the server can be busy: a 503 means "come back", not "there is no analysis".
+    const load = (attempt: number) => {
+      getAnalysis(id).then(
+        (value) => current && setAnalysisState({ id, value }),
+        (e: unknown) => {
+          if (!current) return
+          if (e instanceof ApiError && e.status === 401) {
+            onUnauthorized()
+            return
+          }
+          if (e instanceof ApiError && e.status === 503 && attempt < 2) {
+            window.setTimeout(() => current && load(attempt + 1), 2000)
+            return
+          }
+          setAnalysisState({
+            id,
+            error: e instanceof ApiError && e.status === 503 ? 'busy' : 'unavailable',
+          })
+        },
+      )
+    }
+    load(0)
     return () => {
       current = false
     }
   }, [id, onUnauthorized])
+
+  const analysis = analysisState?.id === id && 'value' in analysisState ? analysisState.value : null
+  const analysisError = analysisState?.id === id && 'error' in analysisState ? analysisState.error : null
 
   const line = loaded?.track.geometry
   useEffect(() => {
@@ -159,7 +184,12 @@ export function ActivityDetail({
         ))}
       </dl>
       {analysis && <Analysis analysis={analysis} sport={activity.sport} />}
-      {analysisFailed && (
+      {analysisError === 'busy' && (
+        <p role="status">
+          The server is busy: the analysis of this activity is being prepared. Reload in a moment.
+        </p>
+      )}
+      {analysisError === 'unavailable' && (
         <p role="status">The analysis of this activity is not available. The numbers above are still there.</p>
       )}
       <p className="small">

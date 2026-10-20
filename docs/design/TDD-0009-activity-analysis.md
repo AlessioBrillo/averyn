@@ -96,7 +96,7 @@ The backend holds the orchestration: `ActivityAnalyzer` (the replay that feeds t
 
 - **When the activity is stored:** the ingest already replays the file for the summary and the track, so the
   analysis costs no second pass. If the analysis cannot be stored, the activity is still stored: the analysis is
-  derived data, it must not make an upload fail.
+  derived data, it must not make an upload fail, and it is computed the first time the activity is read.
 - **When it is read:** an activity stored before this increment, or one whose algorithms changed, is analysed the
   first time it is read. Two analyses at a time are computed (a semaphore); a third request gets `503` and a
   `Retry-After`, like the uploads.

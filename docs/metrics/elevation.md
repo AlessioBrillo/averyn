@@ -21,16 +21,19 @@ Meters.
 `elevation-v1`:
 
 - The altitude of a point is the **median of the five points around it** (the window shrinks at the ends of a
-  recording interval). One wrong altitude does not move the profile.
+  recording interval). One wrong altitude does not move the profile. A point that has **no** altitude keeps none:
+  the median of the window would fill a hole that was never measured.
 - The **climb** and the **descent** are counted with a **3 m threshold**: the altitude only counts when it moved
   3 m more than the last altitude that counted. The noise of the altitude is not a mountain, and a threshold
   below the noise of the receiver would turn a flat path into a climb.
-- The reference altitude is **reset at every pause**: the altitude before a pause and the altitude after it are
-  not compared.
+- The reference altitude is **reset at every pause** and at every hole: the altitude before a pause and the
+  altitude after it are not compared, and a rise across a hole is not counted either. What was not measured is
+  not a climb.
 - The **minimum**, the **maximum** and the **mean** altitude are those of the smoothed series.
 - The **coverage** is the share of the accepted samples that carried an altitude. An activity with no altitude at
   all has **no elevation**: the numbers are null, not zero. A flat activity and an activity whose altitude was
   never measured are not the same thing.
+- An altitude that is not a number (a platform can report one) is not an altitude: it is treated as a hole.
 
 ## Required inputs
 

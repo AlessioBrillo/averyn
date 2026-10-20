@@ -13,6 +13,7 @@ import dev.averyn.analysis.SERIES_ALGORITHM_VERSION
 import dev.averyn.analysis.SPLITS_ALGORITHM_VERSION
 import dev.averyn.sensors.HR_ALGORITHM_VERSION
 import kotlinx.serialization.json.Json
+import org.slf4j.LoggerFactory
 import java.sql.Connection
 import java.sql.PreparedStatement
 import java.sql.ResultSet
@@ -30,7 +31,11 @@ import javax.sql.DataSource
 class ActivityAnalysisStore(
     private val db: DataSource,
 ) {
-    private val json = Json
+    // A stored analysis that cannot be read must not break the read of the activity: the row is recomputed
+    // when it is not the current one, and a shape that changed is not a reason to answer 500 forever.
+    private val json = Json { ignoreUnknownKeys = true }
+
+    private val log = LoggerFactory.getLogger(ActivityAnalysisStore::class.java)
 
     /** The analysis of the activity, or null when it has none (or it is not the caller's). */
     fun find(
@@ -50,7 +55,18 @@ class ActivityAnalysisStore(
                     stmt.setObject(2, ownerId)
                     stmt.executeQuery().use { rs ->
                         if (!rs.next()) return null
-                        val analysis = rs.toAnalysis()
+                        val analysis =
+                            try {
+                                rs.toAnalysis()
+                            } catch (e: Exception) {
+                                // A row that cannot be read is a row that has to be computed again.
+                                log.warn(
+                                    "could not read the analysis of activity {}: {}",
+                                    activityId,
+                                    e.javaClass.simpleName,
+                                )
+                                null
+                            } ?: return null
                         analysis.copy(splits = readSplits(conn, activityId))
                     }
                 }
@@ -93,12 +109,12 @@ class ActivityAnalysisStore(
                         INSERT INTO activity_analyses (activity_id, splits_version, elevation_version,
                             series_version, series_schema_version, split_length_m, elevation_source,
                             elevation_gain_m, elevation_loss_m, min_altitude_m, max_altitude_m, avg_altitude_m,
-                            elevation_coverage_percent, hr_algorithm_version, hr_min_bpm, hr_coverage_percent,
-                            hr_dropouts, hr_artifacts, series)
+                            elevation_coverage_percent, hr_algorithm_version, hr_min_bpm, hr_avg_bpm, hr_max_bpm,
+                            hr_coverage_percent, hr_dropouts, hr_artifacts, series)
                         VALUES (?::uuid, ?::text, ?::text, ?::text, ?::integer, ?::double precision, ?::text,
                             ?::double precision, ?::double precision, ?::double precision, ?::double precision,
-                            ?::double precision, ?::double precision, ?::text, ?::integer, ?::double precision,
-                            ?::integer, ?::integer, ?::jsonb)
+                            ?::double precision, ?::double precision, ?::text, ?::integer, ?::integer, ?::integer,
+                            ?::double precision, ?::integer, ?::integer, ?::jsonb)
                         ON CONFLICT (activity_id) DO UPDATE SET
                             splits_version = EXCLUDED.splits_version,
                             elevation_version = EXCLUDED.elevation_version,
@@ -114,6 +130,8 @@ class ActivityAnalysisStore(
                             elevation_coverage_percent = EXCLUDED.elevation_coverage_percent,
                             hr_algorithm_version = EXCLUDED.hr_algorithm_version,
                             hr_min_bpm = EXCLUDED.hr_min_bpm,
+                            hr_avg_bpm = EXCLUDED.hr_avg_bpm,
+                            hr_max_bpm = EXCLUDED.hr_max_bpm,
                             hr_coverage_percent = EXCLUDED.hr_coverage_percent,
                             hr_dropouts = EXCLUDED.hr_dropouts,
                             hr_artifacts = EXCLUDED.hr_artifacts,
@@ -141,6 +159,8 @@ class ActivityAnalysisStore(
                         // numbers of the heart rate are null when the activity has no heart rate at all.
                         stmt.setString(++i, analysis.algorithmVersions.heartRate)
                         stmt.setIntOrNull(++i, heart?.minBpm)
+                        stmt.setIntOrNull(++i, heart?.avgBpm)
+                        stmt.setIntOrNull(++i, heart?.maxBpm)
                         stmt.setDoubleOrNull(++i, heart?.coveragePercent)
                         stmt.setIntOrNull(++i, heart?.dropouts)
                         stmt.setIntOrNull(++i, heart?.artifacts)
@@ -285,11 +305,11 @@ class ActivityAnalysisStore(
             getIntOrNull(14)?.let {
                 AnalysisHeartRate(
                     minBpm = it,
-                    avgBpm = getInt(24),
-                    maxBpm = getInt(25),
-                    coveragePercent = getDouble(15),
-                    dropouts = getInt(16),
-                    artifacts = getInt(17),
+                    avgBpm = getInt(15),
+                    maxBpm = getInt(16),
+                    coveragePercent = getDouble(17),
+                    dropouts = getInt(18),
+                    artifacts = getInt(19),
                 )
             }
         return ActivityAnalysis(
@@ -304,16 +324,16 @@ class ActivityAnalysisStore(
             splitLengthM = getDouble(5),
             totals =
                 AnalysisTotals(
-                    distanceM = getDouble(19),
-                    elapsedMs = getLong(20),
-                    movingMs = getLong(21),
-                    pausedMs = getLong(22),
-                    stationaryMs = getLong(23),
+                    distanceM = getDouble(21),
+                    elapsedMs = getLong(22),
+                    movingMs = getLong(23),
+                    pausedMs = getLong(24),
+                    stationaryMs = getLong(25),
                 ),
             elevation = elevation,
             heartRate = heartRate,
             splits = emptyList(),
-            series = json.decodeFromString(AnalysisSeries.serializer(), getString(18)),
+            series = json.decodeFromString(AnalysisSeries.serializer(), getString(20)),
         )
     }
 
@@ -339,15 +359,15 @@ class ActivityAnalysisStore(
         /**
          * The analysis and the totals of the activity, in the order [toAnalysis] reads them:
          * 1-3 the algorithm versions, 4 the schema version, 5 the split length, 6-12 the elevation,
-         * 13-17 the heart rate, 18 the series, 19-23 the totals, 24-25 the heart rate of the summary.
+         * 13-19 the heart rate, 20 the series, 21-25 the totals.
          */
         const val ANALYSIS_COLUMNS =
             "an.splits_version, an.elevation_version, an.series_version, an.series_schema_version, " +
                 "an.split_length_m, an.elevation_source, an.elevation_gain_m, an.elevation_loss_m, " +
                 "an.min_altitude_m, an.max_altitude_m, an.avg_altitude_m, an.elevation_coverage_percent, " +
-                "an.hr_algorithm_version, an.hr_min_bpm, an.hr_coverage_percent, an.hr_dropouts, " +
-                "an.hr_artifacts, an.series, a.distance_m, a.elapsed_ms, a.moving_ms, a.paused_ms, " +
-                "a.stationary_ms, a.avg_hr_bpm, a.max_hr_bpm"
+                "an.hr_algorithm_version, an.hr_min_bpm, an.hr_avg_bpm, an.hr_max_bpm, an.hr_coverage_percent, " +
+                "an.hr_dropouts, an.hr_artifacts, an.series, a.distance_m, a.elapsed_ms, a.moving_ms, " +
+                "a.paused_ms, a.stationary_ms"
     }
 }
 

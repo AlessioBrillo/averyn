@@ -8,6 +8,7 @@ import dev.averyn.metrics.DISTANCE_ALGORITHM_VERSION
 import dev.averyn.metrics.SPEED_ALGORITHM_VERSION
 import dev.averyn.metrics.TIME_ALGORITHM_VERSION
 import dev.averyn.sensors.HR_ALGORITHM_VERSION
+import dev.averyn.sensors.HeartRateMetrics
 import dev.averyn.sensors.HeartRateSample
 import dev.averyn.tracking.ActivityMetadata
 import dev.averyn.tracking.ActivityStore
@@ -195,7 +196,7 @@ class ActivityIngest(
         val input = AnalysisInput()
         val metadata: ActivityMetadata
         val replayed: ReplayResult
-        val analysis: ActivityAnalysis
+        val hrSamples = mutableListOf<Int>()
         try {
             metadata = store.metadataOf(activityId) ?: return IngestResult.Invalid("no activity metadata line")
             if (!metadata.activityId.equals(clientActivityId.toString(), ignoreCase = true)) {
@@ -212,11 +213,9 @@ class ActivityIngest(
                     onRecordingStart = { input.onRecordingStart() },
                     onHeartRate = { sample: HeartRateSample, state: ActivityState ->
                         input.onHeartRate(sample, state)
+                        if (state == ActivityState.RECORDING) hrSamples += sample.bpm
                     },
                 )
-            // The analysis comes out of the same replay: the splits, the elevation and the series cost no
-            // second pass over the file.
-            analysis = input.build(replayed.metadata.sport, replayed.metrics.snapshot())
         } catch (e: RuntimeException) {
             // A line that parses but violates the model (e.g. latitude out of range) is an invalid upload.
             return IngestResult.Invalid("unreadable activity file")
@@ -224,6 +223,24 @@ class ActivityIngest(
         if (replayed.lastState != ActivityState.COMPLETED && replayed.lastState != ActivityState.FAILED) {
             return IngestResult.Invalid("activity is not finished (state ${replayed.lastState})")
         }
+
+        // The analysis comes out of the same replay: the splits, the elevation and the series cost no second
+        // pass over the file. It is derived data, though: a failure of the analyzer never loses the upload,
+        // and the analysis is computed the first time the activity is read.
+        val analysis: ActivityAnalysis? =
+            try {
+                input.build(replayed.metadata.sport, replayed.metrics.snapshot())
+            } catch (e: RuntimeException) {
+                log.warn("could not analyse the activity {}: {}", clientActivityId, e.javaClass.simpleName)
+                null
+            }
+        // The heart rate of the summary: the same samples, counted by the same metric, whatever the analyzer
+        // did. The coverage is over the recording time, the pauses excluded (hr-v2).
+        val metrics = replayed.metrics.snapshot()
+        val heartRate =
+            HeartRateMetrics()
+                .apply { hrSamples.forEach { onSample(it) } }
+                .snapshot((metrics.elapsedMs - metrics.pausedMs).coerceAtLeast(0))
 
         // Object first, row second: a failed insert leaves an orphan object, never a row without its raw file.
         // The hash in the key means two different uploads of one id can never overwrite each other's bytes.
@@ -307,17 +324,16 @@ class ActivityIngest(
                             stmt.setString(++i, wkt)
                             // Which sensor produced the heart rate: the device's BLE strap, or the file the
                             // activity was imported from (ADR-0014: imported metrics stay imported).
-                            val heartRate = analysis.heartRate
                             val hrSource =
-                                if (heartRate == null) {
+                                if (hrSamples.isEmpty()) {
                                     "none"
                                 } else if (source == SOURCE_DEVICE) {
                                     "ble-hr"
                                 } else {
                                     source
                                 }
-                            stmt.setInt(++i, heartRate?.avgBpm ?: 0)
-                            stmt.setInt(++i, heartRate?.maxBpm ?: 0)
+                            stmt.setInt(++i, heartRate.avgHrBpm)
+                            stmt.setInt(++i, heartRate.maxHrBpm)
                             stmt.setString(++i, hrSource)
                             stmt.setString(++i, HR_ALGORITHM_VERSION)
                             stmt.setString(++i, source)
@@ -344,10 +360,12 @@ class ActivityIngest(
         if (inserted != null) {
             // The analysis is derived data: the activity is valid even when it cannot be stored, and the next
             // read of it computes the analysis on the spot.
-            try {
-                analysisStore.save(UUID.fromString(inserted.id), analysis)
-            } catch (e: Exception) {
-                log.warn("could not store the analysis of activity {}: {}", inserted.id, e.javaClass.simpleName)
+            if (analysis != null) {
+                try {
+                    analysisStore.save(UUID.fromString(inserted.id), analysis)
+                } catch (e: Exception) {
+                    log.warn("could not store the analysis of activity {}: {}", inserted.id, e.javaClass.simpleName)
+                }
             }
             return IngestResult.Created(inserted)
         }

@@ -27,7 +27,9 @@ Meters of distance, milliseconds of time, meters of altitude, beats per minute.
   that carry the shape of the curve and drops the ones that only repeat it. The first and the last point are
   always kept.
 - The heart rate is decimated **stretch by stretch**: a stretch is a run of samples that are less than two seconds
-  apart. The sensor was silent between two stretches, and the decimation never mixes them.
+  apart. The sensor was silent between two stretches, and the decimation never mixes them. Every stretch keeps
+  its first and its last point (or the one point the budget leaves it), and what is left of the bound goes to the
+  stretches that have more samples.
 - Every point carries the **segment** it belongs to: the recording interval of the track (a change of segment is a
   pause) and the stretch of the heart rate (a change of segment is a dropout). The web app breaks the line there:
   a line across a pause or across a dropout would invent what was not measured.

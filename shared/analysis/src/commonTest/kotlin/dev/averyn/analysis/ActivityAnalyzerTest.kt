@@ -300,6 +300,24 @@ class ActivityAnalyzerTest {
     }
 
     @Test
+    fun anAltitudeThatWasNotMeasuredStaysAHole() {
+        // Ten samples, only three of them with an altitude.
+        val samples =
+            track(steps = 10, stepM = 3.0, altitude = { index -> if (index in listOf(2, 5, 8)) 100.0 else null })
+        val analysis = analyzeActivity(Sport.RUN, listOf(samples), emptyList(), totals(30.0, 9_000))
+
+        val elevation = assertNotNull(analysis.elevation)
+        // The coverage is the share of the samples that carried an altitude, not of the ones that inherited one.
+        assertEquals(30.0, elevation.coveragePercent, 0.001)
+        // The holes are holes: the profile does not invent an altitude between two measured ones.
+        assertEquals(10, analysis.series.elevationM.size)
+        assertEquals(3, analysis.series.elevationM.count { it != null })
+        assertNull(analysis.series.elevationM[0])
+        assertNotNull(analysis.series.elevationM[2])
+        assertNull(analysis.series.elevationM[4])
+    }
+
+    @Test
     fun theAnalysisDeclaresTheVersionOfEveryAlgorithm() {
         val analysis =
             analyzeActivity(

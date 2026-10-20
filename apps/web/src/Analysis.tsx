@@ -163,6 +163,16 @@ export function Analysis({
     metrics.push(['Heart rate coverage', formatCoverage(heart.coveragePercent)])
   }
 
+  // The charts are a picture; the numbers they draw are also a sentence, for the screen readers.
+  const elevationLabel = elevation
+    ? `Elevation profile: from ${formatElevation(elevation.minM)} to ${formatElevation(elevation.maxM)} over ` +
+      `${formatDistance(analysis.totals.distanceM)}, ${formatElevationDelta(elevation.gainM)} of climb.`
+    : 'Elevation profile.'
+  const heartLabel = heart
+    ? `Heart rate: ${formatHeartRate(heart.avgBpm)} on average, ${formatHeartRate(heart.maxBpm)} at most, ` +
+      `measured ${formatCoverage(heart.coveragePercent)} of the recording time.`
+    : 'Heart rate over the time.'
+
   return (
     <section aria-labelledby="analysis-heading" className="analysis">
       <h3 id="analysis-heading">Analysis</h3>
@@ -179,14 +189,14 @@ export function Analysis({
       {hasElevation && (
         <>
           <h4>Elevation</h4>
-          <Chart prepare={elevationPrepare} label="Elevation profile over the distance" />
+          <Chart prepare={elevationPrepare} label={elevationLabel} />
           <p className="small">Estimated from the altitude the samples carry, not from a digital elevation model.</p>
         </>
       )}
       {hasHeartRate && (
         <>
           <h4>Heart rate</h4>
-          <Chart prepare={heartRatePrepare} label="Heart rate over the time" />
+          <Chart prepare={heartRatePrepare} label={heartLabel} />
         </>
       )}
       {analysis.splits.length > 0 && (

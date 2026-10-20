@@ -30,14 +30,18 @@ per minute for the heart rate.
 - The **moving time** of a split is the sum of the legs of the split whose speed is at least 0.5 m/s (the same
   threshold as `time-v1`, see [moving-time.md](moving-time.md)). The **elapsed time** of a split is the wall time
   between its first and its last point, a pause inside it included.
+- The sum of the moving times of the splits is the moving time of the activity, up to the tail between the last
+  GPS sample and the end of the recording: `time-v1` counts that tail as moving (it is elapsed time that no leg
+  covers) and no split covers it either.
 - A **pause is never crossed by distance**: the samples of a recording interval start where the previous one
   ended, so a split that spans a pause holds the distance of both intervals and the time of the pause in its
   elapsed time.
 - The last split is **partial** when the activity ended before the next boundary. It is a split like the others,
   marked as partial, and it is not a best effort.
-- The climb and the descent of a split are the elevation changes that fall inside it (see
-  [elevation.md](elevation.md)). The heart rate of a split is the mean of the usable samples that fall inside its
-  time range, and it is null when there is none.
+- The climb and the descent of a split are the elevation changes that are counted in it (see
+  [elevation.md](elevation.md)): a climb is counted in the split where the threshold is crossed, so the climbs of
+  the splits add up to the climb of the activity. The heart rate of a split is the mean of the usable samples that
+  fall inside its time range, and it is null when there is none.
 
 The sum of the distances of the splits is the distance of the activity, up to the rounding of the interpolation.
 

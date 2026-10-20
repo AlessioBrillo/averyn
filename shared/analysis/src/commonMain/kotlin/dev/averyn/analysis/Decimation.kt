@@ -6,7 +6,8 @@ import kotlin.math.abs
  * The largest triangle three buckets decimation: it keeps the points that carry the shape of the curve and
  * drops the ones that only repeat it. The chart shows a bounded number of points, the numbers do not change.
  *
- * @return the indexes of the kept points, in order, the first and the last always among them.
+ * @return the indexes of the kept points, in order. The first and the last are among them when the budget is
+ *   at least two.
  */
 internal fun decimateLttb(
     xs: DoubleArray,
