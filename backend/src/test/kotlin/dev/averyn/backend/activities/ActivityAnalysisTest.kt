@@ -90,7 +90,10 @@ class ActivityAnalysisTest {
     }
 
     /** A straight run of [steps] samples 100 m apart, one every ten seconds: 1 100 m over two minutes. */
-    private fun record(steps: Int = 12): Pair<UUID, ByteArray> {
+    private fun record(
+        steps: Int = 12,
+        withAltitude: Boolean = true,
+    ): Pair<UUID, ByteArray> {
         val id = UUID.randomUUID()
         val recorder = ActivityRecorder(ActivityStore(Path(dir.toString())))
         recorder.start(id.toString(), Sport.RUN, 0, 1_700_000_000_000)
@@ -98,7 +101,16 @@ class ActivityAnalysisTest {
         val step = 100.0 / 111_195.08
         for (i in 0 until steps) {
             val t = i * 10_000L
-            recorder.onSample(LocationSample(1_700_000_000_000 + t, t, i * step, 8.0, 5.0, altitudeM = 100.0 + i))
+            recorder.onSample(
+                LocationSample(
+                    1_700_000_000_000 + t,
+                    t,
+                    i * step,
+                    8.0,
+                    5.0,
+                    altitudeM = if (withAltitude) 100.0 + i else null,
+                ),
+            )
         }
         val end = steps * 10_000L
         recorder.stop(end, 1_700_000_000_000 + end)
@@ -192,6 +204,26 @@ class ActivityAnalysisTest {
             assertEquals(12, analysis.series.distanceM.size)
         }
     }
+
+    @Test
+    fun anActivityWithoutAltitudeHasNoElevationAndTheSeriesKeepsTheHoles() =
+        app {
+            val (id, bytes) = record(withAltitude = false)
+            val created = upload(id, bytes)
+            val summary = json.decodeFromString(ActivitySummary.serializer(), created.bodyAsText())
+
+            val response = get("/v1/activities/${summary.id}/analysis") { bearerAuth(alice) }
+            assertEquals(HttpStatusCode.OK, response.status)
+            val analysis = json.decodeFromString(ActivityAnalysis.serializer(), response.bodyAsText())
+
+            // No altitude is not a flat activity: there is no elevation at all.
+            assertNull(analysis.elevation)
+            assertTrue(analysis.splits.isNotEmpty())
+            assertNull(analysis.splits.first().elevationGainM)
+            // The holes of the series survive the round trip through the database.
+            assertTrue(analysis.series.elevationM.all { it == null })
+            assertEquals(analysis.series.distanceM.size, analysis.series.elevationM.size)
+        }
 
     @Test
     fun theAnalysisIsOnlyForItsOwner() {
