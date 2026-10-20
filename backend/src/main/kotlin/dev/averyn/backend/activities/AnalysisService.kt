@@ -59,8 +59,9 @@ class AnalysisService(
             // A request does not wait: the caller is told to come back later, like for an upload.
             if (!slots.tryAcquire()) return AnalysisOutcome.Busy
             try {
-                val analysis = computeAndStore(activityId, activity.first, activity.second)
-                    ?: return AnalysisOutcome.Failed
+                val analysis =
+                    computeAndStore(activityId, activity.first, activity.second)
+                        ?: return AnalysisOutcome.Failed
                 AnalysisOutcome.Ready(analysis)
             } finally {
                 slots.release()

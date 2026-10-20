@@ -184,7 +184,10 @@ class ActivityAnalysisTest {
             assertEquals("recorded", elevation.source)
             // No heart-rate strap, no heart rate: not a heart rate of zero.
             assertNull(analysis.heartRate)
-            assertTrue(analysis.series.heartRate.bpm.isEmpty())
+            assertTrue(
+                analysis.series.heartRate.bpm
+                    .isEmpty(),
+            )
             // The series has one point per sample, and the pause of the file is a segment of its own.
             assertEquals(12, analysis.series.distanceM.size)
         }
