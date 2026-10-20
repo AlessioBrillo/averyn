@@ -15,7 +15,11 @@ internal fun decimateLttb(
 ): IntArray {
     val n = xs.size
     require(xs.size == ys.size) { "the two series must have the same length" }
-    if (threshold >= n || threshold < 3) return IntArray(n) { it }
+    if (threshold >= n) return IntArray(n) { it }
+    // Fewer than three points: the first and the last are the only ones that carry a shape.
+    if (threshold <= 0) return IntArray(0)
+    if (threshold == 1) return intArrayOf(0)
+    if (threshold == 2) return intArrayOf(0, n - 1)
     val kept = IntArray(threshold)
     val every = (n - 2).toDouble() / (threshold - 2)
     var anchor = 0

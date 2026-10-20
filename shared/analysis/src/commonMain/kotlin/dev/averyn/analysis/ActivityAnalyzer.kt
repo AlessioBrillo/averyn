@@ -379,6 +379,10 @@ private fun buildSeries(
 /**
  * The heart rate over time. The samples are grouped in stretches: where the sensor was silent for more than two
  * seconds the line breaks, because the gap is a dropout and not a flat heart rate.
+ *
+ * Each stretch is decimated on its own, so a dropout is never filled with the points of another stretch, and
+ * the whole series is decimated again when the stretches together are more than the bound: the number of points
+ * of the chart is a hard limit.
  */
 private fun buildHeartRateSeries(
     heartRate: List<HeartRateSample>,
@@ -415,7 +419,19 @@ private fun buildHeartRateSeries(
             segment.add(index)
         }
     }
-    return AnalysisHeartRateSeries(elapsedMs = elapsed, bpm = bpm, segment = segment)
+    if (elapsed.size <= MAX_HEART_RATE_POINTS) {
+        return AnalysisHeartRateSeries(elapsedMs = elapsed, bpm = bpm, segment = segment)
+    }
+    // More points than the bound: the stretches are decimated once more, all together. The stretch of every
+    // kept point travels with it, so the line still breaks where the sensor was silent.
+    val xs = DoubleArray(elapsed.size) { elapsed[it].toDouble() }
+    val ys = DoubleArray(bpm.size) { bpm[it].toDouble() }
+    val kept = decimateLttb(xs, ys, MAX_HEART_RATE_POINTS)
+    return AnalysisHeartRateSeries(
+        elapsedMs = kept.map { elapsed[it] },
+        bpm = kept.map { bpm[it] },
+        segment = kept.map { segment[it] },
+    )
 }
 
 /** The median of the altitude over a window of five points: one wrong altitude does not move the profile. */

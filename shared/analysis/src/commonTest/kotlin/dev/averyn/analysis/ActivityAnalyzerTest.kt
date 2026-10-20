@@ -272,6 +272,34 @@ class ActivityAnalyzerTest {
     }
 
     @Test
+    fun theHeartRateSeriesStaysBoundedWhenTheSensorDropsOut() {
+        // 600 stretches of ten samples, each one after a silence: more stretches than the bound has points.
+        val heartRate =
+            (0 until 600).flatMap { group ->
+                (0 until 10).map { index ->
+                    HeartRateSample(
+                        timeMs = START_MS + group * 20_000L + index * 1_000L,
+                        elapsedRealtimeMs = group * 20_000L + index * 1_000L,
+                        bpm = 130,
+                    )
+                }
+            }
+        val analysis =
+            analyzeActivity(
+                Sport.RUN,
+                listOf(track(steps = 10, stepM = 3.0)),
+                heartRate,
+                totals(30.0, 9_000),
+            )
+
+        val series = analysis.series.heartRate
+        assertTrue(series.bpm.size <= 1000, "the series had ${series.bpm.size} points")
+        // The first and the last sample of the activity are still there.
+        assertEquals(0L, series.elapsedMs.first())
+        assertEquals(599 * 20_000L + 9_000L, series.elapsedMs.last())
+    }
+
+    @Test
     fun theAnalysisDeclaresTheVersionOfEveryAlgorithm() {
         val analysis =
             analyzeActivity(

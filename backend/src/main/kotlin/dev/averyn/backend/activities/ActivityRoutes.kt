@@ -82,8 +82,8 @@ fun Application.activities(
     quotaBytes: Long = DEFAULT_USER_QUOTA_BYTES,
     requestsPerMinute: Int = DEFAULT_REQUESTS_PER_MINUTE,
     consentStore: ConsentStore = ConsentStore(db),
-    userData: UserData = UserData(db, raw),
     analysisService: AnalysisService = AnalysisService(db, raw),
+    userData: UserData = UserData(db, raw, analysisService = analysisService),
 ) {
     val ingest = ActivityIngest(db, raw, quotaBytes)
     install(RateLimit) {
