@@ -15,6 +15,7 @@ import software.amazon.awssdk.services.s3.model.NoSuchBucketException
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
 import software.amazon.awssdk.services.s3.model.ObjectIdentifier
 import java.net.URI
+import java.nio.file.Files
 import java.nio.file.Path
 
 /**
@@ -77,6 +78,18 @@ class RawObjectStore(
 
     /** The whole object. For recomputing derived data from the raw file (ADR-0016) and for tests. */
     fun get(key: String): ByteArray = s3.getObjectAsBytes { it.bucket(bucket).key(key) }.asByteArray()
+
+    /**
+     * The object written to [file], without holding it in memory: a stored activity can be tens of megabytes.
+     * @return the number of bytes written.
+     */
+    fun getToFile(
+        key: String,
+        file: Path,
+    ): Long {
+        s3.getObject({ it.bucket(bucket).key(key) }, file)
+        return Files.size(file)
+    }
 
     fun put(
         key: String,

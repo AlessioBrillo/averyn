@@ -239,6 +239,58 @@ class ImportTest {
         }
 
     @Test
+    fun theImportedActivityIsAnalysedLikeARecordedOne() =
+        app {
+            val created = json.parseToJsonElement(importGpx(twoSegments, "analysis").bodyAsText()).jsonObject
+            val id =
+                created
+                    .getValue("activity")
+                    .jsonObject
+                    .getValue("id")
+                    .jsonPrimitive.content
+
+            val response = get("/v1/activities/$id/analysis") { bearerAuth(token("analysis")) }
+            assertEquals(HttpStatusCode.OK, response.status)
+            val analysis = json.parseToJsonElement(response.bodyAsText()).jsonObject
+
+            // The file is short: one partial split, and it covers the whole track.
+            val splits = analysis.getValue("splits").jsonArray
+            assertEquals(1, splits.size)
+            val split = splits[0].jsonObject
+            assertEquals("true", split.getValue("partial").jsonPrimitive.content)
+            val distance =
+                split
+                    .getValue("endDistanceM")
+                    .jsonPrimitive.content
+                    .toDouble() -
+                    split
+                        .getValue("startDistanceM")
+                        .jsonPrimitive.content
+                        .toDouble()
+            val total =
+                analysis
+                    .getValue("totals")
+                    .jsonObject
+                    .getValue("distanceM")
+                    .jsonPrimitive.content
+                    .toDouble()
+            assertEquals(total, distance, 0.01)
+            // The file carries an altitude: the elevation is there, and the pause does not cross the track.
+            val elevation = analysis.getValue("elevation").jsonObject
+            assertEquals("recorded", elevation.getValue("source").jsonPrimitive.content)
+            val series = analysis.getValue("series").jsonObject
+            assertEquals(
+                2,
+                series
+                    .getValue("segment")
+                    .jsonArray
+                    .map { it.jsonPrimitive.content.toInt() }
+                    .distinct()
+                    .size,
+            )
+        }
+
+    @Test
     fun theSameFileIsImportedOnce() =
         app {
             val first = importGpx(twoSegments, "once")

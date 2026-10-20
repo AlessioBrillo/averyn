@@ -168,6 +168,33 @@ paths:
         "403": { description: The account was deleted (ADR-0017) }
         "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
         "404": { description: Not found, or not owned by the caller }
+  /v1/activities/{id}/analysis:
+    get:
+      summary: The analysis of the activity — the automatic splits, the elevation and the series (owner only; TDD-0009)
+      description: >
+        The analysis is computed by the shared code from the raw file the device uploaded, and it is stored with
+        the version of the algorithm that produced it. An activity stored before the analysis existed, or one
+        whose algorithms changed, is analysed the first time it is read: the first read can take a moment, and
+        the answer is stored for the next ones.
+      security: [{ oidc: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The analysis of the activity
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ActivityAnalysis" }
+        "400": { description: Malformed activity id }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted (ADR-0017) }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+        "404": { description: Not found, or not owned by the caller }
+        "500": { description: The analysis could not be computed; the activity itself is untouched }
+        "503": { description: Too many analyses in progress, retry after the Retry-After seconds }
   /v1/activities/{clientActivityId}/rr:
     put:
       summary: Upload the heart-rate sidecar of an activity (consent-gated, ADR-0021)
@@ -292,7 +319,8 @@ paths:
       description: >
         Entries: raw/{clientActivityId}.jsonl (byte-for-byte), original/{clientActivityId}.gpx (the file an
         imported activity was imported from), rr/{clientActivityId}.rr.jsonl (the heart-rate sidecar),
-        gpx/{clientActivityId}.gpx, consents.json and activities.json (summaries and skipped-line counts,
+        gpx/{clientActivityId}.gpx, analysis/{clientActivityId}.json (the splits, the elevation and the series
+        of the activity, TDD-0009), consents.json and activities.json (summaries and skipped-line counts,
         written last). Streamed.
       security: [{ oidc: [] }]
       responses:
@@ -323,7 +351,7 @@ components:
         mapStyleUrl: { type: string, format: uri, description: MapLibre style for the web basemap (deployment configuration) }
     ActivitySummary:
       type: object
-      required: [id, clientActivityId, sport, startedAt, finalState, distanceM, elapsedMs, movingMs, pausedMs, averageSpeedMps, qualityGrade, droppedRecords, metricsAlgorithmVersion, qualityAlgorithmVersion, visibility]
+      required: [id, clientActivityId, sport, startedAt, finalState, distanceM, elapsedMs, movingMs, pausedMs, stationaryMs, averageSpeedMps, qualityGrade, droppedRecords, metricsAlgorithmVersion, qualityAlgorithmVersion, visibility]
       properties:
         id: { type: string, format: uuid }
         clientActivityId: { type: string, format: uuid }
@@ -334,6 +362,7 @@ components:
         elapsedMs: { type: integer, format: int64 }
         movingMs: { type: integer, format: int64 }
         pausedMs: { type: integer, format: int64 }
+        stationaryMs: { type: integer, format: int64, description: "time-v1: the time the activity was recording and the user was not moving" }
         averageSpeedMps: { type: number, description: "speed-v1: distance over moving time; 0 while nothing moved" }
         paceSecPerKm: { type: [number, "null"], description: "speed-v1: 1000 / averageSpeedMps; null when the average speed is 0" }
         qualityGrade: { type: string, enum: [GOOD, FAIR, POOR, UNKNOWN], description: "UNKNOWN when the accuracy was never measured (an imported file, TDD-0008)" }
@@ -341,10 +370,116 @@ components:
         metricsAlgorithmVersion: { type: string, description: "Comma-separated, e.g. distance-v1,time-v1,speed-v1" }
         qualityAlgorithmVersion: { type: string }
         visibility: { type: string, enum: [private, followers, public, link] }
-        avgHrBpm: { type: integer, description: "hr-v1: mean heart rate over the recording; 0 when there is none" }
-        maxHrBpm: { type: integer, description: "hr-v1: maximum heart rate; 0 when there is none" }
+        avgHrBpm: { type: integer, description: "hr-v2: mean heart rate over the recording; 0 when there is none" }
+        maxHrBpm: { type: integer, description: "hr-v2: maximum heart rate; 0 when there is none" }
         hrSource: { type: string, description: "Which sensor produced the heart rate (ble-hr, none, ...)" }
+        hrAlgorithmVersion: { type: string, description: "The algorithm that computed the heart rate of this row" }
         source: { type: string, enum: [device, gpx, fit, tcx], description: "Where the activity comes from: recorded or imported (TDD-0008)" }
+    ActivityAnalysis:
+      type: object
+      required: [schemaVersion, algorithmVersions, splitLengthM, totals, splits, series]
+      properties:
+        schemaVersion: { type: integer, description: The shape of this document; a new shape is a new number }
+        algorithmVersions: { $ref: "#/components/schemas/AnalysisVersions" }
+        splitLengthM: { type: number, description: "The length of a split: 1000 m, 5000 m for a ride" }
+        totals: { $ref: "#/components/schemas/AnalysisTotals" }
+        elevation:
+          description: "Null when the activity carries no altitude at all"
+          oneOf:
+            - { $ref: "#/components/schemas/AnalysisElevation" }
+            - { type: "null" }
+        heartRate:
+          description: "Null when the activity has no heart rate"
+          oneOf:
+            - { $ref: "#/components/schemas/AnalysisHeartRate" }
+            - { type: "null" }
+        splits:
+          type: array
+          items: { $ref: "#/components/schemas/AnalysisSplit" }
+        series: { $ref: "#/components/schemas/AnalysisSeries" }
+    AnalysisVersions:
+      type: object
+      required: [splits, elevation, series, heartRate]
+      properties:
+        splits: { type: string, description: "e.g. splits-v1" }
+        elevation: { type: string, description: "e.g. elevation-v1" }
+        series: { type: string, description: "e.g. series-v1" }
+        heartRate: { type: string, description: "e.g. hr-v2" }
+    AnalysisTotals:
+      type: object
+      required: [distanceM, elapsedMs, movingMs, pausedMs, stationaryMs]
+      properties:
+        distanceM: { type: number }
+        elapsedMs: { type: integer, format: int64 }
+        movingMs: { type: integer, format: int64 }
+        pausedMs: { type: integer, format: int64 }
+        stationaryMs: { type: integer, format: int64 }
+    AnalysisElevation:
+      type: object
+      required: [source, gainM, lossM, minM, maxM, avgM, coveragePercent]
+      properties:
+        source: { type: string, enum: [recorded], description: "The altitude comes from the samples, not from a digital elevation model" }
+        gainM: { type: number, description: "elevation-v1: the climb, with a 3 m threshold" }
+        lossM: { type: number, description: "elevation-v1: the descent, with a 3 m threshold" }
+        minM: { type: number }
+        maxM: { type: number }
+        avgM: { type: number }
+        coveragePercent: { type: number, description: "The share of the samples that carried an altitude" }
+    AnalysisHeartRate:
+      type: object
+      required: [minBpm, avgBpm, maxBpm, coveragePercent, dropouts, artifacts]
+      properties:
+        minBpm: { type: integer }
+        avgBpm: { type: integer }
+        maxBpm: { type: integer }
+        coveragePercent: { type: number, description: "hr-v2: the share of the recording time, the pauses excluded" }
+        dropouts: { type: integer, description: "The expected 1 s intervals of the recording time without a usable sample" }
+        artifacts: { type: integer, description: "The samples outside the plausible range: counted, never used" }
+    AnalysisSplit:
+      type: object
+      required: [index, startDistanceM, endDistanceM, elapsedMs, movingMs, avgSpeedMps, partial]
+      properties:
+        index: { type: integer, description: "The 1-based position of the split" }
+        startDistanceM: { type: number }
+        endDistanceM: { type: number }
+        elapsedMs: { type: integer, format: int64, description: "The wall time of the split, a pause inside it included" }
+        movingMs: { type: integer, format: int64, description: "The time the user was moving: the pace is computed on this" }
+        avgSpeedMps: { type: number }
+        elevationGainM: { type: [number, "null"], description: "Null when the activity has no altitude" }
+        elevationLossM: { type: [number, "null"], description: "Null when the activity has no altitude" }
+        avgHrBpm: { type: [integer, "null"], description: "Null when the split has no heart-rate sample" }
+        partial: { type: boolean, description: "True for the last split when the activity ended before the next boundary" }
+    AnalysisSeries:
+      type: object
+      required: [distanceM, elevationM, elapsedMs, segment, heartRate]
+      description: "A bounded, decimated drawing of the activity: the numbers to trust are the splits and the totals"
+      properties:
+        distanceM:
+          type: array
+          items: { type: number }
+        elevationM:
+          type: array
+          items: { type: [number, "null"], description: "Null where the altitude is not known" }
+        elapsedMs:
+          type: array
+          items: { type: integer, format: int64 }
+        segment:
+          type: array
+          items: { type: integer, description: "The recording interval of the point: a change of number is a pause" }
+        heartRate: { $ref: "#/components/schemas/AnalysisHeartRateSeries" }
+    AnalysisHeartRateSeries:
+      type: object
+      required: [elapsedMs, bpm, segment]
+      properties:
+        elapsedMs:
+          type: array
+          items: { type: integer, format: int64 }
+        bpm:
+          type: array
+          items: { type: integer }
+        segment:
+          type: array
+          items: { type: integer, description: "The stretch of the point: a change of number is a dropout of the sensor" }
     ImportResponse:
       type: object
       required: [activity, import]

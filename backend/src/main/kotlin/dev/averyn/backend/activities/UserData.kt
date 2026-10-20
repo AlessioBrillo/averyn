@@ -1,5 +1,6 @@
 package dev.averyn.backend.activities
 
+import dev.averyn.analysis.ActivityAnalysis
 import dev.averyn.backend.consent.ConsentGrant
 import dev.averyn.backend.consent.ConsentStore
 import dev.averyn.backend.storage.RawObjectStore
@@ -38,6 +39,7 @@ class UserData(
     private val db: DataSource,
     private val raw: RawObjectStore,
     private val consentStore: ConsentStore = ConsentStore(db),
+    private val analysisService: AnalysisService = AnalysisService(db, raw),
 ) {
     /**
      * Removes one activity and remembers its id so that a device retry gets `410`. Returns false when the caller
@@ -244,6 +246,16 @@ class UserData(
                     zip.closeEntry()
                     Files.delete(gpx)
                     Files.delete(rawFile)
+
+                    // The analysis of the activity: the splits, the elevation and the series, computed when it
+                    // is missing. It is derived data, so a failure here does not hold back the raw file.
+                    analysisService
+                        .analysisOrNull(ownerId, UUID.fromString(summary.id))
+                        ?.let { analysis ->
+                            zip.putNextEntry(ZipEntry("analysis/$id.json"))
+                            zip.write(Json.encodeToString(ActivityAnalysis.serializer(), analysis).toByteArray())
+                            zip.closeEntry()
+                        }
 
                     exported += ExportedActivity(summary, skipped)
                 }
