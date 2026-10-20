@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GeoJSONSourceSpecification, Map as MapLibreMap } from 'maplibre-gl'
-import { ApiError, deleteActivity, getActivity, getTrack } from './api'
-import type { ActivitySummary, Track } from './api'
+import { Analysis } from './Analysis'
+import { ApiError, deleteActivity, getActivity, getAnalysis, getTrack } from './api'
+import type { ActivityAnalysis, ActivitySummary, Track } from './api'
 import { formatDistance, formatDuration, formatQuality, formatRate } from './format'
 
 type Loaded = { activity: ActivitySummary; track: Track }
@@ -21,6 +22,9 @@ export function ActivityDetail({
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [error, setError] = useState<'notFound' | 'failed' | null>(null)
   const [deleteFailed, setDeleteFailed] = useState(false)
+  // The analysis is a separate call: an activity without an analysis is still an activity.
+  const [analysis, setAnalysis] = useState<ActivityAnalysis | null>(null)
+  const [analysisFailed, setAnalysisFailed] = useState(false)
   const mapElement = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -32,6 +36,21 @@ export function ActivityDetail({
         if (e instanceof ApiError && e.status === 401) onUnauthorized()
         else setError(e instanceof ApiError && e.status === 404 ? 'notFound' : 'failed')
       })
+    return () => {
+      current = false
+    }
+  }, [id, onUnauthorized])
+
+  useEffect(() => {
+    let current = true
+    getAnalysis(id).then(
+      (value) => current && setAnalysis(value),
+      (e: unknown) => {
+        if (!current) return
+        if (e instanceof ApiError && e.status === 401) onUnauthorized()
+        else setAnalysisFailed(true)
+      },
+    )
     return () => {
       current = false
     }
@@ -110,6 +129,7 @@ export function ActivityDetail({
     ['Moving time', formatDuration(activity.movingMs)],
     ['Elapsed time', formatDuration(activity.elapsedMs)],
     ['Paused', formatDuration(activity.pausedMs)],
+    ['Stationary', formatDuration(activity.stationaryMs)],
     [rate.label, rate.value],
     ['GPS quality', formatQuality(activity.qualityGrade)],
     ['Unreadable records', String(activity.droppedRecords)],
@@ -138,6 +158,10 @@ export function ActivityDetail({
           </div>
         ))}
       </dl>
+      {analysis && <Analysis analysis={analysis} sport={activity.sport} />}
+      {analysisFailed && (
+        <p role="status">The analysis of this activity is not available. The numbers above are still there.</p>
+      )}
       <p className="small">
         Algorithms: {activity.metricsAlgorithmVersion}, {activity.qualityAlgorithmVersion}
       </p>

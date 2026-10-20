@@ -41,3 +41,24 @@ export function formatRate(
 export function formatQuality(grade: string): string {
   return grade === 'UNKNOWN' ? 'unknown (accuracy not measured)' : grade.toLowerCase()
 }
+
+/** An altitude, in metres. */
+export function formatElevation(meters: number): string {
+  return `${Math.round(meters)} m`
+}
+
+/** A climb, with its sign: "+120 m", "-35 m". */
+export function formatElevationDelta(meters: number): string {
+  const sign = meters > 0 ? '+' : meters < 0 ? '−' : ''
+  return `${sign}${Math.round(Math.abs(meters))} m`
+}
+
+/** A share, in percent: "98%". */
+export function formatCoverage(percent: number): string {
+  return `${Math.round(percent)}%`
+}
+
+/** A heart rate, in beats per minute. */
+export function formatHeartRate(bpm: number): string {
+  return `${Math.round(bpm)} bpm`
+}
