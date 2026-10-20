@@ -24,7 +24,7 @@ MVP-2's first sensor channel: BLE heart rate (standard GATT Heart Rate service `
 | R2 | HR samples are written to the activity's `.jsonl` as `HR` records (formatVersion 2), flushed before use (F3), counted as `HR_RECORD` in diagnostics; unknown record kinds on old readers are losses, never crashes. |
 | R3 | RR intervals from `0x2A37`'s flag-gated field go to the sidecar `<id>.rr.jsonl` only while a valid `rr_recording` consent is cached; fail-closed (no consent → no RR), HR bpm unaffected. |
 | R4 | Revoking `rr_recording` stops RR recording immediately, cancels the pending sidecar upload, and deletes already-uploaded RR objects via a `deleted_rr` tombstone (`410` on re-upload); the activity file is untouched. |
-| R5 | Server recomputes `hr-v1` from the `.jsonl` `HR` records and stores `avg_hr_bpm`, `max_hr_bpm`, `hr_source`; `rr-quality-v1` artifacts (implausible RR, missed beats, median deviation, coverage) are stored with the sidecar's metadata. |
+| R5 | Server recomputes `hr-v2` from the `.jsonl` `HR` records and stores `avg_hr_bpm`, `max_hr_bpm`, `hr_source`; `rr-quality-v1` artifacts (implausible RR, missed beats, median deviation, coverage) are stored with the sidecar's metadata. |
 | R6 | `replay`/`recover` stay correct with `HR` records interleaved: `live == recovered == replayed` including HR diagnostics counts; `formatVersion 1` files read by a v2 reader and vice versa. |
 | R7 | Web detail page shows HR; history/export include consents and RR sidecars. |
 | R8 | Device matrix rows S15 (HR vs reference strap) and S16 (consent revocation mid-activity). |

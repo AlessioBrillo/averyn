@@ -14,7 +14,7 @@ A signed-in user sees their uploaded activities in the web app: a list, and a de
 
 **Goals:** sign in from the browser against the bundled IdP; list own activities; show one activity with map and basic metrics; one origin for the web app and the API, so no CORS; self-hosters choose the basemap.
 
-**Non-goals (v1):** splits, charts, elevation (MVP-2); imperial units and user preferences; editing visibility; public or link-shared pages; deletion and export; a CSP and TLS example (self-host hardening slice); offline web; server-side rendering.
+**Non-goals (v1):** splits, charts, elevation (MVP-2, landed with [TDD-0009](TDD-0009-activity-analysis.md)); imperial units and user preferences; editing visibility; public or link-shared pages; deletion and export; a CSP and TLS example (self-host hardening slice); offline web; server-side rendering.
 
 ## 3. Functional requirements
 

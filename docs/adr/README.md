@@ -23,5 +23,9 @@ Format: [MADR](https://adr.github.io/madr/)-style, see [template](template.md). 
 | [0017](0017-data-deletion-and-retention.md) | Data deletion and retention: hard delete, tombstones, account data only | accepted |
 | [0018](0018-tls-edge-and-public-issuer.md) | TLS at one edge proxy, a fixed public issuer, internal OIDC discovery | accepted |
 | [0019](0019-crash-reporting-and-tester-builds.md) | Crash reporting and tester builds: store vitals only, no SDK | accepted |
+| [0020](0020-sensor-raw-channels.md) | Sensor raw channels: `formatVersion`, HR in-file, RR sidecar | accepted |
+| [0021](0021-consent-health-data.md) | Consent for health-adjacent sensor data: server-authoritative, fail-closed device cache | accepted |
+| [0022](0022-imported-activity-provenance.md) | Imported activities: the original file is kept next to the canonical one | accepted |
+| [0023](0023-activity-analysis-storage.md) | Activity analysis: derived data in PostgreSQL, the raw file stays the source | accepted |
 
 Open decisions still without an ADR are tracked in [product/roadmap.md](../product/roadmap.md#open-decisions).
