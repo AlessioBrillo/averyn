@@ -78,7 +78,7 @@ class ActivityAnalysisStore(
             conn
                 .prepareStatement(
                     "SELECT splits_version, elevation_version, series_version, series_schema_version, " +
-                        "hr_algorithm_version FROM activity_analyses WHERE activity_id = ?",
+                        "hr_algorithm_version, metrics_algorithm_version FROM activity_analyses WHERE activity_id = ?",
                 ).use { stmt ->
                     stmt.setObject(1, activityId)
                     stmt.executeQuery().use { rs ->
@@ -87,7 +87,10 @@ class ActivityAnalysisStore(
                             rs.getString(2) == ELEVATION_ALGORITHM_VERSION &&
                             rs.getString(3) == SERIES_ALGORITHM_VERSION &&
                             rs.getInt(4) == ANALYSIS_SCHEMA_VERSION &&
-                            rs.getString(5) == HR_ALGORITHM_VERSION
+                            rs.getString(5) == HR_ALGORITHM_VERSION &&
+                            // The splits are built on the metrics of the activity: a change of those makes them
+                            // outdated too.
+                            rs.getString(6) == METRICS_ALGORITHM_VERSION
                     }
                 }
         }
@@ -107,18 +110,19 @@ class ActivityAnalysisStore(
                     .prepareStatement(
                         """
                         INSERT INTO activity_analyses (activity_id, splits_version, elevation_version,
-                            series_version, series_schema_version, split_length_m, elevation_source,
-                            elevation_gain_m, elevation_loss_m, min_altitude_m, max_altitude_m, avg_altitude_m,
-                            elevation_coverage_percent, hr_algorithm_version, hr_min_bpm, hr_avg_bpm, hr_max_bpm,
-                            hr_coverage_percent, hr_dropouts, hr_artifacts, series)
-                        VALUES (?::uuid, ?::text, ?::text, ?::text, ?::integer, ?::double precision, ?::text,
-                            ?::double precision, ?::double precision, ?::double precision, ?::double precision,
-                            ?::double precision, ?::double precision, ?::text, ?::integer, ?::integer, ?::integer,
-                            ?::double precision, ?::integer, ?::integer, ?::jsonb)
+                            series_version, metrics_algorithm_version, series_schema_version, split_length_m,
+                            elevation_source, elevation_gain_m, elevation_loss_m, min_altitude_m, max_altitude_m,
+                            avg_altitude_m, elevation_coverage_percent, hr_algorithm_version, hr_min_bpm,
+                            hr_avg_bpm, hr_max_bpm, hr_coverage_percent, hr_dropouts, hr_artifacts, series)
+                        VALUES (?::uuid, ?::text, ?::text, ?::text, ?::text, ?::integer, ?::double precision,
+                            ?::text, ?::double precision, ?::double precision, ?::double precision,
+                            ?::double precision, ?::double precision, ?::double precision, ?::text, ?::integer,
+                            ?::integer, ?::integer, ?::double precision, ?::integer, ?::integer, ?::jsonb)
                         ON CONFLICT (activity_id) DO UPDATE SET
                             splits_version = EXCLUDED.splits_version,
                             elevation_version = EXCLUDED.elevation_version,
                             series_version = EXCLUDED.series_version,
+                            metrics_algorithm_version = EXCLUDED.metrics_algorithm_version,
                             series_schema_version = EXCLUDED.series_schema_version,
                             split_length_m = EXCLUDED.split_length_m,
                             elevation_source = EXCLUDED.elevation_source,
@@ -144,6 +148,7 @@ class ActivityAnalysisStore(
                         stmt.setString(++i, analysis.algorithmVersions.splits)
                         stmt.setString(++i, analysis.algorithmVersions.elevation)
                         stmt.setString(++i, analysis.algorithmVersions.series)
+                        stmt.setString(++i, METRICS_ALGORITHM_VERSION)
                         stmt.setInt(++i, analysis.schemaVersion)
                         stmt.setDouble(++i, analysis.splitLengthM)
                         val elevation = analysis.elevation
@@ -288,52 +293,52 @@ class ActivityAnalysisStore(
 
     private fun ResultSet.toAnalysis(): ActivityAnalysis {
         val elevation =
-            getString(6)?.let {
+            getString(7)?.let {
                 AnalysisElevation(
                     source = it,
-                    gainM = getDouble(7),
-                    lossM = getDouble(8),
-                    minM = getDouble(9),
-                    maxM = getDouble(10),
-                    avgM = getDouble(11),
-                    coveragePercent = getDouble(12),
+                    gainM = getDouble(8),
+                    lossM = getDouble(9),
+                    minM = getDouble(10),
+                    maxM = getDouble(11),
+                    avgM = getDouble(12),
+                    coveragePercent = getDouble(13),
                 )
             }
         // The heart rate is there when its numbers are: a null minimum means the activity has no heart rate
         // at all, which is not a heart rate of zero.
         val heartRate =
-            getIntOrNull(14)?.let {
+            getIntOrNull(15)?.let {
                 AnalysisHeartRate(
                     minBpm = it,
-                    avgBpm = getInt(15),
-                    maxBpm = getInt(16),
-                    coveragePercent = getDouble(17),
-                    dropouts = getInt(18),
-                    artifacts = getInt(19),
+                    avgBpm = getInt(16),
+                    maxBpm = getInt(17),
+                    coveragePercent = getDouble(18),
+                    dropouts = getInt(19),
+                    artifacts = getInt(20),
                 )
             }
         return ActivityAnalysis(
-            schemaVersion = getInt(4),
+            schemaVersion = getInt(5),
             algorithmVersions =
                 AnalysisAlgorithmVersions(
                     splits = getString(1),
                     elevation = getString(2),
                     series = getString(3),
-                    heartRate = getString(13),
+                    heartRate = getString(14),
                 ),
-            splitLengthM = getDouble(5),
+            splitLengthM = getDouble(6),
             totals =
                 AnalysisTotals(
-                    distanceM = getDouble(21),
-                    elapsedMs = getLong(22),
-                    movingMs = getLong(23),
-                    pausedMs = getLong(24),
-                    stationaryMs = getLong(25),
+                    distanceM = getDouble(22),
+                    elapsedMs = getLong(23),
+                    movingMs = getLong(24),
+                    pausedMs = getLong(25),
+                    stationaryMs = getLong(26),
                 ),
             elevation = elevation,
             heartRate = heartRate,
             splits = emptyList(),
-            series = json.decodeFromString(AnalysisSeries.serializer(), getString(20)),
+            series = json.decodeFromString(AnalysisSeries.serializer(), getString(21)),
         )
     }
 
@@ -358,16 +363,16 @@ class ActivityAnalysisStore(
     private companion object {
         /**
          * The analysis and the totals of the activity, in the order [toAnalysis] reads them:
-         * 1-3 the algorithm versions, 4 the schema version, 5 the split length, 6-12 the elevation,
-         * 13-19 the heart rate, 20 the series, 21-25 the totals.
+         * 1-3 the algorithm versions, 4 the version of the metrics, 5 the schema version, 6 the split length,
+         * 7-13 the elevation, 14-20 the heart rate, 21 the series, 22-26 the totals.
          */
         const val ANALYSIS_COLUMNS =
-            "an.splits_version, an.elevation_version, an.series_version, an.series_schema_version, " +
-                "an.split_length_m, an.elevation_source, an.elevation_gain_m, an.elevation_loss_m, " +
-                "an.min_altitude_m, an.max_altitude_m, an.avg_altitude_m, an.elevation_coverage_percent, " +
-                "an.hr_algorithm_version, an.hr_min_bpm, an.hr_avg_bpm, an.hr_max_bpm, an.hr_coverage_percent, " +
-                "an.hr_dropouts, an.hr_artifacts, an.series, a.distance_m, a.elapsed_ms, a.moving_ms, " +
-                "a.paused_ms, a.stationary_ms"
+            "an.splits_version, an.elevation_version, an.series_version, an.metrics_algorithm_version, " +
+                "an.series_schema_version, an.split_length_m, an.elevation_source, an.elevation_gain_m, " +
+                "an.elevation_loss_m, an.min_altitude_m, an.max_altitude_m, an.avg_altitude_m, " +
+                "an.elevation_coverage_percent, an.hr_algorithm_version, an.hr_min_bpm, an.hr_avg_bpm, " +
+                "an.hr_max_bpm, an.hr_coverage_percent, an.hr_dropouts, an.hr_artifacts, an.series, " +
+                "a.distance_m, a.elapsed_ms, a.moving_ms, a.paused_ms, a.stationary_ms"
     }
 }
 

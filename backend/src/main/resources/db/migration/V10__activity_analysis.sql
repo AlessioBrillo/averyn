@@ -17,6 +17,9 @@ CREATE TABLE activity_analyses (
     splits_version             text NOT NULL,
     elevation_version          text NOT NULL,
     series_version             text NOT NULL,
+    -- The metrics the splits are built on (the accepted samples and the moving time): a change of those
+    -- makes the stored splits outdated too.
+    metrics_algorithm_version  text NOT NULL,
     series_schema_version      integer NOT NULL,
     split_length_m             double precision NOT NULL,
     elevation_source           text,
