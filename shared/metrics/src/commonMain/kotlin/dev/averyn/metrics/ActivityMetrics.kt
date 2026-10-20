@@ -8,7 +8,11 @@ const val TIME_ALGORITHM_VERSION = "time-v1"
 /** Algorithm version for current/average speed and pace. Spec: docs/metrics/speed-and-pace.md. */
 const val SPEED_ALGORITHM_VERSION = "speed-v1"
 
-private const val STATIONARY_SPEED_MPS = 0.5
+/**
+ * Below this speed a leg is stationary, not moving (docs/metrics/moving-time.md). The same threshold is used
+ * by the analysis: the split times and the activity's moving time must agree.
+ */
+const val STATIONARY_SPEED_MPS = 0.5
 
 data class ActivitySnapshot(
     val distanceM: Double,

@@ -1,7 +1,7 @@
 # Metric: Heart rate
 
 - **Status:** draft
-- **Current algorithm version:** `hr-v1`
+- **Current algorithm version:** `hr-v2`
 
 ## Definition
 
@@ -13,15 +13,20 @@ Beats per minute (bpm), integer platform values.
 
 ## Formula / method
 
-`hr-v1`: over every `HR` record whose enclosing state interval is `RECORDING` (same ordering rule as `distance-v1`, docs/metrics/distance.md):
+`hr-v2`: over every `HR` record whose enclosing state interval is `RECORDING` (same ordering rule as `distance-v1`, docs/metrics/distance.md):
 
 - `avg_hr_bpm = mean(bpm)` over qualifying samples; `0` when none
 - `max_hr_bpm = max(bpm)`; `0` when none
 - `min_hr_bpm = min(bpm)`; `0` when none
-- `hr_coverage_percent = 100 × qualifying samples / expected samples` (expected = activity duration in seconds at the configured 1 s sampling interval; capped at 100)
+- `hr_coverage_percent = 100 × qualifying samples / expected samples` (expected = the time the activity was **recording**, the pauses excluded, at the configured 1 s sampling interval; capped at 100)
 - `hr_dropouts = expected samples − qualifying samples` (floored at 0)
 
 No interpolation across gaps; no smoothing; zones/time-in-zone require a user profile (deferred increment).
+
+`hr-v1` counted the **elapsed** time of the activity in the denominator, pauses included, while the samples of a
+paused activity are not recorded: a strap that worked perfectly through a half-hour pause was reported as half
+covered. `hr-v2` counts the recording time, so the coverage says what it means. The average, the maximum and the
+minimum do not change between the two versions.
 
 ## Required inputs
 
@@ -40,6 +45,7 @@ A signal gap becomes missing samples in coverage/dropouts, exactly like a GPS ga
 | Version | Date | Change |
 |---|---|---|
 | hr-v1 | 2026-10-18 | Initial: avg/max/min, coverage, dropouts, no interpolation |
+| hr-v2 | 2026-10-20 | The coverage is over the recording time, the pauses excluded. The average, the maximum and the minimum do not change. |
 
 ## Reliability level
 
@@ -51,4 +57,4 @@ No motion-artifact filtering in v1; chest-strap vs optical not distinguished; zo
 
 ## Reference tests
 
-`shared/metrics` unit tests with synthetic HR fixtures; `shared/tracking`'s `FixtureConformanceTest` does not cover HR (no GPX fixture for HR — HR is never in GPX output).
+`shared/sensors`'s unit tests with synthetic HR fixtures; `shared/analysis`'s `ActivityAnalyzerTest` (the coverage over the recording time, the pauses excluded); `shared/tracking`'s `FixtureConformanceTest` does not cover HR (no GPX fixture for HR — HR is never in GPX output).

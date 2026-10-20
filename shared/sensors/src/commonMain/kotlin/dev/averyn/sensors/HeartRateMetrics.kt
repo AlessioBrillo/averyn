@@ -3,14 +3,14 @@ package dev.averyn.sensors
 import kotlin.math.roundToInt
 
 /** Algorithm version for heart-rate metrics. Spec: docs/metrics/heart-rate.md. */
-const val HR_ALGORITHM_VERSION = "hr-v1"
+const val HR_ALGORITHM_VERSION = "hr-v2"
 
 private const val EXPECTED_INTERVAL_MS = 1000L
 private const val BPM_MIN = 1
 private const val BPM_MAX = 240
 
 /**
- * Result of `hr-v1` over the heart-rate samples of one activity (docs/metrics/heart-rate.md).
+ * Result of `hr-v2` over the heart-rate samples of one activity (docs/metrics/heart-rate.md).
  * No interpolation, no smoothing, no zones: zones need a user profile (deferred increment).
  */
 data class HeartRateSnapshot(
@@ -39,8 +39,15 @@ class HeartRateMetrics {
         if (bpm in BPM_MIN..BPM_MAX) values += bpm else artifactCount++
     }
 
-    fun snapshot(durationMs: Long): HeartRateSnapshot {
-        val expected = expectedIntervals(durationMs)
+    /**
+     * The metrics of the activity.
+     *
+     * [recordingMs] is the time the activity was recording, **the pauses excluded** (`hr-v2`): the samples of
+     * a paused activity are not recorded either, so counting the pause in the denominator would report a strap
+     * that worked perfectly as a half-covered one.
+     */
+    fun snapshot(recordingMs: Long): HeartRateSnapshot {
+        val expected = expectedIntervals(recordingMs)
         if (values.isEmpty()) {
             return HeartRateSnapshot(0, 0, 0, 0.0, expected.toInt(), artifactCount)
         }
@@ -55,6 +62,6 @@ class HeartRateMetrics {
         )
     }
 
-    private fun expectedIntervals(durationMs: Long): Long =
-        (durationMs + EXPECTED_INTERVAL_MS - 1) / EXPECTED_INTERVAL_MS
+    private fun expectedIntervals(recordingMs: Long): Long =
+        (recordingMs + EXPECTED_INTERVAL_MS - 1) / EXPECTED_INTERVAL_MS
 }
