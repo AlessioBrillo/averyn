@@ -137,6 +137,8 @@ class ActivityAnalysisStore(
                         stmt.setDoubleOrNull(++i, elevation?.avgM)
                         stmt.setDoubleOrNull(++i, elevation?.coveragePercent)
                         val heart = analysis.heartRate
+                        // The version is always there: it is the version the analysis was computed with. The
+                        // numbers of the heart rate are null when the activity has no heart rate at all.
                         stmt.setString(++i, analysis.algorithmVersions.heartRate)
                         stmt.setIntOrNull(++i, heart?.minBpm)
                         stmt.setDoubleOrNull(++i, heart?.coveragePercent)
@@ -277,10 +279,12 @@ class ActivityAnalysisStore(
                     coveragePercent = getDouble(12),
                 )
             }
+        // The heart rate is there when its numbers are: a null minimum means the activity has no heart rate
+        // at all, which is not a heart rate of zero.
         val heartRate =
-            getString(13)?.let {
+            getIntOrNull(14)?.let {
                 AnalysisHeartRate(
-                    minBpm = getInt(14),
+                    minBpm = it,
                     avgBpm = getInt(24),
                     maxBpm = getInt(25),
                     coveragePercent = getDouble(15),

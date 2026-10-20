@@ -50,26 +50,26 @@ class AnalysisService(
     fun analysisFor(
         ownerId: UUID,
         activityId: UUID,
-    ): AnalysisOutcome {
-        val activity = activityOf(ownerId, activityId) ?: return AnalysisOutcome.NotFound
-        val stored = analysisStore.find(ownerId, activityId)
-        if (stored != null && analysisStore.isCurrent(activityId)) return AnalysisOutcome.Ready(stored)
-
-        // A request does not wait: the caller is told to come back later, like for an upload.
-        if (!slots.tryAcquire()) return AnalysisOutcome.Busy
+    ): AnalysisOutcome =
         try {
-            val analysis =
-                computeAndStore(activityId, activity.first, activity.second)
+            val activity = activityOf(ownerId, activityId) ?: return AnalysisOutcome.NotFound
+            val stored = analysisStore.find(ownerId, activityId)
+            if (stored != null && analysisStore.isCurrent(activityId)) return AnalysisOutcome.Ready(stored)
+
+            // A request does not wait: the caller is told to come back later, like for an upload.
+            if (!slots.tryAcquire()) return AnalysisOutcome.Busy
+            try {
+                val analysis = computeAndStore(activityId, activity.first, activity.second)
                     ?: return AnalysisOutcome.Failed
-            return AnalysisOutcome.Ready(analysis)
+                AnalysisOutcome.Ready(analysis)
+            } finally {
+                slots.release()
+            }
         } catch (e: Exception) {
             // Never the coordinates, never the file: what failed and which activity it was.
             log.warn("could not analyse activity {}: {}", activityId, e.javaClass.simpleName)
-            return AnalysisOutcome.Failed
-        } finally {
-            slots.release()
+            AnalysisOutcome.Failed
         }
-    }
 
     /**
      * The analysis of the activity, whatever its state. Used by the export, which must be complete: it waits for
@@ -78,20 +78,22 @@ class AnalysisService(
     fun analysisOrNull(
         ownerId: UUID,
         activityId: UUID,
-    ): ActivityAnalysis? {
-        val activity = activityOf(ownerId, activityId) ?: return null
-        val stored = analysisStore.find(ownerId, activityId)
-        if (stored != null && analysisStore.isCurrent(activityId)) return stored
-        slots.acquire()
+    ): ActivityAnalysis? =
         try {
-            return computeAndStore(activityId, activity.first, activity.second)
+            val activity = activityOf(ownerId, activityId) ?: return null
+            val stored = analysisStore.find(ownerId, activityId)
+            if (stored != null && analysisStore.isCurrent(activityId)) return stored
+            slots.acquire()
+            try {
+                computeAndStore(activityId, activity.first, activity.second)
+            } finally {
+                slots.release()
+            }
         } catch (e: Exception) {
+            // The export of an account must not break because of one analysis.
             log.warn("could not analyse activity {}: {}", activityId, e.javaClass.simpleName)
-            return null
-        } finally {
-            slots.release()
+            null
         }
-    }
 
     /** The activity of the owner: its client id and the key of its raw file. */
     private fun activityOf(

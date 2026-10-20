@@ -35,6 +35,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -181,6 +182,9 @@ class ActivityAnalysisTest {
             // The altitude of the samples is measured, so the elevation is there.
             val elevation = assertNotNull(analysis.elevation)
             assertEquals("recorded", elevation.source)
+            // No heart-rate strap, no heart rate: not a heart rate of zero.
+            assertNull(analysis.heartRate)
+            assertTrue(analysis.series.heartRate.bpm.isEmpty())
             // The series has one point per sample, and the pause of the file is a segment of its own.
             assertEquals(12, analysis.series.distanceM.size)
         }
