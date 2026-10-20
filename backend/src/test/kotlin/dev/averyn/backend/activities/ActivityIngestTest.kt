@@ -610,11 +610,26 @@ class ActivityIngestTest {
             assertEquals("application/zip", response.contentType()?.withoutParameters().toString())
             assertTrue(response.headers[HttpHeaders.ContentDisposition]!!.contains("averyn-export.zip"))
             val files = unzip(response.readRawBytes())
-            assertEquals(6, files.size, files.keys.toString()) // 2 raw + 2 gpx + consents.json + activities.json
+            // 2 raw + 2 gpx + 2 analysis + consents.json + activities.json
+            assertEquals(8, files.size, files.keys.toString())
             for (rec in listOf(a, b)) {
                 assertContentEquals(rec.bytes, files.getValue("raw/${rec.id}.jsonl"))
                 val gpx = String(files.getValue("gpx/${rec.id}.gpx"))
                 assertTrue(gpx.contains("<gpx") && gpx.contains("<trkpt"), gpx.take(200))
+                // The analysis of the activity is part of what the user has stored (TDD-0009).
+                val analysis =
+                    json
+                        .parseToJsonElement(String(files.getValue("analysis/${rec.id}.json")))
+                        .jsonObject
+                assertTrue(analysis.getValue("splits").jsonArray.isNotEmpty())
+                assertEquals(
+                    "splits-v1",
+                    analysis
+                        .getValue("algorithmVersions")
+                        .jsonObject
+                        .getValue("splits")
+                        .jsonPrimitive.content,
+                )
             }
             val manifest = json.parseToJsonElement(String(files.getValue("activities.json"))).jsonObject
             val listed = manifest.getValue("activities").jsonArray
@@ -688,6 +703,59 @@ class ActivityIngestTest {
             // And even with the consent again, the data that was deleted does not come back.
             post("/v1/consents/${ConsentScope.RR_RECORDING}") { bearerAuth(alice) }
             assertEquals(HttpStatusCode.Gone, uploadRr().status)
+        }
+
+    @Test
+    fun aSidecarThatReplacesAnotherOneLeavesNoObjectBehind() =
+        app {
+            val rec = record()
+            upload(rec.id, rec.bytes)
+            post("/v1/consents/${ConsentScope.RR_RECORDING}") { bearerAuth(alice) }
+            val first =
+                "META {\"activityId\":\"${rec.id}\",\"sport\":\"RUN\",\"startedAtMs\":0,\"formatVersion\":1}\n" +
+                    "RR {\"timeMs\":1000,\"elapsedRealtimeMs\":1000,\"rrMs\":857}\n"
+            val second =
+                "META {\"activityId\":\"${rec.id}\",\"sport\":\"RUN\",\"startedAtMs\":0,\"formatVersion\":1}\n" +
+                    "RR {\"timeMs\":2000,\"elapsedRealtimeMs\":2000,\"rrMs\":900}\n"
+            val uploadSidecar: suspend (String) -> HttpResponse = { body ->
+                put("/v1/activities/${rec.id}/rr") {
+                    bearerAuth(alice)
+                    setBody(body.toByteArray())
+                }
+            }
+
+            assertEquals(HttpStatusCode.Created, uploadSidecar(first).status)
+            val firstKey = scalar("SELECT rr_object_key FROM activities WHERE client_activity_id = '${rec.id}'")
+            assertTrue(rawFileExists(firstKey as String))
+
+            // A second sidecar replaces the first one: the old object goes, or it would stay in the store
+            // with no way to delete it.
+            assertEquals(HttpStatusCode.Created, uploadSidecar(second).status)
+            val secondKey = scalar("SELECT rr_object_key FROM activities WHERE client_activity_id = '${rec.id}'")
+            assertTrue(firstKey != secondKey)
+            assertTrue(!rawFileExists(firstKey as String), "the replaced sidecar must be gone")
+            assertTrue(rawFileExists(secondKey as String))
+        }
+
+    @Test
+    fun theSidecarCountsAgainstTheStorageQuota() =
+        app {
+            val rec = record()
+            upload(rec.id, rec.bytes)
+            post("/v1/consents/${ConsentScope.RR_RECORDING}") { bearerAuth(alice) }
+            val sidecar =
+                "META {\"activityId\":\"${rec.id}\",\"sport\":\"RUN\",\"startedAtMs\":0,\"formatVersion\":1}\n" +
+                    "RR {\"timeMs\":1000,\"elapsedRealtimeMs\":1000,\"rrMs\":857}\n"
+
+            // The quota holds the activity but not the sidecar: the sidecar is a file of the user like the others.
+            app(quotaBytes = rec.bytes.size.toLong()) {
+                val response =
+                    put("/v1/activities/${rec.id}/rr") {
+                        bearerAuth(alice)
+                        setBody(sidecar.toByteArray())
+                    }
+                assertEquals(HttpStatusCode.InsufficientStorage, response.status)
+            }
         }
 
     @Test

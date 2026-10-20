@@ -18,13 +18,21 @@ dependencyResolutionManagement {
 
 // The backend Docker image has no Android SDK and no Xcode: it builds with AVERYN_BACKEND_ONLY=1.
 if (System.getenv("AVERYN_BACKEND_ONLY") != null) {
-    include(":shared:domain", ":shared:tracking", ":shared:metrics", ":shared:sensors", ":backend")
+    include(
+        ":shared:domain",
+        ":shared:tracking",
+        ":shared:metrics",
+        ":shared:sensors",
+        ":shared:analysis",
+        ":backend",
+    )
 } else {
     include(
         ":shared:domain",
         ":shared:tracking",
         ":shared:metrics",
         ":shared:sensors",
+        ":shared:analysis",
         ":shared:sync",
         ":shared:ios-umbrella",
         ":backend",

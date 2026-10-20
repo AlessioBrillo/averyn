@@ -1,10 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GeoJSONSourceSpecification, Map as MapLibreMap } from 'maplibre-gl'
-import { ApiError, deleteActivity, getActivity, getTrack } from './api'
-import type { ActivitySummary, Track } from './api'
+import { Analysis } from './Analysis'
+import { ApiError, deleteActivity, getActivity, getAnalysis, getTrack } from './api'
+import type { ActivityAnalysis, ActivitySummary, Track } from './api'
 import { formatDistance, formatDuration, formatQuality, formatRate } from './format'
 
 type Loaded = { activity: ActivitySummary; track: Track }
+
+/**
+ * The analysis of the activity that is open. It carries the id of the activity it belongs to: the state of a
+ * previous activity must never show up under the next one.
+ */
+type AnalysisState =
+  | { id: string; value: ActivityAnalysis }
+  | { id: string; error: 'busy' | 'unavailable' }
 
 /** `onUnauthorized` must be stable (useCallback): it is an effect dependency. */
 export function ActivityDetail({
@@ -21,6 +30,8 @@ export function ActivityDetail({
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [error, setError] = useState<'notFound' | 'failed' | null>(null)
   const [deleteFailed, setDeleteFailed] = useState(false)
+  // The analysis is a separate call: an activity without an analysis is still an activity.
+  const [analysisState, setAnalysisState] = useState<AnalysisState | null>(null)
   const mapElement = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -36,6 +47,39 @@ export function ActivityDetail({
       current = false
     }
   }, [id, onUnauthorized])
+
+  useEffect(() => {
+    let current = true
+    // The analysis of an activity that was stored before the analysis existed is computed by the server when it
+    // is read, and the server can be busy: a 503 means "come back", not "there is no analysis".
+    const load = (attempt: number) => {
+      getAnalysis(id).then(
+        (value) => current && setAnalysisState({ id, value }),
+        (e: unknown) => {
+          if (!current) return
+          if (e instanceof ApiError && e.status === 401) {
+            onUnauthorized()
+            return
+          }
+          if (e instanceof ApiError && e.status === 503 && attempt < 2) {
+            window.setTimeout(() => current && load(attempt + 1), 2000)
+            return
+          }
+          setAnalysisState({
+            id,
+            error: e instanceof ApiError && e.status === 503 ? 'busy' : 'unavailable',
+          })
+        },
+      )
+    }
+    load(0)
+    return () => {
+      current = false
+    }
+  }, [id, onUnauthorized])
+
+  const analysis = analysisState?.id === id && 'value' in analysisState ? analysisState.value : null
+  const analysisError = analysisState?.id === id && 'error' in analysisState ? analysisState.error : null
 
   const line = loaded?.track.geometry
   useEffect(() => {
@@ -110,6 +154,7 @@ export function ActivityDetail({
     ['Moving time', formatDuration(activity.movingMs)],
     ['Elapsed time', formatDuration(activity.elapsedMs)],
     ['Paused', formatDuration(activity.pausedMs)],
+    ['Stationary', formatDuration(activity.stationaryMs)],
     [rate.label, rate.value],
     ['GPS quality', formatQuality(activity.qualityGrade)],
     ['Unreadable records', String(activity.droppedRecords)],
@@ -138,6 +183,15 @@ export function ActivityDetail({
           </div>
         ))}
       </dl>
+      {analysis && <Analysis analysis={analysis} sport={activity.sport} />}
+      {analysisError === 'busy' && (
+        <p role="status">
+          The server is busy: the analysis of this activity is being prepared. Reload in a moment.
+        </p>
+      )}
+      {analysisError === 'unavailable' && (
+        <p role="status">The analysis of this activity is not available. The numbers above are still there.</p>
+      )}
       <p className="small">
         Algorithms: {activity.metricsAlgorithmVersion}, {activity.qualityAlgorithmVersion}
       </p>

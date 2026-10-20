@@ -1,14 +1,15 @@
 package dev.averyn.backend.activities
 
+import dev.averyn.analysis.ActivityAnalysis
 import dev.averyn.backend.storage.RawObjectStore
 import dev.averyn.domain.ActivityState
 import dev.averyn.domain.LocationSample
 import dev.averyn.metrics.DISTANCE_ALGORITHM_VERSION
 import dev.averyn.metrics.SPEED_ALGORITHM_VERSION
 import dev.averyn.metrics.TIME_ALGORITHM_VERSION
+import dev.averyn.sensors.HR_ALGORITHM_VERSION
 import dev.averyn.sensors.HeartRateMetrics
 import dev.averyn.sensors.HeartRateSample
-import dev.averyn.sensors.HeartRateSnapshot
 import dev.averyn.tracking.ActivityMetadata
 import dev.averyn.tracking.ActivityStore
 import dev.averyn.tracking.ReplayResult
@@ -16,6 +17,7 @@ import dev.averyn.tracking.SUPPORTED_FORMAT_VERSIONS
 import dev.averyn.tracking.replay
 import kotlinx.io.files.Path
 import kotlinx.serialization.Serializable
+import org.slf4j.LoggerFactory
 import java.nio.file.Files
 import java.sql.ResultSet
 import java.sql.SQLException
@@ -34,6 +36,7 @@ const val GPX_CONTENT_TYPE = "application/gpx+xml"
 /** Metric algorithms an activity row was computed with (a change of any of them is a new version, never an edit). */
 const val METRICS_ALGORITHM_VERSION = "$DISTANCE_ALGORITHM_VERSION,$TIME_ALGORITHM_VERSION,$SPEED_ALGORITHM_VERSION"
 
+/** One activity in the activity list and in the detail page. */
 @Serializable
 data class ActivitySummary(
     val id: String,
@@ -45,6 +48,8 @@ data class ActivitySummary(
     val elapsedMs: Long,
     val movingMs: Long,
     val pausedMs: Long,
+    /** The time the activity was recording but the user was not moving (`time-v1`). */
+    val stationaryMs: Long,
     val averageSpeedMps: Double,
     /** null when the average speed is 0 (speed-v1). */
     val paceSecPerKm: Double?,
@@ -53,12 +58,14 @@ data class ActivitySummary(
     val metricsAlgorithmVersion: String,
     val qualityAlgorithmVersion: String,
     val visibility: String,
-    /** hr-v1 (docs/metrics/heart-rate.md): mean HR over RECORDING-state samples, 0 when none. */
+    /** hr-v2 (docs/metrics/heart-rate.md): mean HR over RECORDING-state samples, 0 when none. */
     val avgHrBpm: Int,
-    /** hr-v1: max HR over RECORDING-state samples, 0 when none. */
+    /** hr-v2: max HR over RECORDING-state samples, 0 when none. */
     val maxHrBpm: Int,
     /** Which sensor produced the HR values (`ble-hr`, `none`, …). */
     val hrSource: String,
+    /** The algorithm that computed the heart rate: the numbers of two versions are never mixed silently. */
+    val hrAlgorithmVersion: String,
     /** Where the activity comes from: `device` (recorded) or `gpx` (imported, TDD-0008). */
     val source: String = "device",
 )
@@ -126,7 +133,10 @@ class ActivityIngest(
     private val db: DataSource,
     private val raw: RawObjectStore,
     private val quotaBytes: Long = DEFAULT_USER_QUOTA_BYTES,
+    private val analysisStore: ActivityAnalysisStore = ActivityAnalysisStore(db),
 ) {
+    private val log = LoggerFactory.getLogger(ActivityIngest::class.java)
+
     /**
      * @param file the uploaded body, already on disk and named `<clientActivityId>.jsonl` (the store layout)
      * @param sha256 lower-case hex SHA-256 of that file
@@ -183,12 +193,10 @@ class ActivityIngest(
         val store = ActivityStore(Path(file.parent.toString()))
         val activityId = file.name.removeSuffix(".jsonl")
         // One line per continuous recording interval: a pause ends a line, it does not bridge it.
-        val trackSegments = mutableListOf<List<String>>()
-        var currentSegment: MutableList<String>? = null
+        val input = AnalysisInput()
         val metadata: ActivityMetadata
         val replayed: ReplayResult
         val hrSamples = mutableListOf<Int>()
-        var hrSnapshot: HeartRateSnapshot? = null
         try {
             metadata = store.metadataOf(activityId) ?: return IngestResult.Invalid("no activity metadata line")
             if (!metadata.activityId.equals(clientActivityId.toString(), ignoreCase = true)) {
@@ -201,20 +209,13 @@ class ActivityIngest(
                 replay(
                     store,
                     activityId,
-                    onMeteredSample = { sample: LocationSample ->
-                        currentSegment?.add("${sample.longitude} ${sample.latitude}")
-                    },
-                    onRecordingStart = { currentSegment = mutableListOf() },
-                    onRecordingEnd = {
-                        currentSegment?.let { segment -> if (segment.size >= 2) trackSegments.add(segment.toList()) }
-                        currentSegment = null
-                    },
+                    onMeteredSample = { sample: LocationSample -> input.onSample(sample) },
+                    onRecordingStart = { input.onRecordingStart() },
                     onHeartRate = { sample: HeartRateSample, state: ActivityState ->
+                        input.onHeartRate(sample, state)
                         if (state == ActivityState.RECORDING) hrSamples += sample.bpm
                     },
                 )
-            val hr = HeartRateMetrics().apply { hrSamples.forEach { onSample(it) } }
-            hrSnapshot = hr.snapshot(replayed.metrics.snapshot().elapsedMs)
         } catch (e: RuntimeException) {
             // A line that parses but violates the model (e.g. latitude out of range) is an invalid upload.
             return IngestResult.Invalid("unreadable activity file")
@@ -222,6 +223,24 @@ class ActivityIngest(
         if (replayed.lastState != ActivityState.COMPLETED && replayed.lastState != ActivityState.FAILED) {
             return IngestResult.Invalid("activity is not finished (state ${replayed.lastState})")
         }
+
+        // The analysis comes out of the same replay: the splits, the elevation and the series cost no second
+        // pass over the file. It is derived data, though: a failure of the analyzer never loses the upload,
+        // and the analysis is computed the first time the activity is read.
+        val analysis: ActivityAnalysis? =
+            try {
+                input.build(replayed.metadata.sport, replayed.metrics.snapshot())
+            } catch (e: RuntimeException) {
+                log.warn("could not analyse the activity {}: {}", clientActivityId, e.javaClass.simpleName)
+                null
+            }
+        // The heart rate of the summary: the same samples, counted by the same metric, whatever the analyzer
+        // did. The coverage is over the recording time, the pauses excluded (hr-v2).
+        val metrics = replayed.metrics.snapshot()
+        val heartRate =
+            HeartRateMetrics()
+                .apply { hrSamples.forEach { onSample(it) } }
+                .snapshot((metrics.elapsedMs - metrics.pausedMs).coerceAtLeast(0))
 
         // Object first, row second: a failed insert leaves an orphan object, never a row without its raw file.
         // The hash in the key means two different uploads of one id can never overwrite each other's bytes.
@@ -242,6 +261,10 @@ class ActivityIngest(
 
         val snapshot = replayed.metrics.snapshot()
         val quality = replayed.quality.build()
+        val trackSegments =
+            input.recordedSegments
+                .filter { it.size >= 2 }
+                .map { segment -> segment.map { "${it.longitude} ${it.latitude}" } }
         val wkt =
             if (trackSegments.isEmpty()) {
                 null
@@ -259,15 +282,15 @@ class ActivityIngest(
                             """
                             INSERT INTO activities (owner_id, client_activity_id, sport, started_at, final_state,
                                 raw_object_key, raw_sha256, raw_size_bytes, distance_m, elapsed_ms, moving_ms, paused_ms,
-                                average_speed_mps, pace_sec_per_km, quality_grade, dropped_records,
+                                stationary_ms, average_speed_mps, pace_sec_per_km, quality_grade, dropped_records,
                                 metrics_algorithm_version, quality_algorithm_version, track,
-                                avg_hr_bpm, max_hr_bpm, hr_source,
+                                avg_hr_bpm, max_hr_bpm, hr_source, hr_algorithm_version,
                                 source, source_object_key, source_sha256, source_size_bytes, import_version, imported_at)
                             SELECT ?::uuid, ?::uuid, ?::text, ?::timestamptz, ?::text, ?::text, ?::text, ?::bigint,
-                                ?::double precision, ?::bigint, ?::bigint, ?::bigint, ?::double precision,
+                                ?::double precision, ?::bigint, ?::bigint, ?::bigint, ?::bigint, ?::double precision,
                                 ?::double precision, ?::text, ?::integer, ?::text, ?::text,
                                 ST_GeomFromText(?::text, 4326),
-                                ?::integer, ?::integer, ?::text,
+                                ?::integer, ?::integer, ?::text, ?::text,
                                 ?::text, ?::text, ?::text, ?::bigint, ?::text, ?::timestamptz
                             WHERE NOT EXISTS (SELECT 1 FROM users WHERE id = ?::uuid AND deleted_at IS NOT NULL)
                                 AND NOT EXISTS (
@@ -291,6 +314,7 @@ class ActivityIngest(
                             stmt.setLong(++i, snapshot.elapsedMs)
                             stmt.setLong(++i, snapshot.movingMs)
                             stmt.setLong(++i, snapshot.pausedMs)
+                            stmt.setLong(++i, snapshot.stationaryMs)
                             stmt.setDouble(++i, snapshot.averageSpeedMps)
                             stmt.setObject(++i, snapshot.paceSecPerKm, java.sql.Types.DOUBLE)
                             stmt.setString(++i, quality.grade.name)
@@ -308,9 +332,10 @@ class ActivityIngest(
                                 } else {
                                     source
                                 }
-                            stmt.setInt(++i, hrSnapshot.avgHrBpm)
-                            stmt.setInt(++i, hrSnapshot.maxHrBpm)
+                            stmt.setInt(++i, heartRate.avgHrBpm)
+                            stmt.setInt(++i, heartRate.maxHrBpm)
                             stmt.setString(++i, hrSource)
+                            stmt.setString(++i, HR_ALGORITHM_VERSION)
                             stmt.setString(++i, source)
                             stmt.setString(++i, sourceKey)
                             stmt.setString(++i, originalSha256)
@@ -332,7 +357,18 @@ class ActivityIngest(
                 sourceKey?.let { raw.delete(it) }
                 return IngestResult.Existing(winner)
             }
-        if (inserted != null) return IngestResult.Created(inserted)
+        if (inserted != null) {
+            // The analysis is derived data: the activity is valid even when it cannot be stored, and the next
+            // read of it computes the analysis on the spot.
+            if (analysis != null) {
+                try {
+                    analysisStore.save(UUID.fromString(inserted.id), analysis)
+                } catch (e: Exception) {
+                    log.warn("could not store the analysis of activity {}: {}", inserted.id, e.javaClass.simpleName)
+                }
+            }
+            return IngestResult.Created(inserted)
+        }
         // No row back: either a concurrent upload of this id won the race between our check and our insert, or the
         // account/activity was deleted meanwhile and the insert refused. In the second case the object just stored
         // can never be referenced by a row, so it goes (an identical concurrent upload would have been `existing`).
@@ -350,11 +386,43 @@ class ActivityIngest(
             }
         }
 
+    /**
+     * The sidecar of the activity, if it has one: its key and its size. A sidecar that replaces another one leaves
+     * the old object behind, and the old size must not be counted twice against the quota.
+     */
+    fun rrSidecar(
+        ownerId: UUID,
+        clientActivityId: UUID,
+    ): Pair<String, Long>? =
+        db.connection.use { conn ->
+            conn
+                .prepareStatement(
+                    "SELECT rr_object_key, rr_size_bytes FROM activities " +
+                        "WHERE owner_id = ? AND client_activity_id = ? AND rr_object_key IS NOT NULL",
+                ).use { stmt ->
+                    stmt.setObject(1, ownerId)
+                    stmt.setObject(2, clientActivityId)
+                    stmt.executeQuery().use { rs ->
+                        if (!rs.next()) {
+                            null
+                        } else {
+                            rs.getString(1) to rs.getLong(2)
+                        }
+                    }
+                }
+        }
+
+    /**
+     * The bytes the owner stores: every canonical file, every imported original, every sidecar. The sidecar
+     * counts: it is a file of the user like the others, and leaving it out of the check let an owner store
+     * more than the quota through the heart-rate channel.
+     */
     private fun storedBytes(ownerId: UUID): Long =
         db.connection.use { conn ->
             conn
                 .prepareStatement(
-                    "SELECT coalesce(sum(raw_size_bytes + coalesce(source_size_bytes, 0)), 0) FROM activities WHERE owner_id = ?",
+                    "SELECT coalesce(sum(raw_size_bytes + coalesce(source_size_bytes, 0) " +
+                        "+ coalesce(rr_size_bytes, 0)), 0) FROM activities WHERE owner_id = ?",
                 ).use {
                     it.setObject(1, ownerId)
                     it.executeQuery().use { rs -> if (rs.next()) rs.getLong(1) else 0 }
@@ -564,8 +632,9 @@ class ActivityIngest(
 
 internal const val SUMMARY_COLUMNS =
     "id, client_activity_id, sport, started_at, final_state, distance_m, elapsed_ms, moving_ms, paused_ms, " +
-        "average_speed_mps, pace_sec_per_km, quality_grade, dropped_records, metrics_algorithm_version, " +
-        "quality_algorithm_version, visibility, avg_hr_bpm, max_hr_bpm, hr_source, source"
+        "stationary_ms, average_speed_mps, pace_sec_per_km, quality_grade, dropped_records, " +
+        "metrics_algorithm_version, quality_algorithm_version, visibility, avg_hr_bpm, max_hr_bpm, hr_source, " +
+        "hr_algorithm_version, source"
 
 internal fun ResultSet.toSummary(columnOffset: Int = 0): ActivitySummary {
     var i = columnOffset
@@ -579,6 +648,7 @@ internal fun ResultSet.toSummary(columnOffset: Int = 0): ActivitySummary {
         elapsedMs = getLong(++i),
         movingMs = getLong(++i),
         pausedMs = getLong(++i),
+        stationaryMs = getLong(++i),
         averageSpeedMps = getDouble(++i),
         paceSecPerKm = getDouble(++i).takeUnless { wasNull() },
         qualityGrade = getString(++i),
@@ -589,6 +659,7 @@ internal fun ResultSet.toSummary(columnOffset: Int = 0): ActivitySummary {
         avgHrBpm = getInt(++i),
         maxHrBpm = getInt(++i),
         hrSource = getString(++i),
+        hrAlgorithmVersion = getString(++i),
         source = getString(++i),
     )
 }

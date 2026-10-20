@@ -19,7 +19,7 @@ Counts and percentages; RR values in ms.
 - `rr_implausible` — intervals `< 300 ms` or `> 2000 ms` (physiologically impossible at rest or in exercise)
 - `rr_missed` — gaps larger than 2 s against the expected 1 s grid (a beat the strap did not report)
 - `rr_median_deviation_pct` — share of intervals deviating more than 25 % from the rolling local median (window 30 s)
-- `rr_coverage_percent = 100 × rr_count / expected intervals` (expected = activity duration in seconds)
+- `rr_coverage_percent = 100 × rr_count / expected intervals` (expected = the time the activity was **recording**, the pauses excluded; the activity duration would report a strap that worked perfectly through a long pause as half covered — the same correction `hr-v2` made for the heart rate)
 - `rr_artifacts = rr_implausible + rr_missed` (also reported per-1000 intervals)
 
 No interpolation; no score; no medical claim (wellness framing, ADR-0013).

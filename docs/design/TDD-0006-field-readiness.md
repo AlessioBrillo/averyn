@@ -105,7 +105,7 @@ Additive over `diagnostics-v1`; `formatVersion` becomes 2.
 | `droppedInputs` | by reason: `NO_ACTIVE_ACTIVITY`, `INVALID_SAMPLE`, plus the store losses |
 | `DeviceInfo` | manufacturer, hardware model (`utsname` on iOS), OS, app version, **build/commit**, permission level (precise/approximate, always/when-in-use), power-saver on, battery-optimisation exempt (Android). Every field is passed explicitly by the native caller (Swift cannot see Kotlin default arguments) |
 
-A FAILED activity also gets a report (the `ponytail:` in `ActivityRecorder.fail`).
+A FAILED activity has no diagnostics report: `ActivityRecorder.fail` has no `CompletedActivity` to attach one to, and the counters of a failed run are only in the file (a `ponytail:` in `ActivityRecorder.fail` says so). A report for a failed run is needed only when the history view shows one.
 
 ### 5.6 History and export (R8)
 

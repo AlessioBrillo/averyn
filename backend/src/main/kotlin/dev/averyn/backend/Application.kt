@@ -1,5 +1,6 @@
 package dev.averyn.backend
 
+import dev.averyn.backend.activities.AnalysisService
 import dev.averyn.backend.activities.DEFAULT_REQUESTS_PER_MINUTE
 import dev.averyn.backend.activities.DEFAULT_USER_QUOTA_BYTES
 import dev.averyn.backend.activities.UserData
@@ -47,7 +48,10 @@ fun Application.module() {
     clientConfig(oidc, mapStyleUrl)
     val quotaBytes =
         cfg.propertyOrNull("averyn.limits.quotaBytes")?.getString()?.toLong() ?: DEFAULT_USER_QUOTA_BYTES
-    val userData = UserData(db, raw)
+    // One analysis service for the whole process: it holds the slots that limit how many activities are
+    // analysed at the same time.
+    val analysisService = AnalysisService(db, raw)
+    val userData = UserData(db, raw, analysisService = analysisService)
     val consentStore =
         consent(db) { ownerId, scope ->
             // Revoking the recording consent really deletes the data it covers (ADR-0021).
@@ -62,6 +66,7 @@ fun Application.module() {
                 ?: DEFAULT_REQUESTS_PER_MINUTE,
         consentStore = consentStore,
         userData = userData,
+        analysisService = analysisService,
     )
     imports(db, raw, quotaBytes = quotaBytes)
 }

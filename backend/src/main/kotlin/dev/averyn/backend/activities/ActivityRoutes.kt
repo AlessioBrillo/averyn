@@ -82,7 +82,8 @@ fun Application.activities(
     quotaBytes: Long = DEFAULT_USER_QUOTA_BYTES,
     requestsPerMinute: Int = DEFAULT_REQUESTS_PER_MINUTE,
     consentStore: ConsentStore = ConsentStore(db),
-    userData: UserData = UserData(db, raw),
+    analysisService: AnalysisService = AnalysisService(db, raw),
+    userData: UserData = UserData(db, raw, analysisService = analysisService),
 ) {
     val ingest = ActivityIngest(db, raw, quotaBytes)
     install(RateLimit) {
@@ -225,10 +226,11 @@ fun Application.activities(
                                     )
                                     return@withContext
                                 }
-                                if (withContext(Dispatchers.IO) {
-                                        ingest.storedBytesOf(owner) + Files.size(file) > quotaBytes
-                                    }
-                                ) {
+                                // A sidecar that replaces another one: the old one is not stored twice, and its
+                                // size is not counted twice against the quota.
+                                val previous = ingest.rrSidecar(owner, clientId)
+                                val stored = ingest.storedBytesOf(owner) - (previous?.second ?: 0L)
+                                if (stored + Files.size(file) > quotaBytes) {
                                     call.respond(
                                         HttpStatusCode.InsufficientStorage,
                                         errorBody("storage quota exceeded"),
@@ -245,6 +247,11 @@ fun Application.activities(
                                     raw.delete(key)
                                     call.respond(HttpStatusCode.NotFound, errorBody("the activity does not exist"))
                                     return@withContext
+                                }
+                                // The old sidecar is not the one the row points at anymore: it goes, or it would
+                                // stay in the store forever with no way to delete it.
+                                previous?.first?.takeIf { it != key }?.let { old ->
+                                    runCatching { raw.delete(old) }
                                 }
                                 call.respond(HttpStatusCode.Created)
                             } finally {
@@ -298,6 +305,28 @@ fun Application.activities(
                             // Not yours and not existing look identical (S5): never reveal that someone else's id is real.
                             ?: return@get call.respond(HttpStatusCode.NotFound, errorBody("not found"))
                     call.respond(summary)
+                }
+
+                // The analysis of the activity: the automatic splits, the elevation and the series (TDD-0009).
+                // It is computed when it is missing or when the algorithms changed, and it is stored.
+                get("/v1/activities/{id}/analysis") {
+                    val id =
+                        call.parameters["id"]?.toUuidOrNull()
+                            ?: return@get call.respond(HttpStatusCode.BadRequest, errorBody("malformed activity id"))
+                    val owner = call.owner(db) ?: return@get
+                    when (val outcome = withContext(Dispatchers.IO) { analysisService.analysisFor(owner, id) }) {
+                        is AnalysisOutcome.Ready -> call.respond(outcome.analysis)
+                        AnalysisOutcome.NotFound -> call.respond(HttpStatusCode.NotFound, errorBody("not found"))
+                        AnalysisOutcome.Busy -> {
+                            call.response.header(HttpHeaders.RetryAfter, "5")
+                            call.respond(HttpStatusCode.ServiceUnavailable, errorBody("busy, retry later"))
+                        }
+                        AnalysisOutcome.Failed ->
+                            call.respond(
+                                HttpStatusCode.InternalServerError,
+                                errorBody("the analysis could not be computed"),
+                            )
+                    }
                 }
 
                 delete("/v1/activities/{id}") {

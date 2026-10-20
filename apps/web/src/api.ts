@@ -17,6 +17,8 @@ export interface ActivitySummary {
   elapsedMs: number
   movingMs: number
   pausedMs: number
+  /** The time the activity was recording but the user was not moving. */
+  stationaryMs: number
   averageSpeedMps: number
   paceSecPerKm: number | null
   /** `UNKNOWN` when the activity has no measured accuracy (an imported file, TDD-0008). */
@@ -28,8 +30,88 @@ export interface ActivitySummary {
   avgHrBpm: number
   maxHrBpm: number
   hrSource: string
+  /** The algorithm that computed the heart rate. */
+  hrAlgorithmVersion: string
   /** `device` (recorded) or `gpx` (imported, TDD-0008). */
   source: string
+}
+
+/** Which algorithm produced which number of the analysis (TDD-0009). */
+export interface AnalysisVersions {
+  splits: string
+  elevation: string
+  series: string
+  heartRate: string
+}
+
+export interface AnalysisTotals {
+  distanceM: number
+  elapsedMs: number
+  movingMs: number
+  pausedMs: number
+  stationaryMs: number
+}
+
+/** The elevation of the activity; null when the activity has no altitude at all. */
+export interface AnalysisElevation {
+  source: string
+  gainM: number
+  lossM: number
+  minM: number
+  maxM: number
+  avgM: number
+  coveragePercent: number
+}
+
+/** The heart rate of the activity; null when there was no heart rate. */
+export interface AnalysisHeartRate {
+  minBpm: number
+  avgBpm: number
+  maxBpm: number
+  coveragePercent: number
+  dropouts: number
+  artifacts: number
+}
+
+/** One automatic split. */
+export interface AnalysisSplit {
+  index: number
+  startDistanceM: number
+  endDistanceM: number
+  elapsedMs: number
+  movingMs: number
+  avgSpeedMps: number
+  elevationGainM: number | null
+  elevationLossM: number | null
+  avgHrBpm: number | null
+  partial: boolean
+}
+
+/** The display series: a bounded, decimated view of the track, the elevation and the heart rate. */
+export interface AnalysisSeries {
+  distanceM: number[]
+  elevationM: (number | null)[]
+  elapsedMs: number[]
+  /** The recording interval of each point: a change of number is a pause. */
+  segment: number[]
+  heartRate: {
+    elapsedMs: number[]
+    bpm: number[]
+    /** The stretch of samples of each point: a change of number is a dropout of the sensor. */
+    segment: number[]
+  }
+}
+
+/** Everything the analysis of one activity holds (TDD-0009). */
+export interface ActivityAnalysis {
+  schemaVersion: number
+  algorithmVersions: AnalysisVersions
+  splitLengthM: number
+  totals: AnalysisTotals
+  elevation: AnalysisElevation | null
+  heartRate: AnalysisHeartRate | null
+  splits: AnalysisSplit[]
+  series: AnalysisSeries
 }
 
 export interface ActivityPage {
@@ -125,6 +207,13 @@ export function listActivities(cursor?: string): Promise<ActivityPage> {
 export const getActivity = (id: string) => get<ActivitySummary>(`/v1/activities/${encodeURIComponent(id)}`)
 
 export const getTrack = (id: string) => get<Track>(`/v1/activities/${encodeURIComponent(id)}/track`)
+
+/**
+ * The analysis of the activity: the automatic splits, the elevation and the series (TDD-0009). The server
+ * computes it when it is missing, so the first read of an old activity can take a moment.
+ */
+export const getAnalysis = (id: string) =>
+  get<ActivityAnalysis>(`/v1/activities/${encodeURIComponent(id)}/analysis`)
 
 /**
  * Imports a GPX file as an activity (TDD-0008). The file is sent as it is; the server parses it, keeps it and

@@ -30,7 +30,7 @@ The console is at `http://IDP_HOST:IDP_PORT/ui/console`, login name `admin@zitad
 
 ## Web app
 
-The `web` service serves the web app at `http://localhost:8082` (`WEB_PORT`) and forwards `/v1/*` to the backend, so the browser talks to one origin. Sign in with a user created in the IdP console; the list shows synced activities and each opens with its track and basic metrics ([TDD-0003](../design/TDD-0003-web-activity-view.md)).
+The `web` service serves the web app at `http://localhost:8082` (`WEB_PORT`) and forwards `/v1/*` to the backend, so the browser talks to one origin. Sign in with a user created in the IdP console; the list shows synced activities and each opens with its track, its metrics and its analysis: the automatic splits, the profile of the altitude and the heart rate ([TDD-0003](../design/TDD-0003-web-activity-view.md), [TDD-0009](../design/TDD-0009-activity-analysis.md)).
 
 - **`WEB_ORIGIN`** is the exact URL you open the web app at (default `http://localhost:${WEB_PORT}`). `idp-init` registers the browser app's redirect with it **the first time the stack starts**; if you later change it, sign-in fails with a redirect mismatch. Fix it in the console (Averyn project, app `averyn-web`) or recreate the IdP volume.
 - **Basemap:** `AVERYN_MAP_STYLE_URL` is a MapLibre style URL. Unset, the app uses a demo world style that is fine to try things out. Whoever serves the tiles learns which areas your users look at (the track itself is drawn in the browser and is never sent to them), so a real instance should point this at a tile service it trusts, or its own. Set **`AVERYN_MAP_ORIGINS`** with it: the origins the style, tiles, glyphs and sprites come from (space-separated); the web app's Content-Security-Policy blocks every other host, and the map then stays blank (the browser console names the blocked host).
@@ -73,6 +73,21 @@ Debug builds allow plain HTTP for this; release builds need the TLS stack (serve
 ## Deleting data and backups
 
 Users can delete an activity, delete their account's data and download an export from the web app ([ADR-0017](../adr/0017-data-deletion-and-retention.md)). Deleting the account removes Averyn's data only: close the person's identity in your identity provider separately (in the bundled Zitadel: Users, select the user, Delete). Deletion is immediate in the database and object store, but **your backups still hold the data**: make them expire within a retention period you choose and state to your users (we suggest at most 35 days). After restoring a backup, delete again whatever users deleted since it was taken.
+
+The export of an account holds the analysis of every activity too (`analysis/<id>.json`): the splits, the elevation and the heart rate of the activity, next to the raw file they come from ([TDD-0009](../design/TDD-0009-activity-analysis.md)). It is derived data, so it can be recomputed, but it is part of what the user has stored.
+
+## The analysis of the activities
+
+Every activity is analysed when it is stored: the automatic splits, the elevation and the series the web app draws ([TDD-0009](../design/TDD-0009-activity-analysis.md)). An activity that was stored before the analysis existed, or one whose algorithms changed, is analysed the first time somebody opens it, and the answer is kept.
+
+To have the whole instance up to date at once — after an upgrade, or before the first user asks for the numbers — run the backfill. It reads the same environment variables as the server and it is safe to run more than once:
+
+```sh
+docker compose run --rm --entrypoint java backend \
+  -cp "/opt/backend/lib/*" dev.averyn.backend.analysis.BackfillAnalysisKt
+```
+
+From a checkout it is `./gradlew :backend:backfillAnalysis`. The command prints how many activities it analysed and how many it could not: a failure is per activity, and the other ones are still analysed.
 
 ## Backups and upgrades
 
