@@ -112,7 +112,7 @@ export function RecordsView({
                           : '—'}
                       </td>
                       <td>
-                        {record ? new Date(record.achievedAt).toLocaleDateString() : '—'}
+                        {record ? new Date(record.achievedAt).toLocaleString() : '—'}
                       </td>
                       <td>
                         {record ? (
