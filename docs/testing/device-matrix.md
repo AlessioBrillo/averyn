@@ -42,6 +42,8 @@ Setup common to all: fully charged unless the scenario says otherwise, location 
 | S18 | Analysis of an imported file | Import a GPX of another app with more than one `<trkseg>` and with an `<ele>`; open the activity on the web | The pause is not crossed by the track; the profile is drawn; the elevation is not zero when the file has one; the last split is marked partial |
 | S19 | Analysis of the heart rate | Record ≥ 30 min with a BLE HR strap, pause 5 min in the middle, open the activity on the web | The coverage of the heart rate is the one of the recording time, the pause excluded (≥ 95 %); the chart breaks where the strap was silent; the dropouts are the ones of the strap |
 | S20 | Analysis, export and deletion | Export the account, delete one activity, open another one | The export holds `analysis/<id>.json` with the splits of the activity; the deleted activity has no analysis left; another user gets `404` |
+| S21 | Best efforts of a recorded activity | Record ≥ 10 km with the app; open the activity on the web | The best 1 km is the fastest kilometre of the track: its time is between the time of the fastest split and the time of the average split (±2 s); the effort never crosses a pause |
+| S22 | Records of the account | Record twice, open the Records page, delete the activity that holds the record | The record is the fastest of the two; deleting it promotes the other one; the page says the source and the quality of the record |
 
 ### Recovery loss (S5/S6)
 

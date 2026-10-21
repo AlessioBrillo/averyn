@@ -11,6 +11,7 @@ import {
   formatHeartRate,
   formatPace,
   formatSpeed,
+  formatTargetDistance,
 } from './format'
 import 'uplot/dist/uPlot.min.css'
 
@@ -241,9 +242,47 @@ export function Analysis({
           <p className="small">The time of a split is the time the user was moving.</p>
         </>
       )}
+      {analysis.bestEfforts.length > 0 && (
+        <>
+          <h4>Best efforts</h4>
+          <div className="table-scroll">
+            <table>
+              <caption className="visually-hidden">The fastest windows of the activity</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Distance</th>
+                  <th scope="col">Time</th>
+                  <th scope="col">{sport === 'RIDE' ? 'Speed' : 'Pace'}</th>
+                  <th scope="col">From</th>
+                </tr>
+              </thead>
+              <tbody>
+                {analysis.bestEfforts.map((effort) => (
+                  <tr key={effort.distanceM}>
+                    <th scope="row">{formatTargetDistance(effort.distanceM)}</th>
+                    <td>{formatDuration(effort.durationMs)}</td>
+                    <td>
+                      {effort.avgSpeedMps > 0
+                        ? sport === 'RIDE'
+                          ? formatSpeed(effort.avgSpeedMps)
+                          : formatPace(effort.paceSecPerKm)
+                        : '—'}
+                    </td>
+                    <td>{formatDistance(effort.startDistanceM)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="small">
+            The fastest window of the activity for that distance. The time is the time the athlete was moving.
+          </p>
+        </>
+      )}
       <p className="small">
         Algorithms: {analysis.algorithmVersions.splits}, {analysis.algorithmVersions.elevation},{' '}
-        {analysis.algorithmVersions.series}, {analysis.algorithmVersions.heartRate}
+        {analysis.algorithmVersions.series}, {analysis.algorithmVersions.heartRate},{' '}
+        {analysis.algorithmVersions.bestEfforts}
       </p>
     </section>
   )

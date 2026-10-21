@@ -8,6 +8,8 @@ import dev.averyn.analysis.AnalysisHeartRate
 import dev.averyn.analysis.AnalysisSeries
 import dev.averyn.analysis.AnalysisSplit
 import dev.averyn.analysis.AnalysisTotals
+import dev.averyn.analysis.BEST_EFFORTS_ALGORITHM_VERSION
+import dev.averyn.analysis.BestEffort
 import dev.averyn.analysis.ELEVATION_ALGORITHM_VERSION
 import dev.averyn.analysis.SERIES_ALGORITHM_VERSION
 import dev.averyn.analysis.SPLITS_ALGORITHM_VERSION
@@ -67,7 +69,10 @@ class ActivityAnalysisStore(
                                 )
                                 null
                             } ?: return null
-                        analysis.copy(splits = readSplits(conn, activityId))
+                        analysis.copy(
+                            splits = readSplits(conn, activityId),
+                            bestEfforts = readBestEfforts(conn, activityId),
+                        )
                     }
                 }
         }
@@ -77,8 +82,9 @@ class ActivityAnalysisStore(
         db.connection.use { conn ->
             conn
                 .prepareStatement(
-                    "SELECT splits_version, elevation_version, series_version, series_schema_version, " +
-                        "hr_algorithm_version, metrics_algorithm_version FROM activity_analyses WHERE activity_id = ?",
+                    "SELECT splits_version, elevation_version, series_version, analysis_schema_version, " +
+                        "hr_algorithm_version, metrics_algorithm_version, best_efforts_version " +
+                        "FROM activity_analyses WHERE activity_id = ?",
                 ).use { stmt ->
                     stmt.setObject(1, activityId)
                     stmt.executeQuery().use { rs ->
@@ -90,7 +96,10 @@ class ActivityAnalysisStore(
                             rs.getString(5) == HR_ALGORITHM_VERSION &&
                             // The splits are built on the metrics of the activity: a change of those makes them
                             // outdated too.
-                            rs.getString(6) == METRICS_ALGORITHM_VERSION
+                            rs.getString(6) == METRICS_ALGORITHM_VERSION &&
+                            // The best efforts are stored with the version that produced them: an activity
+                            // stored before they existed has none.
+                            rs.getString(7) == BEST_EFFORTS_ALGORITHM_VERSION
                     }
                 }
         }
@@ -110,20 +119,23 @@ class ActivityAnalysisStore(
                     .prepareStatement(
                         """
                         INSERT INTO activity_analyses (activity_id, splits_version, elevation_version,
-                            series_version, metrics_algorithm_version, series_schema_version, split_length_m,
-                            elevation_source, elevation_gain_m, elevation_loss_m, min_altitude_m, max_altitude_m,
-                            avg_altitude_m, elevation_coverage_percent, hr_algorithm_version, hr_min_bpm,
-                            hr_avg_bpm, hr_max_bpm, hr_coverage_percent, hr_dropouts, hr_artifacts, series)
-                        VALUES (?::uuid, ?::text, ?::text, ?::text, ?::text, ?::integer, ?::double precision,
-                            ?::text, ?::double precision, ?::double precision, ?::double precision,
-                            ?::double precision, ?::double precision, ?::double precision, ?::text, ?::integer,
-                            ?::integer, ?::integer, ?::double precision, ?::integer, ?::integer, ?::jsonb)
+                            series_version, metrics_algorithm_version, analysis_schema_version,
+                            best_efforts_version, split_length_m, elevation_source, elevation_gain_m,
+                            elevation_loss_m, min_altitude_m, max_altitude_m, avg_altitude_m,
+                            elevation_coverage_percent, hr_algorithm_version, hr_min_bpm, hr_avg_bpm,
+                            hr_max_bpm, hr_coverage_percent, hr_dropouts, hr_artifacts, series)
+                        VALUES (?::uuid, ?::text, ?::text, ?::text, ?::text, ?::integer, ?::text,
+                            ?::double precision, ?::text, ?::double precision, ?::double precision,
+                            ?::double precision, ?::double precision, ?::double precision, ?::double precision,
+                            ?::text, ?::integer, ?::integer, ?::integer, ?::double precision,
+                            ?::integer, ?::integer, ?::jsonb)
                         ON CONFLICT (activity_id) DO UPDATE SET
                             splits_version = EXCLUDED.splits_version,
                             elevation_version = EXCLUDED.elevation_version,
                             series_version = EXCLUDED.series_version,
+                            best_efforts_version = EXCLUDED.best_efforts_version,
                             metrics_algorithm_version = EXCLUDED.metrics_algorithm_version,
-                            series_schema_version = EXCLUDED.series_schema_version,
+                            analysis_schema_version = EXCLUDED.analysis_schema_version,
                             split_length_m = EXCLUDED.split_length_m,
                             elevation_source = EXCLUDED.elevation_source,
                             elevation_gain_m = EXCLUDED.elevation_gain_m,
@@ -150,6 +162,9 @@ class ActivityAnalysisStore(
                         stmt.setString(++i, analysis.algorithmVersions.series)
                         stmt.setString(++i, METRICS_ALGORITHM_VERSION)
                         stmt.setInt(++i, analysis.schemaVersion)
+                        // The version of the algorithm that produced the best efforts: the rows of an older
+                        // version are recomputed, never edited.
+                        stmt.setString(++i, analysis.algorithmVersions.bestEfforts)
                         stmt.setDouble(++i, analysis.splitLengthM)
                         val elevation = analysis.elevation
                         stmt.setString(++i, elevation?.source)
@@ -206,6 +221,38 @@ class ActivityAnalysisStore(
                         }
                         stmt.executeBatch()
                     }
+                // The best efforts: one row each, like the splits. They are replaced with the analysis they
+                // belong to, in the same transaction: a reader never sees half of it.
+                conn.prepareStatement("DELETE FROM activity_best_efforts WHERE activity_id = ?").use { stmt ->
+                    stmt.setObject(1, activityId)
+                    stmt.executeUpdate()
+                }
+                conn
+                    .prepareStatement(
+                        """
+                        INSERT INTO activity_best_efforts (activity_id, distance_m, duration_ms, elapsed_ms,
+                            start_distance_m, end_distance_m, start_elapsed_ms, end_elapsed_ms,
+                            avg_speed_mps, pace_sec_per_km)
+                        VALUES (?::uuid, ?::double precision, ?::bigint, ?::bigint, ?::double precision,
+                            ?::double precision, ?::bigint, ?::bigint, ?::double precision, ?::double precision)
+                        """.trimIndent(),
+                    ).use { stmt ->
+                        analysis.bestEfforts.forEach { effort ->
+                            var i = 0
+                            stmt.setObject(++i, activityId)
+                            stmt.setDouble(++i, effort.distanceM)
+                            stmt.setLong(++i, effort.durationMs)
+                            stmt.setLong(++i, effort.elapsedMs)
+                            stmt.setDouble(++i, effort.startDistanceM)
+                            stmt.setDouble(++i, effort.endDistanceM)
+                            stmt.setLong(++i, effort.startElapsedMs)
+                            stmt.setLong(++i, effort.endElapsedMs)
+                            stmt.setDouble(++i, effort.avgSpeedMps)
+                            stmt.setDoubleOrNull(++i, effort.paceSecPerKm)
+                            stmt.addBatch()
+                        }
+                        stmt.executeBatch()
+                    }
                 conn.commit()
             } catch (e: Exception) {
                 conn.rollback()
@@ -229,8 +276,9 @@ class ActivityAnalysisStore(
                         OR an.splits_version <> ?::text
                         OR an.elevation_version <> ?::text
                         OR an.series_version <> ?::text
-                        OR an.series_schema_version <> ?::integer
+                        OR an.analysis_schema_version <> ?::integer
                         OR an.hr_algorithm_version <> ?::text
+                        OR an.best_efforts_version <> ?::text
                     ORDER BY a.started_at, a.id
                     """.trimIndent(),
                 ).use { stmt ->
@@ -240,6 +288,7 @@ class ActivityAnalysisStore(
                     stmt.setString(++i, SERIES_ALGORITHM_VERSION)
                     stmt.setInt(++i, ANALYSIS_SCHEMA_VERSION)
                     stmt.setString(++i, HR_ALGORITHM_VERSION)
+                    stmt.setString(++i, BEST_EFFORTS_ALGORITHM_VERSION)
                     stmt.executeQuery().use { rs ->
                         buildList {
                             while (rs.next()) {
@@ -325,6 +374,7 @@ class ActivityAnalysisStore(
                     elevation = getString(2),
                     series = getString(3),
                     heartRate = getString(14),
+                    bestEfforts = getString(27),
                 ),
             splitLengthM = getDouble(6),
             totals =
@@ -338,9 +388,45 @@ class ActivityAnalysisStore(
             elevation = elevation,
             heartRate = heartRate,
             splits = emptyList(),
+            bestEfforts = emptyList(),
             series = json.decodeFromString(AnalysisSeries.serializer(), getString(21)),
         )
     }
+
+    /** The best efforts of the activity: one row per target distance of the sport. */
+    private fun readBestEfforts(
+        conn: Connection,
+        activityId: UUID,
+    ): List<BestEffort> =
+        conn
+            .prepareStatement(
+                """
+                SELECT distance_m, duration_ms, elapsed_ms, start_distance_m, end_distance_m,
+                    start_elapsed_ms, end_elapsed_ms, avg_speed_mps, pace_sec_per_km
+                FROM activity_best_efforts WHERE activity_id = ? ORDER BY distance_m
+                """.trimIndent(),
+            ).use { stmt ->
+                stmt.setObject(1, activityId)
+                stmt.executeQuery().use { rs ->
+                    buildList {
+                        while (rs.next()) {
+                            add(
+                                BestEffort(
+                                    distanceM = rs.getDouble(1),
+                                    durationMs = rs.getLong(2),
+                                    elapsedMs = rs.getLong(3),
+                                    startDistanceM = rs.getDouble(4),
+                                    endDistanceM = rs.getDouble(5),
+                                    startElapsedMs = rs.getLong(6),
+                                    endElapsedMs = rs.getLong(7),
+                                    avgSpeedMps = rs.getDouble(8),
+                                    paceSecPerKm = rs.getDoubleOrNull(9),
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
 
     private fun PreparedStatement.setDoubleOrNull(
         index: Int,
@@ -364,15 +450,17 @@ class ActivityAnalysisStore(
         /**
          * The analysis and the totals of the activity, in the order [toAnalysis] reads them:
          * 1-3 the algorithm versions, 4 the version of the metrics, 5 the schema version, 6 the split length,
-         * 7-13 the elevation, 14-20 the heart rate, 21 the series, 22-26 the totals.
+         * 7-13 the elevation, 14-20 the heart rate, 21 the series, 22-26 the totals, 27 the version of the
+         * best efforts.
          */
         const val ANALYSIS_COLUMNS =
             "an.splits_version, an.elevation_version, an.series_version, an.metrics_algorithm_version, " +
-                "an.series_schema_version, an.split_length_m, an.elevation_source, an.elevation_gain_m, " +
+                "an.analysis_schema_version, an.split_length_m, an.elevation_source, an.elevation_gain_m, " +
                 "an.elevation_loss_m, an.min_altitude_m, an.max_altitude_m, an.avg_altitude_m, " +
                 "an.elevation_coverage_percent, an.hr_algorithm_version, an.hr_min_bpm, an.hr_avg_bpm, " +
                 "an.hr_max_bpm, an.hr_coverage_percent, an.hr_dropouts, an.hr_artifacts, an.series, " +
-                "a.distance_m, a.elapsed_ms, a.moving_ms, a.paused_ms, a.stationary_ms"
+                "a.distance_m, a.elapsed_ms, a.moving_ms, a.paused_ms, a.stationary_ms, " +
+                "an.best_efforts_version"
     }
 }
 

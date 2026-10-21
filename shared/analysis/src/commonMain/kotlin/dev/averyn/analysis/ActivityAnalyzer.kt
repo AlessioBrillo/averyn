@@ -3,8 +3,6 @@ package dev.averyn.analysis
 import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Sport
 import dev.averyn.metrics.ActivitySnapshot
-import dev.averyn.metrics.STATIONARY_SPEED_MPS
-import dev.averyn.metrics.haversineMeters
 import dev.averyn.sensors.HR_ALGORITHM_VERSION
 import dev.averyn.sensors.HeartRateMetrics
 import dev.averyn.sensors.HeartRateSample
@@ -29,25 +27,6 @@ private const val HR_MAX_GAP_MS = 2_000L
 private const val HR_MIN_BPM = 1
 
 private const val HR_MAX_BPM = 240
-
-/** One point of the track, with the distance from the start and the time from the first sample. */
-private class Point(
-    val sample: LocationSample,
-    val segment: Int,
-    val distanceM: Double,
-    val elapsedMs: Long,
-    /** The altitude of the sample, null when it has none (or when it is not a number). */
-    val altitudeM: Double?,
-)
-
-/** One stretch between two accepted samples: the unit the distance and the time are counted in. */
-private class Leg(
-    val startDistanceM: Double,
-    val endDistanceM: Double,
-    val startElapsedMs: Long,
-    val endElapsedMs: Long,
-    val moving: Boolean,
-)
 
 /** A split while it is being built. */
 private class SplitBuilder(
@@ -78,52 +57,11 @@ fun analyzeActivity(
     val splitLength = splitLengthMeters(sport)
     val origin = segments.firstOrNull()?.firstOrNull()?.elapsedRealtimeMs ?: 0L
 
-    val points = mutableListOf<Point>()
-    val legs = mutableListOf<Leg>()
-    var cumulative = 0.0
-    segments.forEachIndexed { index, segment ->
-        var previous: Point? = null
-        for (sample in segment) {
-            val distance =
-                if (previous == null) {
-                    cumulative
-                } else {
-                    cumulative +
-                        haversineMeters(
-                            previous.sample.latitude,
-                            previous.sample.longitude,
-                            sample.latitude,
-                            sample.longitude,
-                        )
-                }
-            val point =
-                Point(
-                    sample = sample,
-                    segment = index,
-                    distanceM = distance,
-                    elapsedMs = (sample.elapsedRealtimeMs - origin).coerceAtLeast(0),
-                    // An altitude that is not a number is not an altitude: the store accepts it (a platform
-                    // can report it), and a NaN in the profile would break the whole analysis.
-                    altitudeM = sample.altitudeM?.takeIf { it.isFinite() },
-                )
-            if (previous != null) {
-                val legMs = point.elapsedMs - previous.elapsedMs
-                val legM = point.distanceM - previous.distanceM
-                val speed = if (legMs > 0) legM / (legMs / 1000.0) else 0.0
-                legs +=
-                    Leg(
-                        startDistanceM = previous.distanceM,
-                        endDistanceM = point.distanceM,
-                        startElapsedMs = previous.elapsedMs,
-                        endElapsedMs = point.elapsedMs,
-                        moving = speed >= STATIONARY_SPEED_MPS,
-                    )
-            }
-            cumulative = point.distanceM
-            points += point
-            previous = point
-        }
-    }
+    // The track is built once: the splits, the elevation, the series and the best efforts all read the same
+    // distance, the same time and the same samples.
+    val track = buildTrack(segments)
+    val points = track.points
+    val legs = track.legs
 
     val smoothed =
         segments.flatMap { segment ->
@@ -163,6 +101,7 @@ fun analyzeActivity(
                 elevation = ELEVATION_ALGORITHM_VERSION,
                 series = SERIES_ALGORITHM_VERSION,
                 heartRate = HR_ALGORITHM_VERSION,
+                bestEfforts = BEST_EFFORTS_ALGORITHM_VERSION,
             ),
         splitLengthM = splitLength,
         totals =
@@ -176,6 +115,7 @@ fun analyzeActivity(
         elevation = elevation?.summary,
         heartRate = heartRateSummary,
         splits = splits,
+        bestEfforts = bestEfforts(sport, track),
         series = buildSeries(points, smoothed, heartRate, origin),
     )
 }
@@ -195,7 +135,7 @@ private fun buildSplits(
     for (leg in legs) {
         val legDistance = leg.endDistanceM - leg.startDistanceM
         val legElapsed = (leg.endElapsedMs - leg.startElapsedMs).toDouble()
-        val legMoving = if (leg.moving) legElapsed else 0.0
+        val legMoving = leg.movingMs.toDouble()
         if (legDistance <= 0.0) {
             // A leg with no distance (two samples in the same place) moves no split boundary.
             current.movingMs += legMoving

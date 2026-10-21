@@ -12,7 +12,7 @@ const val ELEVATION_ALGORITHM_VERSION = "elevation-v1"
 const val SERIES_ALGORITHM_VERSION = "series-v1"
 
 /** Version of the shape of the JSON the API returns. A new shape is a new number, never an edit. */
-const val ANALYSIS_SCHEMA_VERSION = 1
+const val ANALYSIS_SCHEMA_VERSION = 2
 
 /** The elevation comes from the altitude the samples carry. */
 const val ELEVATION_SOURCE_RECORDED = "recorded"
@@ -27,6 +27,8 @@ data class AnalysisAlgorithmVersions(
     val elevation: String,
     val series: String,
     val heartRate: String,
+    /** The best efforts of the activity (`best-efforts-v1`). */
+    val bestEfforts: String = BEST_EFFORTS_ALGORITHM_VERSION,
 )
 
 /** The activity's own totals, the same ones the summary shows: elapsed = paused + stationary + moving. */
@@ -127,5 +129,10 @@ data class ActivityAnalysis(
     val elevation: AnalysisElevation?,
     val heartRate: AnalysisHeartRate?,
     val splits: List<AnalysisSplit>,
+    /**
+     * The fastest window of each target distance of the sport (`best-efforts-v1`). Empty when the activity is
+     * shorter than the smallest target, or when it has no usable track.
+     */
+    val bestEfforts: List<BestEffort> = emptyList(),
     val series: AnalysisSeries,
 )

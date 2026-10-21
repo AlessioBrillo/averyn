@@ -42,6 +42,8 @@ export interface AnalysisVersions {
   elevation: string
   series: string
   heartRate: string
+  /** The best efforts of the activity (`best-efforts-v1`, TDD-0010). */
+  bestEfforts: string
 }
 
 export interface AnalysisTotals {
@@ -71,6 +73,21 @@ export interface AnalysisHeartRate {
   coveragePercent: number
   dropouts: number
   artifacts: number
+}
+
+/** One best effort of an activity: the fastest window of the track of exactly this distance (TDD-0010). */
+export interface BestEffort {
+  distanceM: number
+  /** The moving time of the effort: what a record is made of. */
+  durationMs: number
+  /** The wall time of the effort, the stops inside it included. */
+  elapsedMs: number
+  startDistanceM: number
+  endDistanceM: number
+  startElapsedMs: number
+  endElapsedMs: number
+  avgSpeedMps: number
+  paceSecPerKm: number | null
 }
 
 /** One automatic split. */
@@ -111,6 +128,8 @@ export interface ActivityAnalysis {
   elevation: AnalysisElevation | null
   heartRate: AnalysisHeartRate | null
   splits: AnalysisSplit[]
+  /** The fastest window of each target distance of the sport (TDD-0010). */
+  bestEfforts: BestEffort[]
   series: AnalysisSeries
 }
 
@@ -245,3 +264,42 @@ export const revokeConsent = (scope: string) =>
 /** Grant a consent scope (ADR-0021): without it the device never records the data it covers. */
 export const grantConsent = (scope: string) =>
   request(`/v1/consents/${encodeURIComponent(scope)}`, 'POST')
+
+/** The fastest effort of a distance, and the activity that holds it (TDD-0010). */
+export interface PersonalRecord {
+  activityId: string
+  /** When it was made: the start of the activity. */
+  achievedAt: string
+  durationMs: number
+  elapsedMs: number
+  avgSpeedMps: number
+  paceSecPerKm: number | null
+  /** `device` (recorded) or `gpx` (imported). */
+  source: string
+  /** `UNKNOWN` when the accuracy of the activity was never measured. */
+  qualityGrade: string
+}
+
+/** One target distance of a sport, with the record of it when there is one. */
+export interface RecordTarget {
+  distanceM: number
+  record: PersonalRecord | null
+}
+
+/** The records of one sport. */
+export interface SportRecords {
+  sport: string
+  targets: RecordTarget[]
+}
+
+/** The personal records of the account. */
+export interface PersonalRecords {
+  /** The version of the algorithm that produced the numbers. */
+  algorithmVersion: string
+  /** The activities that have no analysis yet: the records can be incomplete. */
+  pendingActivities: number
+  sports: SportRecords[]
+}
+
+/** The personal records of the account (TDD-0010). */
+export const getRecords = () => get<PersonalRecords>('/v1/me/records')

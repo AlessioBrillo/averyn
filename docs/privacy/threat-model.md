@@ -20,6 +20,7 @@ Device / browser ↔ edge proxy (internet, TLS, [ADR-0018](../adr/0018-tls-edge-
 | **R**epudiation | A deleted activity reappears from a device retry | Data-free tombstone; the upload answers `410` | deletion test: re-PUT → 410 |
 | **R** | A user disputes an upload | Request ids in logs ([ADR-0009](../adr/0009-observability-baseline.md)); row `created_at` and raw hash | — |
 | **I**nformation disclosure | **IDOR**: reading another user's activity by id | Ownership checked on every read; non-owner gets `404`, not `403` | ingest test: user B → 404 |
+| **I** | **IDOR on the records**: reading the records of another account | The query is scoped to the owner of the token; there is no id of an activity in the request, and the answer of another account is empty, not an error | records test: user B → no record |
 | **I** | **IDOR on deletion**: deleting another user's activity by id | Deletion is scoped to the owner; a non-owner gets `404` and nothing changes | deletion test: user B → 404, row intact |
 | **I** | Data kept after the user asked to delete it | Hard delete of row and raw object; account deletion removes the whole `raw/{ownerId}/` prefix ([ADR-0017](../adr/0017-data-deletion-and-retention.md)); backups expire per operator policy | deletion tests: object absent |
 | **I** | Coordinates or tokens in logs | Log ids, counts and hashes only; reviewed in PRs | log grep in end-to-end verification |

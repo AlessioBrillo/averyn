@@ -40,6 +40,7 @@ class UserData(
     private val raw: RawObjectStore,
     private val consentStore: ConsentStore = ConsentStore(db),
     private val analysisService: AnalysisService = AnalysisService(db, raw),
+    private val recordStore: PersonalRecordStore = PersonalRecordStore(db),
 ) {
     /**
      * Removes one activity and remembers its id so that a device retry gets `410`. Returns false when the caller
@@ -263,6 +264,12 @@ class UserData(
                 zip.write(
                     Json.encodeToString(consentStore.list(ownerId).map { it.toExported() }).toByteArray(),
                 )
+                zip.closeEntry()
+                // The personal records of the account: derived data like the analyses, and as useful as they.
+                // They are written after the activities, so that the best efforts of the activities that were
+                // just analysed are part of them.
+                zip.putNextEntry(ZipEntry("records.json"))
+                zip.write(Json.encodeToString(PersonalRecords.serializer(), recordStore.records(ownerId)).toByteArray())
                 zip.closeEntry()
                 zip.putNextEntry(ZipEntry("activities.json"))
                 zip.write(Json.encodeToString(ExportManifest(Instant.now().toString(), exported)).toByteArray())

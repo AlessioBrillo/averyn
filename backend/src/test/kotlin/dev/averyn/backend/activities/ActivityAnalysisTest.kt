@@ -1,11 +1,10 @@
 package dev.averyn.backend.activities
 
 import dev.averyn.analysis.ActivityAnalysis
+import dev.averyn.backend.TestStack
 import dev.averyn.backend.auth.TestIssuer
 import dev.averyn.backend.auth.auth
-import dev.averyn.backend.connectAndMigrate
 import dev.averyn.backend.content
-import dev.averyn.backend.storage.RawObjectStore
 import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Sport
 import dev.averyn.tracking.ActivityRecorder
@@ -22,11 +21,6 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.testApplication
 import kotlinx.io.files.Path
 import kotlinx.serialization.json.Json
-import org.testcontainers.containers.GenericContainer
-import org.testcontainers.containers.wait.strategy.Wait
-import org.testcontainers.images.builder.Transferable
-import org.testcontainers.postgresql.PostgreSQLContainer
-import org.testcontainers.utility.DockerImageName
 import java.io.File
 import java.nio.file.Files
 import java.util.UUID
@@ -44,33 +38,15 @@ import kotlin.test.assertTrue
  * activity. Real PostgreSQL/PostGIS and a real S3 API (SeaweedFS, as in Compose) via Testcontainers.
  */
 class ActivityAnalysisTest {
-    private companion object {
-        val postgres: PostgreSQLContainer =
-            PostgreSQLContainer(
-                DockerImageName.parse("postgis/postgis:18-3.6-alpine").asCompatibleSubstituteFor("postgres"),
-            ).withDatabaseName("averyn")
-                .also { it.start() }
-
-        val seaweed: GenericContainer<*> =
-            GenericContainer(DockerImageName.parse("chrislusf/seaweedfs:4.47"))
-                .withCommand("server", "-dir=/data", "-s3", "-s3.config=/etc/seaweedfs/s3.json")
-                .withCopyToContainer(Transferable.of(S3_CONFIG), "/etc/seaweedfs/s3.json")
-                .withExposedPorts(8333)
-                .waitingFor(Wait.forListeningPort())
-                .also { it.start() }
-
-        const val S3_CONFIG =
-            """{"identities":[{"name":"test","credentials":[{"accessKey":"test","secretKey":"test"}],"actions":["Admin","Read","Write","List","Tagging"]}]}"""
-
-        val endpoint = "http://${seaweed.host}:${seaweed.getMappedPort(8333)}"
-        val bucket = "averyn-analysis-test"
-        val db = connectAndMigrate(postgres.jdbcUrl, postgres.username, postgres.password)
-        val raw = RawObjectStore(endpoint, bucket, "test", "test")
-
-        init {
-            raw.ensureBucket()
-        }
-    }
+    /**
+     * The stack is shared by the whole suite ([TestStack]): the tables are truncated after every test, and the
+     * objects live under the prefix of the user of the test.
+     *
+     * They are fields, not getters: the first access starts the containers, and a field is read when the test
+     * instance is built, which is outside the coroutine of the test and outside its timeout.
+     */
+    private val db = TestStack.db
+    private val raw = TestStack.raw
 
     private val idp = TestIssuer()
     private val json = Json { ignoreUnknownKeys = true }
