@@ -1,6 +1,6 @@
 # ADR-0024: Personal records — derived rows and a live projection, not a table of records
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-10-21
 - **Deciders:** @AlessioBrillo
 
