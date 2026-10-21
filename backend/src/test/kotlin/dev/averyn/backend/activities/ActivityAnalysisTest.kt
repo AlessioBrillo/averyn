@@ -41,9 +41,12 @@ class ActivityAnalysisTest {
     /**
      * The stack is shared by the whole suite ([TestStack]): the tables are truncated after every test, and the
      * objects live under the prefix of the user of the test.
+     *
+     * They are fields, not getters: the first access starts the containers, and a field is read when the test
+     * instance is built, which is outside the coroutine of the test and outside its timeout.
      */
-    private val db get() = TestStack.db
-    private val raw get() = TestStack.raw
+    private val db = TestStack.db
+    private val raw = TestStack.raw
 
     private val idp = TestIssuer()
     private val json = Json { ignoreUnknownKeys = true }

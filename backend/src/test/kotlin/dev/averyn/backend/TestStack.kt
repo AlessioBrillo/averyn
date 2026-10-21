@@ -6,6 +6,7 @@ import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.images.builder.Transferable
 import org.testcontainers.postgresql.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
+import java.nio.file.Files
 import javax.sql.DataSource
 
 /**
@@ -44,5 +45,25 @@ object TestStack {
 
     init {
         raw.ensureBucket() // retries while the object store comes up
+        warmUp()
+    }
+
+    /**
+     * A round trip through the object store, while the stack is fresh.
+     *
+     * The first test of the suite must not pay the cold start of the store: a request that waits for a store
+     * that is not ready yet takes a minute, and a test that times out is a red build that has nothing to do
+     * with the code.
+     */
+    private fun warmUp() {
+        val probe = Files.createTempFile("averyn-test-stack", ".txt")
+        try {
+            Files.writeString(probe, "probe")
+            raw.put("test-stack/probe", probe)
+            check(raw.get("test-stack/probe").isNotEmpty()) { "the object store did not answer" }
+            raw.delete("test-stack/probe")
+        } finally {
+            Files.deleteIfExists(probe)
+        }
     }
 }

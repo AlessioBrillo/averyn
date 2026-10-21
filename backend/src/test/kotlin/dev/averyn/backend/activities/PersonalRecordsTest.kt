@@ -5,6 +5,8 @@ import dev.averyn.backend.TestStack
 import dev.averyn.backend.auth.TestIssuer
 import dev.averyn.backend.auth.auth
 import dev.averyn.backend.content
+import dev.averyn.backend.imports.ImportResponse
+import dev.averyn.backend.imports.imports
 import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Sport
 import dev.averyn.tracking.ActivityRecorder
@@ -13,17 +15,21 @@ import io.ktor.client.HttpClient
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
+import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.client.statement.readRawBytes
+import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import kotlinx.io.files.Path
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.nio.file.Files
+import java.time.Instant
 import java.util.UUID
 import java.util.zip.ZipInputStream
 import kotlin.test.AfterTest
@@ -43,9 +49,12 @@ class PersonalRecordsTest {
     /**
      * The stack is shared by the whole suite ([TestStack]): the tables are truncated after every test, and the
      * objects live under the prefix of the user of the test.
+     *
+     * They are fields, not getters: the first access starts the containers, and a field is read when the test
+     * instance is built, which is outside the coroutine of the test and outside its timeout.
      */
-    private val db get() = TestStack.db
-    private val raw get() = TestStack.raw
+    private val db = TestStack.db
+    private val raw = TestStack.raw
 
     private val idp = TestIssuer()
     private val json = Json { ignoreUnknownKeys = true }
@@ -73,17 +82,18 @@ class PersonalRecordsTest {
         stepM: Double = 100.0,
         stepMs: Long = 10_000,
         accuracyM: Double = 5.0,
+        startedAtMs: Long = 1_700_000_000_000,
     ): Pair<UUID, ByteArray> {
         val id = UUID.randomUUID()
         val recorder = ActivityRecorder(ActivityStore(Path(dir.toString())))
-        recorder.start(id.toString(), Sport.RUN, 0, 1_700_000_000_000)
-        recorder.gpsReady(0, 1_700_000_000_000)
+        recorder.start(id.toString(), Sport.RUN, 0, startedAtMs)
+        recorder.gpsReady(0, startedAtMs)
         val step = stepM / 111_195.08
         for (i in 0 until steps) {
             val t = i * stepMs
             recorder.onSample(
                 LocationSample(
-                    1_700_000_000_000 + t,
+                    startedAtMs + t,
                     t,
                     i * step,
                     8.0,
@@ -92,8 +102,32 @@ class PersonalRecordsTest {
             )
         }
         val end = steps * stepMs
-        recorder.stop(end, 1_700_000_000_000 + end)
+        recorder.stop(end, startedAtMs + end)
         return id to File(dir.toFile(), "$id.jsonl").readBytes()
+    }
+
+    /** A GPX file of [points] points, [stepM] metres apart, one every second. */
+    private fun gpx(
+        points: Int,
+        stepM: Double,
+    ): String {
+        val start = Instant.parse("2026-10-20T08:00:00Z")
+        val track =
+            (0 until points).joinToString("") { index ->
+                val latitude = 45.0 + index * (stepM / 111_195.08)
+                val time = start.plusMillis(index * 1_000L)
+                """<trkpt lat="$latitude" lon="9.0"><time>$time</time></trkpt>"""
+            }
+        return """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1">
+              <trk>
+                <name>Imported run</name>
+                <type>running</type>
+                <trkseg>$track</trkseg>
+              </trk>
+            </gpx>
+            """.trimIndent()
     }
 
     private fun app(block: suspend HttpClient.() -> Unit) =
@@ -102,9 +136,22 @@ class PersonalRecordsTest {
                 content()
                 auth(idp.config, idp.jwks)
                 activities(db, raw)
+                imports(db, raw)
             }
             client.block()
         }
+
+    /** Imports a GPX file and returns the id of the activity it became. */
+    private suspend fun HttpClient.importGpx(file: String): String {
+        val response =
+            post("/v1/imports/gpx?sport=RUN") {
+                bearerAuth(alice)
+                contentType(ContentType("application", "gpx+xml"))
+                setBody(file)
+            }
+        assertEquals(HttpStatusCode.Created, response.status)
+        return json.decodeFromString(ImportResponse.serializer(), response.bodyAsText()).activity.id
+    }
 
     private suspend fun HttpClient.upload(
         id: UUID,
@@ -184,6 +231,56 @@ class PersonalRecordsTest {
             assertEquals("GOOD", record.qualityGrade)
             // The targets the account has not reached yet are there, without a record.
             assertNull(run.targets.single { it.distanceM == 5_000.0 }.record)
+        }
+    }
+
+    @Test
+    fun aTieGoesToTheOldestActivity() {
+        app {
+            // Two activities of the same speed: the first one is the record.
+            val (old, oldBytes) = record(stepMs = 10_000, startedAtMs = 1_700_000_000_000)
+            val (recent, recentBytes) = record(stepMs = 10_000, startedAtMs = 1_700_060_000_000)
+            val first = json.decodeFromString(ActivitySummary.serializer(), upload(old, oldBytes).bodyAsText())
+            upload(recent, recentBytes)
+
+            val record =
+                assertNotNull(
+                    records()
+                        .sports
+                        .single()
+                        .targets
+                        .single { it.distanceM == 1_000.0 }
+                        .record,
+                )
+
+            assertEquals(first.id, record.activityId)
+            // The two efforts are the same: the record is the one that was achieved first.
+            assertEquals(100_000, record.durationMs)
+        }
+    }
+
+    @Test
+    fun anImportedFileHoldsARecordEvenWhenItsAccuracyWasNeverMeasured() {
+        app {
+            val imported = importGpx(gpx(points = 111, stepM = 10.0))
+
+            // A GPX track carries no accuracy: the quality is UNKNOWN, which is not a bad grade but an
+            // unmeasured one, and the history of the user is worth more than a strict filter.
+            assertEquals("UNKNOWN", scalar("SELECT quality_grade FROM activities WHERE id = '$imported'"))
+            val record =
+                assertNotNull(
+                    records()
+                        .sports
+                        .single()
+                        .targets
+                        .single { it.distanceM == 1_000.0 }
+                        .record,
+                )
+            assertEquals(imported, record.activityId)
+            assertEquals("gpx", record.source)
+            assertEquals("UNKNOWN", record.qualityGrade)
+            // 10 m every second: a kilometre takes a hundred seconds.
+            assertEquals(100_000, record.durationMs)
         }
     }
 
