@@ -3,6 +3,7 @@ import { Account } from './Account'
 import { ActivityDetail } from './ActivityDetail'
 import { ActivityList } from './ActivityList'
 import { ImportGpx } from './ImportGpx'
+import { Records } from './Records'
 import { signIn, signOut, start } from './auth'
 import type { Session } from './auth'
 
@@ -62,6 +63,15 @@ export function App() {
               Import
             </a>{' '}
             <a
+              href="/records"
+              onClick={(e) => {
+                e.preventDefault()
+                navigate('/records')
+              }}
+            >
+              Records
+            </a>{' '}
+            <a
               href="/account"
               onClick={(e) => {
                 e.preventDefault()
@@ -87,6 +97,11 @@ export function App() {
           <ImportGpx
             onUnauthorized={expired}
             onImported={(id) => navigate(`/activities/${id}`)}
+          />
+        ) : path === '/records' ? (
+          <Records
+            onUnauthorized={expired}
+            open={(id) => navigate(`/activities/${id}`)}
           />
         ) : detail ? (
           <ActivityDetail

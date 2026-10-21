@@ -319,9 +319,10 @@ paths:
       description: >
         Entries: raw/{clientActivityId}.jsonl (byte-for-byte), original/{clientActivityId}.gpx (the file an
         imported activity was imported from), rr/{clientActivityId}.rr.jsonl (the heart-rate sidecar),
-        gpx/{clientActivityId}.gpx, analysis/{clientActivityId}.json (the splits, the elevation and the series
-        of the activity, TDD-0009), consents.json and activities.json (summaries and skipped-line counts,
-        written last). Streamed.
+        gpx/{clientActivityId}.gpx, analysis/{clientActivityId}.json (the splits, the elevation, the series
+        and the best efforts of the activity, TDD-0009 and TDD-0010), consents.json, records.json (the personal
+        records of the account, TDD-0010) and activities.json (summaries and skipped-line counts, written
+        last). Streamed.
       security: [{ oidc: [] }]
       responses:
         "200":
@@ -333,6 +334,24 @@ paths:
         "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
         "403": { description: The account was deleted }
         "503": { description: Too many exports in progress, retry after the Retry-After seconds }
+  /v1/me/records:
+    get:
+      summary: The personal records of the caller — the fastest effort of every sport and distance (TDD-0010)
+      description: >
+        A record is the fastest eligible best effort of the account for a sport and a distance. An activity is
+        eligible when it finished, when it comes from Averyn or from a GPX file, and when its quality is not
+        POOR. The number of activities that have no analysis yet is in `pendingActivities`: while it is not
+        zero the list can be incomplete.
+      security: [{ oidc: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonalRecords" }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted (ADR-0017) }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
 components:
   securitySchemes:
     oidc:
@@ -396,6 +415,10 @@ components:
         splits:
           type: array
           items: { $ref: "#/components/schemas/AnalysisSplit" }
+        bestEfforts:
+          type: array
+          description: "The fastest window of each target distance of the sport (best-efforts-v1)"
+          items: { $ref: "#/components/schemas/BestEffort" }
         series: { $ref: "#/components/schemas/AnalysisSeries" }
     AnalysisVersions:
       type: object
@@ -405,6 +428,61 @@ components:
         elevation: { type: string, description: "e.g. elevation-v1" }
         series: { type: string, description: "e.g. series-v1" }
         heartRate: { type: string, description: "e.g. hr-v2" }
+        bestEfforts: { type: string, description: "e.g. best-efforts-v1" }
+    BestEffort:
+      type: object
+      required: [distanceM, durationMs, elapsedMs, startDistanceM, endDistanceM, startElapsedMs, endElapsedMs, avgSpeedMps]
+      properties:
+        distanceM: { type: number, description: "The distance of the effort: one of the targets of the sport" }
+        durationMs: { type: integer, format: int64, description: "The moving time of the effort: what a record is made of" }
+        elapsedMs: { type: integer, format: int64, description: "The wall time of the effort, the stops inside it included" }
+        startDistanceM: { type: number, description: "Where the effort starts, on the cumulative distance of the activity" }
+        endDistanceM: { type: number, description: "Where the effort ends, on the cumulative distance of the activity" }
+        startElapsedMs: { type: integer, format: int64, description: "When the effort starts, from the first sample of the activity" }
+        endElapsedMs: { type: integer, format: int64, description: "When the effort ends, from the first sample of the activity" }
+        avgSpeedMps: { type: number }
+        paceSecPerKm: { type: [number, "null"], description: "Null when the effort does not move" }
+    PersonalRecords:
+      type: object
+      required: [algorithmVersion, pendingActivities, sports]
+      properties:
+        algorithmVersion: { type: string, description: "The version of the algorithm that produced the numbers" }
+        pendingActivities:
+          type: integer
+          description: "The activities of the account that have no analysis yet: the records can be incomplete while this is not zero"
+        sports:
+          type: array
+          items: { $ref: "#/components/schemas/SportRecords" }
+    SportRecords:
+      type: object
+      required: [sport, targets]
+      properties:
+        sport: { type: string, enum: [RUN, RIDE, WALK, HIKE] }
+        targets:
+          type: array
+          items: { $ref: "#/components/schemas/RecordTarget" }
+    RecordTarget:
+      type: object
+      required: [distanceM, record]
+      properties:
+        distanceM: { type: number, description: "The target distance of the sport" }
+        record:
+          description: "Null when the account has no record of this distance yet"
+          oneOf:
+            - { $ref: "#/components/schemas/PersonalRecord" }
+            - { type: "null" }
+    PersonalRecord:
+      type: object
+      required: [activityId, achievedAt, durationMs, elapsedMs, avgSpeedMps, source, qualityGrade]
+      properties:
+        activityId: { type: string, format: uuid, description: "The activity the record was made in" }
+        achievedAt: { type: string, format: date-time, description: "When it was made: the start of the activity" }
+        durationMs: { type: integer, format: int64, description: "The moving time of the effort" }
+        elapsedMs: { type: integer, format: int64, description: "The wall time of the effort" }
+        avgSpeedMps: { type: number }
+        paceSecPerKm: { type: [number, "null"] }
+        source: { type: string, enum: [device, gpx, fit, tcx], description: "Where the activity comes from" }
+        qualityGrade: { type: string, enum: [GOOD, FAIR, POOR, UNKNOWN] }
     AnalysisTotals:
       type: object
       required: [distanceM, elapsedMs, movingMs, pausedMs, stationaryMs]

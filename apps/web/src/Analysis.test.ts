@@ -6,8 +6,14 @@ import { elevationSeries, heartRateSeries } from './analysisSeries'
 import type { ActivityAnalysis } from './api'
 
 const analysis: ActivityAnalysis = {
-  schemaVersion: 1,
-  algorithmVersions: { splits: 'splits-v1', elevation: 'elevation-v1', series: 'series-v1', heartRate: 'hr-v2' },
+  schemaVersion: 2,
+  algorithmVersions: {
+    splits: 'splits-v1',
+    elevation: 'elevation-v1',
+    series: 'series-v1',
+    heartRate: 'hr-v2',
+    bestEfforts: 'best-efforts-v1',
+  },
   splitLengthM: 1000,
   totals: {
     distanceM: 1500,
@@ -57,6 +63,19 @@ const analysis: ActivityAnalysis = {
       elevationLossM: 5,
       avgHrBpm: 135,
       partial: true,
+    },
+  ],
+  bestEfforts: [
+    {
+      distanceM: 1000,
+      durationMs: 360_000,
+      elapsedMs: 362_000,
+      startDistanceM: 0,
+      endDistanceM: 1000,
+      startElapsedMs: 0,
+      endElapsedMs: 360_000,
+      avgSpeedMps: 2.78,
+      paceSecPerKm: 360,
     },
   ],
   series: {
@@ -116,4 +135,14 @@ test('a ride shows the speed of the splits and not the pace', () => {
 
   expect(html).toContain('Speed')
   expect(html).toContain('10.0 km/h')
+})
+
+test('the analysis shows the best efforts of the activity', () => {
+  const html = renderToString(createElement(Analysis, { analysis, sport: 'RUN' }))
+
+  expect(html).toContain('Best efforts')
+  expect(html).toContain('1 km')
+  expect(html).toContain('0:06:00')
+  expect(html).toContain('6:00 /km')
+  expect(html).toContain('best-efforts-v1')
 })

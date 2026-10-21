@@ -84,6 +84,7 @@ fun Application.activities(
     consentStore: ConsentStore = ConsentStore(db),
     analysisService: AnalysisService = AnalysisService(db, raw),
     userData: UserData = UserData(db, raw, analysisService = analysisService),
+    recordStore: PersonalRecordStore = PersonalRecordStore(db),
 ) {
     val ingest = ActivityIngest(db, raw, quotaBytes)
     install(RateLimit) {
@@ -327,6 +328,13 @@ fun Application.activities(
                                 errorBody("the analysis could not be computed"),
                             )
                     }
+                }
+
+                // The personal records of the caller: the fastest effort of every sport and distance
+                // (TDD-0010). The numbers come from the stored best efforts: the browser never computes them.
+                get("/v1/me/records") {
+                    val owner = call.owner(db) ?: return@get
+                    call.respond(withContext(Dispatchers.IO) { recordStore.records(owner) })
                 }
 
                 delete("/v1/activities/{id}") {

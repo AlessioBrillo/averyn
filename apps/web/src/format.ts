@@ -62,3 +62,12 @@ export function formatCoverage(percent: number): string {
 export function formatHeartRate(bpm: number): string {
   return `${Math.round(bpm)} bpm`
 }
+
+/**
+ * A target distance of a record: "1 km", "21.1 km". The distances of the records are the standard ones of
+ * the sport, so they are shown as they are and not rounded to two decimals like a measurement.
+ */
+export function formatTargetDistance(meters: number): string {
+  const km = meters / 1000
+  return `${Number.isInteger(km) ? km : km.toFixed(1)} km`
+}

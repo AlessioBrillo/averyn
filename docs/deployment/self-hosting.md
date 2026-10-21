@@ -78,7 +78,7 @@ The export of an account holds the analysis of every activity too (`analysis/<id
 
 ## The analysis of the activities
 
-Every activity is analysed when it is stored: the automatic splits, the elevation and the series the web app draws ([TDD-0009](../design/TDD-0009-activity-analysis.md)). An activity that was stored before the analysis existed, or one whose algorithms changed, is analysed the first time somebody opens it, and the answer is kept.
+Every activity is analysed when it is stored: the automatic splits, the elevation, the series the web app draws and the best efforts ([TDD-0009](../design/TDD-0009-activity-analysis.md) and [TDD-0010](../design/TDD-0010-best-efforts.md)). An activity that was stored before the analysis existed, or one whose algorithms changed, is analysed the first time somebody opens it, and the answer is kept.
 
 To have the whole instance up to date at once — after an upgrade, or before the first user asks for the numbers — run the backfill. It reads the same environment variables as the server and it is safe to run more than once:
 
@@ -88,6 +88,12 @@ docker compose run --rm --entrypoint java backend \
 ```
 
 From a checkout it is `./gradlew :backend:backfillAnalysis`. The command prints how many activities it analysed and how many it could not: a failure is per activity, and the other ones are still analysed.
+
+**After an upgrade, run it:** the personal records of the accounts are the best efforts of their activities, and the activities stored before the records existed have none until they are analysed again. The Records page says how many activities of an account are still pending, so the list is never quietly incomplete.
+
+## The personal records
+
+The Records page shows the fastest kilometre, the fastest five and the fastest ten of the account, with the activity that holds them. A record is the fastest eligible effort of the account: an activity holds one when it finished, when it comes from Averyn or from an imported GPX file, and when its quality is not `POOR` (the platform says the distance of such an activity is not reliable). The records are not stored: they are read from the best efforts of the activities, so deleting the activity that holds a record promotes the next one by itself.
 
 ## Backups and upgrades
 

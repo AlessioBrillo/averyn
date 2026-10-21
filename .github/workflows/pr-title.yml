@@ -29,4 +29,5 @@ jobs:
             deps
             ci
             import
+            records
           requireScope: false
