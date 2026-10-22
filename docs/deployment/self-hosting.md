@@ -37,6 +37,14 @@ The `web` service serves the web app at `http://localhost:8082` (`WEB_PORT`) and
 - **Security headers:** a strict Content-Security-Policy (scripts from the app's own origin only), `frame-ancestors 'none'`, `Referrer-Policy: no-referrer` ([TDD-0005](../design/TDD-0005-self-host-hardening.md)); in the TLS stack also HSTS.
 - The container writes no access log, because request paths contain activity ids.
 
+## The apps and the versions
+
+The apps read `GET /v1/client-config` (public, no token) before signing in: it says which identity provider to use and which versions are in play ([TDD-0011](../design/TDD-0011-mobile-read-path.md)).
+
+- **`AVERYN_MIN_CLIENT_VERSION`** is optional: the oldest app version this instance supports (for example `0.2.0`). An app below it still works — it shows a warning that says the app should be updated — because the contract of `/v1` is additive inside a version. Unset, there is no minimum.
+- The server also publishes `apiVersion`, the version of the contract it speaks. An app that does not understand it warns too, in the other direction.
+- The copy of the server that the apps keep on the device (the activities that were opened) is bounded, is not part of the backup of the phone and disappears when the session ends ([ADR-0025](../adr/0025-device-side-cache-of-server-activities.md)).
+
 ## TLS (public instance)
 
 The overlay `docker-compose.tls.yml` puts Caddy in front of everything: it is the only service publishing ports (80, redirected, and 443), serves the web app and `/v1` on `AVERYN_DOMAIN` and the identity provider on `IDP_HOST`, and obtains certificates automatically. **Decide the two names before the first start:** the issuer becomes `https://IDP_HOST` and is fixed from then on; moving an existing plain-HTTP instance to TLS, or to other names, is not supported (ADR-0018).

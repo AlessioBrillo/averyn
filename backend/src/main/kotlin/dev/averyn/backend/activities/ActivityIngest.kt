@@ -1,6 +1,8 @@
 package dev.averyn.backend.activities
 
 import dev.averyn.analysis.ActivityAnalysis
+import dev.averyn.api.ActivityPage
+import dev.averyn.api.ActivitySummary
 import dev.averyn.backend.storage.RawObjectStore
 import dev.averyn.domain.ActivityState
 import dev.averyn.domain.LocationSample
@@ -16,7 +18,6 @@ import dev.averyn.tracking.ReplayResult
 import dev.averyn.tracking.SUPPORTED_FORMAT_VERSIONS
 import dev.averyn.tracking.replay
 import kotlinx.io.files.Path
-import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
 import java.nio.file.Files
 import java.sql.ResultSet
@@ -35,47 +36,6 @@ const val GPX_CONTENT_TYPE = "application/gpx+xml"
 
 /** Metric algorithms an activity row was computed with (a change of any of them is a new version, never an edit). */
 const val METRICS_ALGORITHM_VERSION = "$DISTANCE_ALGORITHM_VERSION,$TIME_ALGORITHM_VERSION,$SPEED_ALGORITHM_VERSION"
-
-/** One activity in the activity list and in the detail page. */
-@Serializable
-data class ActivitySummary(
-    val id: String,
-    val clientActivityId: String,
-    val sport: String,
-    val startedAt: String,
-    val finalState: String,
-    val distanceM: Double,
-    val elapsedMs: Long,
-    val movingMs: Long,
-    val pausedMs: Long,
-    /** The time the activity was recording but the user was not moving (`time-v1`). */
-    val stationaryMs: Long,
-    val averageSpeedMps: Double,
-    /** null when the average speed is 0 (speed-v1). */
-    val paceSecPerKm: Double?,
-    val qualityGrade: String,
-    val droppedRecords: Int,
-    val metricsAlgorithmVersion: String,
-    val qualityAlgorithmVersion: String,
-    val visibility: String,
-    /** hr-v2 (docs/metrics/heart-rate.md): mean HR over RECORDING-state samples, 0 when none. */
-    val avgHrBpm: Int,
-    /** hr-v2: max HR over RECORDING-state samples, 0 when none. */
-    val maxHrBpm: Int,
-    /** Which sensor produced the HR values (`ble-hr`, `none`, …). */
-    val hrSource: String,
-    /** The algorithm that computed the heart rate: the numbers of two versions are never mixed silently. */
-    val hrAlgorithmVersion: String,
-    /** Where the activity comes from: `device` (recorded) or `gpx` (imported, TDD-0008). */
-    val source: String = "device",
-)
-
-@Serializable
-data class ActivityPage(
-    val items: List<ActivitySummary>,
-    /** Opaque; null on the last page. */
-    val nextCursor: String?,
-)
 
 /** Keyset position `(started_at, id)` of the last activity of a page, as `"<instant>_<uuid>"`. */
 data class ActivityCursor(

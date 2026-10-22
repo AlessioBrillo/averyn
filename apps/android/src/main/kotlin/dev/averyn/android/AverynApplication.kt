@@ -5,6 +5,7 @@ import android.os.BatteryManager
 import dev.averyn.android.auth.AuthManager
 import dev.averyn.android.ble.BleHrAdapter
 import dev.averyn.android.consent.ConsentClient
+import dev.averyn.client.HistoryRepository
 import dev.averyn.sensors.HeartRateSample
 import dev.averyn.sensors.RrInterval
 import dev.averyn.tracking.ActivityRecorder
@@ -14,9 +15,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.io.files.Path
+import java.io.File
 
 class AverynApplication : Application() {
-    val auth: AuthManager by lazy { AuthManager(this) }
+    val auth: AuthManager by lazy { AuthManager(this) { clearServerCache() } }
     val store: ActivityStore by lazy { ActivityStore(Path(filesDir.absolutePath, "activities")) }
     val recorder: ActivityRecorder by lazy {
         ActivityRecorder(store).apply {
@@ -27,6 +29,38 @@ class AverynApplication : Application() {
                 percent.takeIf { it in 0..100 } // the API returns a negative value when unsupported
             }
         }
+    }
+
+    /** The copy of the server on this device (TDD-0011): its own directory, never the store of the activities. */
+    private val serverCacheDirectory: File by lazy { File(filesDir, "server-cache") }
+
+    /** The history of the account: the server, the cache and the device. Rebuilt when the server changes. */
+    private var historyRepository: HistoryRepository? = null
+    private var historyServerUrl: String? = null
+
+    fun history(): HistoryRepository {
+        val server = auth.serverUrl.orEmpty()
+        val current = historyRepository
+        if (current != null && historyServerUrl == server) return current
+        val created =
+            HistoryRepository.create(
+                store = store,
+                cacheDirectory = serverCacheDirectory.absolutePath,
+                serverUrl = server,
+                nowMs = { System.currentTimeMillis() },
+            )
+        historyRepository = created
+        historyServerUrl = server
+        return created
+    }
+
+    /**
+     * Throws the copy of the server away: the session ended, or the server changed.
+     *
+     * The copy holds the coordinates of the activities of the account: it belongs to the session.
+     */
+    fun clearServerCache() {
+        serverCacheDirectory.deleteRecursively()
     }
 
     /** BLE heart-rate adapter (standard GATT 0x180D/0x2A37). Created lazily so the app installs on
@@ -72,6 +106,9 @@ class AverynApplication : Application() {
         // Anything finished earlier and not uploaded yet (offline, killed, signed out) goes up now.
         if (auth.serverUrl != null) enqueueSync(this)
         refreshConsents()
+        // The activities recorded by an older build have no local summary yet: they get one, in the background
+        // (TDD-0011), so their numbers are there even without a connection.
+        appScope.launch { store.backfillLocalSummaries() }
     }
 }
 

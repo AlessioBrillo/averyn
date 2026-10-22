@@ -1,6 +1,8 @@
 package dev.averyn.backend.activities
 
 import com.auth0.jwt.JWT
+import dev.averyn.api.ActivityPage
+import dev.averyn.api.ActivitySummary
 import dev.averyn.backend.TestStack
 import dev.averyn.backend.auth.TestIssuer
 import dev.averyn.backend.auth.auth

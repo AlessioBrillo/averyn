@@ -52,6 +52,8 @@ dependencies {
     implementation(project(":shared:metrics"))
     implementation(project(":shared:sensors"))
     implementation(project(":shared:sync"))
+    implementation(project(":shared:api"))
+    implementation(project(":shared:client"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.material3)

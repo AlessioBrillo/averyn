@@ -1,10 +1,10 @@
 # Threat model (STRIDE, MVP-1 sync)
 
-Status: v0.3, scope = account identity, activity sync ([TDD-0002](../design/TDD-0002-activity-sync.md)), web app and self-host edge ([TDD-0005](../design/TDD-0005-self-host-hardening.md)), sensor channels and consent ([ADR-0021](../adr/0021-consent-health-data.md)) and the import path ([TDD-0008](../design/TDD-0008-gpx-import.md)). Extend when new data flows are added. Classes refer to [data classification](data-classification.md).
+Status: v0.4, scope = account identity, activity sync ([TDD-0002](../design/TDD-0002-activity-sync.md)), web app and self-host edge ([TDD-0005](../design/TDD-0005-self-host-hardening.md)), sensor channels and consent ([ADR-0021](../adr/0021-consent-health-data.md)) and the import path ([TDD-0008](../design/TDD-0008-gpx-import.md)), plus the copy of the server on the device ([TDD-0011](../design/TDD-0011-mobile-read-path.md), [ADR-0025](../adr/0025-device-side-cache-of-server-activities.md)). Extend when new data flows are added. Classes refer to [data classification](data-classification.md).
 
 ## Assets
 
-Raw activity files and routes (**Restricted**), access tokens and refresh tokens (**Confidential**), the user ↔ IdP-subject mapping (**Confidential**).
+Raw activity files and routes (**Restricted**), access tokens and refresh tokens (**Confidential**), the user ↔ IdP-subject mapping (**Confidential**), the copy of the server on the device (routes and series of the activities that were opened: **Restricted**).
 
 ## Trust boundaries
 
@@ -25,6 +25,7 @@ Device / browser ↔ edge proxy (internet, TLS, [ADR-0018](../adr/0018-tls-edge-
 | **I** | Data kept after the user asked to delete it | Hard delete of row and raw object; account deletion removes the whole `raw/{ownerId}/` prefix ([ADR-0017](../adr/0017-data-deletion-and-retention.md)); backups expire per operator policy | deletion tests: object absent |
 | **I** | Coordinates or tokens in logs | Log ids, counts and hashes only; reviewed in PRs | log grep in end-to-end verification |
 | **I** | Tokens read from a lost or backed-up phone | Android: session encrypted with an AES-GCM key held in the Android Keystore, `allowBackup=false`. iOS: Keychain `AfterFirstUnlockThisDeviceOnly` (no iCloud sync, no restore onto another device). Sign-out deletes it | manual: device matrix S14 |
+| **I** | The copy of the server (routes, series) stays on a lost or backed-up phone | The copy is bounded (10 details, 50 MB) and holds no token, no raw file and no RR interval; it lives in the app's private storage, outside the backup (`allowBackup=false` on Android, `isExcludedFromBackup` on iOS); it is deleted when the session ends, when the server changes and when the user asks for it ([ADR-0025](../adr/0025-device-side-cache-of-server-activities.md)) | device matrix S24; cache tests (wipe on sign-out) |
 | **I** | Credentials or tokens sent in clear on the network | TLS overlay: only the edge publishes ports, 80 → 443, HSTS, issuer `https://` ([ADR-0018](../adr/0018-tls-edge-and-public-issuer.md)). Release builds of both apps are HTTPS-only; cleartext is allowed in Debug builds only, for the plain-HTTP development stack | CI TLS Compose job; CI check of the iOS Release Info.plist |
 | **I** | Injected script in the web app reads the session token from `sessionStorage` | Content-Security-Policy `script-src 'self'`, `connect-src` limited to the API, the IdP and the map hosts, `frame-ancestors 'none'` ([TDD-0005 §5.3](../design/TDD-0005-self-host-hardening.md)) | CI header check; browser run without violations |
 | **I** | Raw objects exposed through the storage endpoint | S3 not published to the host in Compose; backend is the only client | compose review |

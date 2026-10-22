@@ -2,11 +2,18 @@ package dev.averyn.android
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -14,31 +21,36 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import dev.averyn.domain.ActivityState
-import dev.averyn.sync.SyncStatusStore
+import dev.averyn.analysis.ActivityAnalysis
+import dev.averyn.client.AnalysisState
+import dev.averyn.client.ApiFailureKind
+import dev.averyn.client.DetailSnapshot
+import dev.averyn.client.DeviceActivityItem
+import dev.averyn.client.HistoryItem
+import dev.averyn.client.HistorySnapshot
+import dev.averyn.client.HistorySource
+import dev.averyn.client.HistorySyncState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
 
 private const val HISTORY_LIMIT = 20
 
-private data class HistoryRow(
-    val activityId: String,
-    val title: String,
-    val state: ActivityState?,
-    val sync: String,
-)
-
 private enum class ExportKind { GPX, DIAGNOSTICS, RAW }
 
 /**
- * Past activities with their exports (TDD-0006 R8): the GPX, the `diagnostics-v3` report and the raw file of any
- * stored activity, not only the one just finished, so a tester can still export after the app was restarted.
- * [refreshKey] changes when something was recorded or finished, which reloads the list.
+ * The history of the account (TDD-0011): what the server has, what this device has, and what can be read
+ * without a connection.
+ *
+ * The list is shown from the cache first and refreshed afterwards: the user sees something at once, and the
+ * screen says when what it shows is a copy.
  */
 @Composable
 internal fun HistorySection(
@@ -47,11 +59,33 @@ internal fun HistorySection(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var rows by remember { mutableStateOf<List<HistoryRow>>(emptyList()) }
-    var pending by remember { mutableStateOf<String?>(null) }
+    var snapshot by remember { mutableStateOf<HistorySnapshot?>(null) }
+    var detail by remember { mutableStateOf<DetailSnapshot?>(null) }
+    var deviceData by remember { mutableStateOf<List<DeviceActivityItem>>(emptyList()) }
+    var selectedId by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var pending by remember { mutableStateOf<String?>(null) }
+    var toDelete by remember { mutableStateOf<DeviceActivityItem?>(null) }
 
-    LaunchedEffect(refreshKey) { rows = withContext(Dispatchers.IO) { loadHistory(app) } }
+    /** The token of the session, or null when there is none (the list then shows the cache). */
+    suspend fun token(): String? = runCatching { app.auth.freshAccessToken() }.getOrNull()
+
+    suspend fun reload() {
+        val repository = app.history()
+        snapshot = repository.refresh(token())
+        deviceData = repository.deviceData()
+    }
+
+    LaunchedEffect(refreshKey) {
+        busy = true
+        val repository = app.history()
+        // What is on the device comes first: the list is there at once, the server fills it in.
+        snapshot = repository.loadCached()
+        deviceData = repository.deviceData()
+        runCatching { reload() }
+        busy = false
+    }
 
     fun launcherResult(kind: ExportKind): (android.net.Uri?) -> Unit =
         { uri ->
@@ -99,43 +133,311 @@ internal fun HistorySection(
             launcherResult(ExportKind.RAW),
         )
 
+    /** Opens an activity: its numbers first, its analysis right after. */
+    fun openDetail(item: HistoryItem) {
+        val serverId = item.serverId ?: return
+        scope.launch {
+            busy = true
+            selectedId = serverId
+            detail = null
+            val repository = app.history()
+            val accessToken = token()
+            detail = repository.refreshDetail(serverId, accessToken)
+            // The server computes the analysis on the first read: it may answer "in calcolo".
+            var current = repository.refreshAnalysis(serverId, accessToken)
+            var attempts = 0
+            while (current.analysisState == AnalysisState.COMPUTING && attempts < ANALYSIS_RETRIES) {
+                val wait = current.failure?.retryAfterSeconds ?: 5
+                delay(wait * 1000)
+                current = repository.refreshAnalysis(serverId, accessToken)
+                attempts++
+            }
+            detail = current
+            busy = false
+        }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("History")
-        if (rows.isEmpty()) Text("No activities yet")
-        rows.forEach { row ->
-            Text("${row.title} — ${row.state ?: "?"}, sync ${row.sync}")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = {
-                    pending = row.activityId
-                    gpx.launch("${row.activityId}.gpx")
-                }) { Text("GPX") }
-                Button(onClick = {
-                    pending = row.activityId
-                    diagnostics.launch("${row.activityId}-diagnostics.json")
-                }) { Text("Diagnostics") }
-                Button(onClick = {
-                    pending = row.activityId
-                    raw.launch("${row.activityId}.jsonl")
-                }) { Text("Raw file") }
+        snapshot?.let { current ->
+            if (current.fromCache) {
+                Text(
+                    "Offline copy" +
+                        (current.cachedAtMs?.let { " of ${formatDate(it)}" } ?: "") +
+                        " — the server could not be reached.",
+                )
+            }
+            if (current.needsLogin) Text("Sign in to read the activities of the account.")
+            current.failure?.let { failure ->
+                if (failure.kind == ApiFailureKind.UNAUTHORIZED) {
+                    Text("The session expired: sign in again.")
+                }
+            }
+        }
+        val rows = snapshot?.items.orEmpty()
+        if (rows.isEmpty() && !busy) Text("No activities yet")
+        rows.forEach { item ->
+            HistoryRowView(
+                item = item,
+                selected = item.serverId != null && item.serverId == selectedId,
+                onOpen = { openDetail(item) },
+            )
+        }
+        snapshot?.nextCursor?.let { cursor ->
+            Button(onClick = {
+                scope.launch {
+                    busy = true
+                    snapshot = app.history().loadMore(token(), cursor)
+                    busy = false
+                }
+            }) { Text("Load more") }
+        }
+        detail?.let { ActivityDetailView(it) }
+        if (deviceData.isNotEmpty()) {
+            Text("On this device")
+            deviceData.forEach { item ->
+                DeviceRowView(
+                    item = item,
+                    onExport = { kind ->
+                        pending = item.activityId
+                        when (kind) {
+                            ExportKind.GPX -> gpx.launch("${item.activityId}.gpx")
+                            ExportKind.DIAGNOSTICS -> diagnostics.launch("${item.activityId}-diagnostics.json")
+                            ExportKind.RAW -> raw.launch("${item.activityId}.jsonl")
+                        }
+                    },
+                    onDelete = { toDelete = item },
+                )
             }
         }
         message?.let { Text(it) }
     }
+
+    toDelete?.let { item ->
+        AlertDialog(
+            onDismissRequest = { toDelete = null },
+            title = { Text("Delete from this device?") },
+            text = {
+                Text(
+                    "The files of this activity are removed from this device. " +
+                        "What the server has is not touched.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    toDelete = null
+                    scope.launch {
+                        app.history().deleteLocal(item.activityId)
+                        deviceData = app.history().deviceData()
+                        message = "Deleted from this device"
+                    }
+                }) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { toDelete = null }) { Text("Cancel") } },
+        )
+    }
 }
 
-private fun loadHistory(app: AverynApplication): List<HistoryRow> {
-    val statuses = SyncStatusStore(app.store)
-    val format = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
-    return app.store
-        .list()
-        .sortedByDescending { it.startedAtMs }
-        .take(HISTORY_LIMIT)
-        .map { metadata ->
-            HistoryRow(
-                activityId = metadata.activityId,
-                title = "${metadata.sport} ${format.format(Date(metadata.startedAtMs))}",
-                state = app.store.lastStateOf(metadata.activityId),
-                sync = statuses.statusOf(metadata.activityId).state.name,
+/** One row of the list: the numbers of the activity and where they come from. */
+@Composable
+private fun HistoryRowView(
+    item: HistoryItem,
+    selected: Boolean,
+    onOpen: () -> Unit,
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(enabled = item.serverId != null) { onOpen() }
+                .padding(vertical = 4.dp),
+    ) {
+        Text(
+            "${item.sport} ${formatDate(item.startedAtMs)}" +
+                if (selected) " (open)" else "",
+        )
+        Text("${formatDistance(item.distanceM)} — ${formatDuration(item.elapsedMs)}")
+        val pace = item.paceSecPerKm?.let { formatPace(it) }
+        val hr = if (item.avgHrBpm > 0) "HR ${item.avgHrBpm}/${item.maxHrBpm} bpm" else null
+        val badges =
+            listOfNotNull(
+                when (item.source) {
+                    HistorySource.DEVICE -> null
+                    HistorySource.GPX -> "imported"
+                    HistorySource.LOCAL -> "on this device"
+                },
+                item.syncState?.let { syncLabel(it) },
+                if (item.localEstimate) "local estimate" else null,
             )
-        }
+        Text(listOfNotNull(pace, hr).joinToString(" · "))
+        if (badges.isNotEmpty()) Text(badges.joinToString(" · "))
+    }
 }
+
+/** The numbers and the analysis of one activity. */
+@Composable
+private fun ActivityDetailView(detail: DetailSnapshot) {
+    val summary = detail.summary
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text("Activity")
+        if (detail.deletedOnServer) {
+            Text("The server does not have this activity any more. The file on this device is untouched.")
+            return@Column
+        }
+        summary?.let {
+            Text("${formatDistance(it.distanceM)} — ${formatDuration(it.elapsedMs)}")
+            Text("Moving ${formatDuration(it.movingMs)} · Paused ${formatDuration(it.pausedMs)}")
+            it.paceSecPerKm?.let { pace -> Text("Pace ${formatPace(pace)}") }
+            if (it.avgHrBpm > 0) Text("HR ${it.avgHrBpm}/${it.maxHrBpm} bpm (${it.hrSource})")
+            Text("Quality ${it.qualityGrade} · ${it.metricsAlgorithmVersion}")
+        }
+        when (detail.analysisState) {
+            AnalysisState.READY -> detail.analysis?.let { AnalysisView(it) }
+            AnalysisState.COMPUTING -> Text("The analysis is being computed…")
+            AnalysisState.NOT_CACHED -> Text("The analysis is not on this device.")
+            AnalysisState.NOT_SYNCED -> Text("The analysis comes with the upload of the activity.")
+            AnalysisState.UNAVAILABLE -> Text("There is no analysis for this activity.")
+        }
+        if (detail.fromCache) {
+            Text("Offline copy" + (detail.cachedAtMs?.let { " of ${formatDate(it)}" } ?: ""))
+        }
+    }
+}
+
+/** The splits and the two curves of the analysis (TDD-0009): the numbers, not a map. */
+@Composable
+private fun AnalysisView(analysis: ActivityAnalysis) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        if (analysis.splits.isNotEmpty()) {
+            Text("Splits")
+            analysis.splits.forEach { split ->
+                Text(
+                    "#${split.index} ${formatDistance(split.endDistanceM - split.startDistanceM)} — " +
+                        "${formatDuration(split.movingMs)}" +
+                        (split.avgHrBpm?.let { " — $it bpm" } ?: "") +
+                        if (split.partial) " (partial)" else "",
+                )
+            }
+        }
+        analysis.elevation?.let { elevation ->
+            Text("Elevation: +${elevation.gainM.toInt()} m / -${elevation.lossM.toInt()} m")
+        }
+        val series = analysis.series
+        val elevationPoints = series.elevationM.filterNotNull()
+        if (elevationPoints.size > 1) {
+            Text("Elevation profile (${elevationPoints.min().toInt()}–${elevationPoints.max().toInt()} m)")
+            SeriesChart(elevationPoints.map { it.toFloat() }, series.segment)
+        }
+        val heartRate = series.heartRate
+        if (heartRate.bpm.size > 1) {
+            Text("Heart rate (${heartRate.bpm.min()}–${heartRate.bpm.max()} bpm)")
+            SeriesChart(heartRate.bpm.map { it.toFloat() }, heartRate.segment)
+        }
+    }
+}
+
+/**
+ * One curve of the analysis: the points of a series, with the pauses as breaks (TDD-0009).
+ *
+ * A drawing, not a measurement: the numbers above are the ones to trust.
+ */
+@Composable
+private fun SeriesChart(
+    values: List<Float>,
+    segments: List<Int>,
+) {
+    Canvas(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(80.dp),
+    ) {
+        if (values.size < 2) return@Canvas
+        val min = values.min()
+        val max = values.max()
+        val span = (max - min).takeIf { it > 0f } ?: 1f
+        val stepX = size.width / (values.size - 1).toFloat()
+        val path = Path()
+        var started = false
+        values.forEachIndexed { index, value ->
+            val segment = segments.getOrElse(index) { segments.lastOrNull() ?: 0 }
+            val previousSegment = segments.getOrElse(index - 1) { segment }
+            val x = index * stepX
+            val y = size.height - ((value - min) / span) * size.height
+            if (!started || segment != previousSegment) {
+                path.moveTo(x, y)
+                started = true
+            } else {
+                path.lineTo(x, y)
+            }
+        }
+        drawPath(
+            path,
+            color =
+                androidx.compose.ui.graphics
+                    .Color(0xFF2E7D32),
+            style = Stroke(width = 2f),
+        )
+    }
+}
+
+/** One activity stored on this device: its files, its state and the way to get rid of them. */
+@Composable
+private fun DeviceRowView(
+    item: DeviceActivityItem,
+    onExport: (ExportKind) -> Unit,
+    onDelete: () -> Unit,
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+    ) {
+        Text("${item.sport} ${formatDate(item.startedAtMs)} — ${syncLabel(item.syncState)}")
+        item.summary?.let {
+            Text("${formatDistance(it.distanceM)} — ${formatDuration(it.elapsedMs)}")
+        }
+        if (item.deletedOnServer) Text("The server does not have it any more.")
+        Text("${item.localBytes / 1024} kB on this device")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { onExport(ExportKind.GPX) }) { Text("GPX") }
+            Button(onClick = { onExport(ExportKind.DIAGNOSTICS) }) { Text("Diagnostics") }
+            Button(onClick = { onExport(ExportKind.RAW) }) { Text("Raw file") }
+            Button(onClick = onDelete) { Text("Delete") }
+        }
+    }
+}
+
+private fun syncLabel(state: HistorySyncState): String =
+    when (state) {
+        HistorySyncState.LOCAL_ONLY -> "recording"
+        HistorySyncState.QUEUED -> "waiting to upload"
+        HistorySyncState.UPLOADING -> "uploading"
+        HistorySyncState.SYNCED -> "on the server"
+        HistorySyncState.FAILED_RETRYABLE -> "upload failed, will retry"
+        HistorySyncState.FAILED_PERMANENT -> "the server refused it"
+        HistorySyncState.DELETED_ON_SERVER -> "deleted on the server"
+    }
+
+private fun formatDate(epochMs: Long): String =
+    DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(epochMs))
+
+private fun formatDistance(meters: Double): String =
+    if (meters >= 1000) "%.2f km".format(meters / 1000) else "%.0f m".format(meters)
+
+private fun formatDuration(ms: Long): String {
+    val total = ms / 1000
+    val hours = total / 3600
+    val minutes = (total % 3600) / 60
+    val seconds = total % 60
+    return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds) else "%d:%02d".format(minutes, seconds)
+}
+
+private fun formatPace(secondsPerKm: Double): String {
+    val total = secondsPerKm.toInt()
+    return "%d:%02d /km".format(total / 60, total % 60)
+}
+
+/** How many times the app comes back for an analysis the server is still computing. */
+private const val ANALYSIS_RETRIES = 3

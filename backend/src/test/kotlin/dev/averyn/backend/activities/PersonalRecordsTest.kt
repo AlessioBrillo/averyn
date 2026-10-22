@@ -1,6 +1,7 @@
 package dev.averyn.backend.activities
 
 import dev.averyn.analysis.ActivityAnalysis
+import dev.averyn.api.ActivitySummary
 import dev.averyn.backend.TestStack
 import dev.averyn.backend.auth.TestIssuer
 import dev.averyn.backend.auth.auth

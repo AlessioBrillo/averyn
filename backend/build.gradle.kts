@@ -14,6 +14,7 @@ application {
 dependencies {
     implementation(project(":shared:tracking")) // the same replay/metrics code as the devices (TDD-0002 §5.4)
     implementation(project(":shared:analysis")) // the splits, the elevation and the series (TDD-0009)
+    implementation(project(":shared:api")) // the contract of the endpoints (TDD-0011)
 
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.netty)

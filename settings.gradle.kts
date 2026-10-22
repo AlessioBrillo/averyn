@@ -24,6 +24,7 @@ if (System.getenv("AVERYN_BACKEND_ONLY") != null) {
         ":shared:metrics",
         ":shared:sensors",
         ":shared:analysis",
+        ":shared:api",
         ":backend",
     )
 } else {
@@ -33,7 +34,9 @@ if (System.getenv("AVERYN_BACKEND_ONLY") != null) {
         ":shared:metrics",
         ":shared:sensors",
         ":shared:analysis",
+        ":shared:api",
         ":shared:sync",
+        ":shared:client",
         ":shared:ios-umbrella",
         ":backend",
         ":apps:android",

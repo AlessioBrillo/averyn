@@ -17,6 +17,8 @@ final class AuthManager: ObservableObject {
     /// Must match the redirect URI registered with the identity provider (infrastructure/compose/idp-init.sh).
     private static let redirectURL = URL(string: "dev.averyn.app:/oauth2redirect")!
     private static let serverKey = "serverURL"
+    private static let apiVersionKey = "serverApiVersion"
+    private static let minClientVersionKey = "serverMinClientVersion"
 
     @Published var serverURL: String {
         didSet { UserDefaults.standard.set(serverURL, forKey: Self.serverKey) }
@@ -41,11 +43,38 @@ final class AuthManager: ObservableObject {
         return url.isEmpty ? nil : url
     }
 
+    /// Reads the configuration of the server again (TDD-0011).
+    ///
+    /// The versions it carries say whether this app and this server still fit together: the app warns, it
+    /// never refuses to work. A failure is not fatal: the last known answer is kept.
+    func refreshServerConfig() async {
+        guard let server = normalizedServerURL else { return }
+        guard let config = try? await fetchClientConfig(server: server) else { return }
+        rememberServerConfig(config)
+    }
+
+    /// How this app and the server fit together (TDD-0011).
+    var compatibility: ClientCompatibility {
+        let stored = Int32(UserDefaults.standard.integer(forKey: Self.apiVersionKey))
+        return Api.shared.checkCompatibility(
+            serverApiVersion: stored == 0 ? Api.shared.API_VERSION : stored,
+            supportedApiVersion: Api.shared.SUPPORTED_API_VERSION,
+            minClientVersion: UserDefaults.standard.string(forKey: Self.minClientVersionKey),
+            clientVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        )
+    }
+
+    private func rememberServerConfig(_ config: ClientConfig) {
+        UserDefaults.standard.set(config.apiVersion ?? Api.shared.API_VERSION, forKey: Self.apiVersionKey)
+        UserDefaults.standard.set(config.minClientVersion, forKey: Self.minClientVersionKey)
+    }
+
     /// Opens the system browser at the IdP's login page and stores the session. Throws if the server cannot be
     /// reached or the user cancels.
     func signIn() async throws {
         guard let server = normalizedServerURL else { throw AuthError.noServer }
         let config = try await fetchClientConfig(server: server)
+        rememberServerConfig(config)
         let issuer = config.issuer.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let discoveryURL = URL(string: issuer + "/.well-known/openid-configuration") else {
             throw AuthError.badServerResponse
@@ -102,6 +131,8 @@ final class AuthManager: ObservableObject {
         authState = nil
         isSignedIn = false
         KeychainStore.deleteAuthState()
+        // The copy of the server belongs to the session (TDD-0011).
+        AppModel.shared.clearServerCache()
     }
 
     private func save(_ state: OIDAuthState) {
@@ -110,9 +141,13 @@ final class AuthManager: ObservableObject {
         KeychainStore.saveAuthState(state)
     }
 
+    /// The configuration of the server: the sign-in part and the versions (TDD-0011).
     private struct ClientConfig: Decodable {
         let issuer: String
         let clientId: String
+        /// Absent on an older server: the app then assumes the version it knows.
+        let apiVersion: Int?
+        let minClientVersion: String?
     }
 
     /// `GET /v1/client-config` (public): the issuer and the public client id apps sign in with.

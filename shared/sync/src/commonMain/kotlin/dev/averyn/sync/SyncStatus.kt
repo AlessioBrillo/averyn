@@ -121,4 +121,19 @@ class SyncStatusStore(
         }
         SystemFileSystem.atomicMove(temp, target)
     }
+
+    /**
+     * Throws the status of an activity away (TDD-0011): the activity is deleted on this device, so its upload
+     * state is meaningless. Without this, a new activity that reuses the id would inherit the old state.
+     */
+    fun delete(activityId: String) {
+        val path = pathFor(activityId)
+        if (SystemFileSystem.exists(path)) SystemFileSystem.delete(path)
+    }
+
+    /** Throws the status of the heart-rate sidecar away. */
+    fun deleteRr(activityId: String) {
+        val path = Path(directory, "$activityId.rr.sync.json")
+        if (SystemFileSystem.exists(path)) SystemFileSystem.delete(path)
+    }
 }

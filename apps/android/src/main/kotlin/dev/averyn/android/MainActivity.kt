@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import dev.averyn.api.ClientCompatibility
 import dev.averyn.domain.ActivityState
 import dev.averyn.domain.Sport
 import dev.averyn.sync.SyncStatusStore
@@ -333,6 +334,17 @@ private fun AccountSection(app: AverynApplication) {
     var signedIn by remember { mutableStateOf(app.auth.isSignedIn) }
     var message by remember { mutableStateOf<String?>(null) }
     var syncText by remember { mutableStateOf("") }
+    // How this app and the server fit together (TDD-0011): a warning, never a refusal.
+    var compatibility by remember { mutableStateOf(app.auth.compatibility()) }
+    var cacheSize by remember { mutableStateOf("") }
+
+    // The configuration of the server is public: it can be read without a session, and it says which versions
+    // are in play. A failure is not fatal: the last known answer is kept.
+    LaunchedEffect(Unit) {
+        runCatching { app.auth.refreshServerConfig() }
+        compatibility = app.auth.compatibility()
+        cacheSize = cacheSizeText(app)
+    }
 
     val signInLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -342,6 +354,7 @@ private fun AccountSection(app: AverynApplication) {
                     app.auth.completeSignIn(data)
                     signedIn = true
                     message = null
+                    compatibility = app.auth.compatibility()
                     enqueueSync(context)
                 } catch (e: Exception) {
                     message = "Sign-in failed"
@@ -371,6 +384,7 @@ private fun AccountSection(app: AverynApplication) {
                 Button(onClick = {
                     app.auth.signOut()
                     signedIn = false
+                    scope.launch { cacheSize = cacheSizeText(app) }
                 }) { Text("Sign out") }
             } else {
                 Button(onClick = {
@@ -390,9 +404,37 @@ private fun AccountSection(app: AverynApplication) {
                 enqueueSync(context)
             }) { Text("Sync now") }
         }
+        compatibilityText(compatibility)?.let { Text(it) }
+        if (cacheSize.isNotEmpty()) {
+            Text(cacheSize)
+            Button(onClick = {
+                scope.launch {
+                    app.history().clearCache()
+                    cacheSize = cacheSizeText(app)
+                    message = "The offline copy was deleted"
+                }
+            }) { Text("Delete the offline copy") }
+        }
         message?.let { Text(it) }
         Text(syncText)
     }
+}
+
+/** The warning of a version that does not fit (TDD-0011): it never stops the app from working. */
+private fun compatibilityText(compatibility: ClientCompatibility): String? =
+    when (compatibility) {
+        ClientCompatibility.OK -> null
+        ClientCompatibility.APP_TOO_OLD -> "This server is newer than the app: update the app to use everything."
+        ClientCompatibility.APP_BELOW_MINIMUM -> "This server needs a newer app: update the app."
+        ClientCompatibility.SERVER_TOO_OLD -> "This server is older than the app: some features may be missing."
+        ClientCompatibility.UNKNOWN -> null
+    }
+
+/** What the copy of the server occupies on this device. */
+private suspend fun cacheSizeText(app: AverynApplication): String {
+    val stats = app.history().cacheStats()
+    if (stats.detailCount == 0) return ""
+    return "Offline copy: ${stats.detailCount} activities, ${stats.bytes / 1024} kB"
 }
 
 private fun latestSyncText(app: AverynApplication): String {

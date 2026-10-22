@@ -362,12 +362,20 @@ components:
   schemas:
     ClientConfig:
       type: object
-      required: [issuer, clientId, webClientId, mapStyleUrl]
+      required: [issuer, clientId, webClientId, mapStyleUrl, apiVersion]
       properties:
         issuer: { type: string, format: uri }
         clientId: { type: string, description: The native (mobile) OIDC app }
         webClientId: { type: string, description: The browser OIDC app (same project and audience) }
         mapStyleUrl: { type: string, format: uri, description: MapLibre style for the web basemap (deployment configuration) }
+        apiVersion:
+          type: integer
+          description: "The version of the API contract this server speaks (TDD-0011). A client that does not understand it is warned, never refused: the read path is additive."
+          example: 1
+        minClientVersion:
+          type: [string, "null"]
+          description: The oldest app version this instance supports (semantic version), null when there is no minimum. A client below it is warned.
+          example: "0.1.0"
     ActivitySummary:
       type: object
       required: [id, clientActivityId, sport, startedAt, finalState, distanceM, elapsedMs, movingMs, pausedMs, stationaryMs, averageSpeedMps, qualityGrade, droppedRecords, metricsAlgorithmVersion, qualityAlgorithmVersion, visibility]

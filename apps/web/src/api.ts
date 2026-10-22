@@ -5,6 +5,10 @@ export interface ClientConfig {
   clientId: string
   webClientId: string
   mapStyleUrl: string
+  /** The version of the API contract the server speaks (TDD-0011). */
+  apiVersion?: number
+  /** The oldest app version the instance supports; null when there is no minimum. */
+  minClientVersion?: string | null
 }
 
 export interface ActivitySummary {

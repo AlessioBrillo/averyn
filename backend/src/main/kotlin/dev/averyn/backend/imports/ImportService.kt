@@ -1,7 +1,7 @@
 package dev.averyn.backend.imports
 
+import dev.averyn.api.ActivitySummary
 import dev.averyn.backend.activities.ActivityIngest
-import dev.averyn.backend.activities.ActivitySummary
 import dev.averyn.backend.activities.DEFAULT_USER_QUOTA_BYTES
 import dev.averyn.backend.activities.IngestResult
 import dev.averyn.domain.Sport

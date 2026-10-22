@@ -5,6 +5,7 @@ import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Reason
 import dev.averyn.metrics.ActivityMetrics
 import dev.averyn.sensors.HR_ALGORITHM_VERSION
+import dev.averyn.sensors.HeartRateMetrics
 import dev.averyn.sensors.HeartRateSample
 
 /**
@@ -40,6 +41,13 @@ class ReplayResult internal constructor(
     val timeline: List<TimelineEvent>,
     /** True when at least one `HR ` record was found (diagnostics stamps `hr-v1`). */
     val hasHeartRate: Boolean = false,
+    /**
+     * The heart-rate metric of the activity so far (`hr-v2`): the samples of the recording state only.
+     *
+     * A recorder that adopts it (TDD-0011) carries on with the same numbers the server will compute from the
+     * same file.
+     */
+    val heartRate: HeartRateMetrics = HeartRateMetrics(),
 )
 
 /**
@@ -100,6 +108,7 @@ fun replay(
     var lastTimeMs = 0L
     var offsetMs = 0L
     var hasHeartRate = false
+    val heartRate = HeartRateMetrics()
     val gaps = RecoveryGapTracker()
     val timeline = mutableListOf<TimelineEvent>()
 
@@ -163,6 +172,8 @@ fun replay(
                 // Heart-rate records don't affect GPS state/metrics; they're reported to the caller
                 // (backend computes hr-v1 from them, same as GPS samples from onMeteredSample).
                 onHeartRate(record.sample, lastState)
+                // The metric of the activity (hr-v2) counts the samples of the recording state only.
+                if (lastState == ActivityState.RECORDING) heartRate.onSample(record.sample.bpm)
                 hasHeartRate = true
             }
         }
@@ -188,6 +199,7 @@ fun replay(
         recoveryGaps = gaps,
         timeline = timeline.toList(),
         hasHeartRate = hasHeartRate,
+        heartRate = heartRate,
     )
 }
 
