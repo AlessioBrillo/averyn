@@ -45,7 +45,9 @@ fun Application.module() {
     content()
     observability(isReady = db::isReachable)
     auth(oidc)
-    clientConfig(oidc, mapStyleUrl)
+    // The oldest app version this instance still supports (TDD-0011): optional, an unset value means no minimum.
+    val minClientVersion = cfg.propertyOrNull("averyn.client.minClientVersion")?.getString()?.ifBlank { null }
+    clientConfig(oidc, mapStyleUrl, minClientVersion)
     val quotaBytes =
         cfg.propertyOrNull("averyn.limits.quotaBytes")?.getString()?.toLong() ?: DEFAULT_USER_QUOTA_BYTES
     // One analysis service for the whole process: it holds the slots that limit how many activities are

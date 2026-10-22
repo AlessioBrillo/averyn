@@ -6,6 +6,9 @@ import android.content.pm.ApplicationInfo
 import android.net.Uri
 import androidx.core.content.edit
 import androidx.core.net.toUri
+import dev.averyn.android.BuildConfig
+import dev.averyn.api.Api
+import dev.averyn.api.ClientCompatibility
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.openid.appauth.AppAuthConfiguration
@@ -59,6 +62,8 @@ private object CleartextConnectionBuilder : ConnectionBuilder {
  */
 class AuthManager(
     private val context: Context,
+    /** Called when the session ends (sign-out, or a refresh the identity provider refused). */
+    private val onSessionEnded: (() -> Unit)? = null,
 ) {
     private val prefs = context.getSharedPreferences("averyn", Context.MODE_PRIVATE)
     private val storage = TokenStorage(File(context.filesDir, "auth.bin"))
@@ -88,7 +93,9 @@ class AuthManager(
     /** The intent that opens the system browser at the IdP's login page. Throws if the server cannot be reached. */
     suspend fun signInIntent(): Intent {
         val server = checkNotNull(serverUrl) { "no server URL" }
-        val (issuer, clientId) = withContext(Dispatchers.IO) { fetchClientConfig(server) }
+        val config = withContext(Dispatchers.IO) { fetchClientConfig(server) }
+        rememberServerConfig(config)
+        val issuer = config.issuer
         val discoveryUrl = "${issuer.trimEnd('/')}/.well-known/openid-configuration"
         val configuration =
             suspendCoroutine { cont ->
@@ -100,7 +107,7 @@ class AuthManager(
             }
         val request =
             AuthorizationRequest
-                .Builder(configuration, clientId, ResponseTypeValues.CODE, REDIRECT_URI.toUri())
+                .Builder(configuration, config.clientId, ResponseTypeValues.CODE, REDIRECT_URI.toUri())
                 .setScope("openid offline_access") // offline_access: a refresh token, so background sync keeps working
                 .build()
         return service.getAuthorizationRequestIntent(request)
@@ -152,6 +159,41 @@ class AuthManager(
     fun signOut() {
         state = null
         storage.clear()
+        onSessionEnded?.invoke()
+    }
+
+    /**
+     * Reads the configuration of the server again, without blocking anything (TDD-0011).
+     *
+     * The versions it carries say whether this app and this server still fit together: the app warns, it
+     * never refuses to work.
+     */
+    suspend fun refreshServerConfig() {
+        val server = serverUrl ?: return
+        val config =
+            runCatching { withContext(Dispatchers.IO) { fetchClientConfig(server) } }.getOrNull() ?: return
+        rememberServerConfig(config)
+    }
+
+    /**
+     * How this app and the server fit together (TDD-0011).
+     *
+     * The answer comes from the last configuration that was read: the warning is shown even when the server
+     * cannot be reached right now.
+     */
+    fun compatibility(): ClientCompatibility =
+        Api.checkCompatibility(
+            serverApiVersion = prefs.getInt(KEY_API_VERSION, Api.API_VERSION),
+            supportedApiVersion = Api.SUPPORTED_API_VERSION,
+            minClientVersion = prefs.getString(KEY_MIN_CLIENT_VERSION, null),
+            clientVersion = BuildConfig.VERSION_NAME,
+        )
+
+    private fun rememberServerConfig(config: ServerConfig) {
+        prefs.edit {
+            putInt(KEY_API_VERSION, config.apiVersion)
+            putString(KEY_MIN_CLIENT_VERSION, config.minClientVersion)
+        }
     }
 
     private fun persist(newState: AuthState) {
@@ -159,21 +201,36 @@ class AuthManager(
         storage.write(newState.jsonSerializeString())
     }
 
-    /** `GET /v1/client-config` (public): the issuer and the public client id apps sign in with. */
-    private fun fetchClientConfig(server: String): Pair<String, String> {
+    /** `GET /v1/client-config` (public): the issuer, the public client id and the versions (TDD-0011). */
+    private fun fetchClientConfig(server: String): ServerConfig {
         val connection = URL("$server/v1/client-config").openConnection() as HttpURLConnection
         connection.connectTimeout = 10_000
         connection.readTimeout = 10_000
         return try {
             check(connection.responseCode == 200) { "server answered ${connection.responseCode}" }
             val json = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
-            json.getString("issuer") to json.getString("clientId")
+            ServerConfig(
+                issuer = json.getString("issuer"),
+                clientId = json.getString("clientId"),
+                apiVersion = json.optInt("apiVersion", Api.API_VERSION),
+                minClientVersion = if (json.isNull("minClientVersion")) null else json.optString("minClientVersion"),
+            )
         } finally {
             connection.disconnect()
         }
     }
 
+    /** What the server says about itself: the sign-in part and the versions (TDD-0011). */
+    private data class ServerConfig(
+        val issuer: String,
+        val clientId: String,
+        val apiVersion: Int,
+        val minClientVersion: String?,
+    )
+
     private companion object {
         const val KEY_SERVER_URL = "server_url"
+        const val KEY_API_VERSION = "api_version"
+        const val KEY_MIN_CLIENT_VERSION = "min_client_version"
     }
 }

@@ -1,6 +1,7 @@
 package dev.averyn.backend.activities
 
 import dev.averyn.analysis.ActivityAnalysis
+import dev.averyn.api.ActivitySummary
 import dev.averyn.backend.consent.ConsentGrant
 import dev.averyn.backend.consent.ConsentStore
 import dev.averyn.backend.storage.RawObjectStore

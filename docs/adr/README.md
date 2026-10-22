@@ -28,5 +28,6 @@ Format: [MADR](https://adr.github.io/madr/)-style, see [template](template.md). 
 | [0022](0022-imported-activity-provenance.md) | Imported activities: the original file is kept next to the canonical one | accepted |
 | [0023](0023-activity-analysis-storage.md) | Activity analysis: derived data in PostgreSQL, the raw file stays the source | accepted |
 | [0024](0024-personal-records.md) | Personal records: derived rows and a live projection, not a table of records | accepted |
+| [0025](0025-device-side-cache-of-server-activities.md) | The server's copy on the device: a bounded cache with an end, not a mirror | accepted |
 
 Open decisions still without an ADR are tracked in [product/roadmap.md](../product/roadmap.md#open-decisions).

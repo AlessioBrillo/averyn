@@ -11,6 +11,7 @@ import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.readByteArray
 import kotlinx.io.readLine
+import kotlinx.io.readString
 import kotlinx.io.writeString
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
@@ -75,6 +76,9 @@ private const val HR_PREFIX = "HR "
 
 /** The file name suffix of the heart-rate sidecar: it ends in `.jsonl` but it is not an activity file. */
 private const val RR_FILE_SUFFIX = ".rr.jsonl"
+
+/** The file name suffix of the local summary sidecar (TDD-0011): the numbers of an activity on this device. */
+private const val SUMMARY_FILE_SUFFIX = ".summary.json"
 
 // NaN/Infinity in an optional field (altitude, speed, bearing) is stored as the platform reported it rather than
 // crashing the recording thread: raw samples are immutable and never silently lost (F5).
@@ -149,6 +153,8 @@ class ActivityStore(
     }
 
     private fun pathFor(activityId: String) = Path(directory, "$activityId.jsonl")
+
+    private fun pathForLocalSummary(activityId: String) = Path(directory, "$activityId$SUMMARY_FILE_SUFFIX")
 
     fun create(metadata: ActivityMetadata) {
         SystemFileSystem.sink(pathFor(metadata.activityId), append = false).buffered().use { sink ->
@@ -308,9 +314,77 @@ class ActivityStore(
                 lastState == ActivityState.STOPPING
         }
 
+    /**
+     * Throws one activity off the device: the raw file and the local summary sidecar (TDD-0011). The
+     * heart-rate sidecar and the sync status have their own lifecycle and are deleted by their owners.
+     */
     fun delete(activityId: String) {
         val path = pathFor(activityId)
         if (SystemFileSystem.exists(path)) SystemFileSystem.delete(path)
+        deleteLocalSummary(activityId)
+    }
+
+    // --- Local summary sidecar (TDD-0011): `<id>.summary.json`, the numbers of an activity on this device.
+
+    /**
+     * Writes the local summary of an activity, next to its file.
+     *
+     * The write is atomic (a temporary file and a rename), so a kill leaves the previous summary, never half
+     * a JSON. A summary that cannot be written is a summary that is missing: the activity itself is intact.
+     */
+    fun writeLocalSummary(summary: LocalActivitySummary) {
+        val target = pathForLocalSummary(summary.activityId)
+        val temp = Path(directory, "${summary.activityId}$SUMMARY_FILE_SUFFIX.tmp")
+        try {
+            SystemFileSystem.sink(temp, append = false).buffered().use { sink ->
+                sink.writeString(json.encodeToString(LocalActivitySummary.serializer(), summary))
+            }
+            SystemFileSystem.atomicMove(temp, target)
+        } catch (e: Exception) {
+            // A cache of derived data must never fail the activity that produced it.
+            if (SystemFileSystem.exists(temp)) SystemFileSystem.delete(temp)
+        }
+    }
+
+    /** The local summary of an activity, or null when there is none (or it cannot be read). */
+    fun readLocalSummary(activityId: String): LocalActivitySummary? {
+        val path = pathForLocalSummary(activityId)
+        if (!SystemFileSystem.exists(path)) return null
+        return try {
+            json.decodeFromString(
+                LocalActivitySummary.serializer(),
+                SystemFileSystem.source(path).buffered().use { it.readString() },
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** Throws the local summary of an activity away. */
+    fun deleteLocalSummary(activityId: String) {
+        val path = pathForLocalSummary(activityId)
+        if (SystemFileSystem.exists(path)) SystemFileSystem.delete(path)
+    }
+
+    /** The size of the files of an activity on this device, in bytes. */
+    fun localSize(activityId: String): Long = SystemFileSystem.metadataOrNull(pathFor(activityId))?.size ?: 0L
+
+    /**
+     * Writes the local summary of the activities that finished before this build existed (TDD-0011).
+     *
+     * @return how many summaries were written.
+     */
+    fun backfillLocalSummaries(limit: Int = 20): Int {
+        var written = 0
+        for (metadata in list().sortedByDescending { it.startedAtMs }) {
+            if (written >= limit) break
+            if (readLocalSummary(metadata.activityId) != null) continue
+            if (lastStateOf(metadata.activityId) != ActivityState.COMPLETED) continue
+            val summary = localSummaryOf(metadata.activityId) ?: continue
+            writeLocalSummary(summary)
+            written++
+        }
+        return written
     }
 
     // --- Heart-rate sidecar (ADR-0020/0021): `<id>.rr.jsonl`, own lifecycle (consent-gated, independently deletable).

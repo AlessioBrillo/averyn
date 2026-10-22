@@ -16,6 +16,12 @@ final class AppModel {
     let sync: SyncService
     /// Where the activity files live; the raw file of an activity is `<id>.jsonl` in here (ADR-0015).
     let activitiesDirectory: URL
+    /// Where the copy of the server lives (TDD-0011): its own directory, excluded from the backup.
+    let serverCacheDirectory: URL
+
+    /// The history of the account: the server, the copy and the device. Rebuilt when the server changes.
+    private var historyRepository: HistoryRepository?
+    private var historyServerURL: String?
 
     /// True when this launch resumed an interrupted activity by itself; the UI says so once.
     private(set) var resumedAtLaunch = false
@@ -28,6 +34,17 @@ final class AppModel {
         activitiesDirectory = dir
         store = ActivityStore.companion.open(directoryPath: dir.path)
 
+        // The copy of the server holds the coordinates of the activities of the account: it is not in the
+        // backup of the device (TDD-0011).
+        let cacheDir = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("server-cache", isDirectory: true)
+        try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+        var cacheValues = URLResourceValues()
+        cacheValues.isExcludedFromBackup = true
+        try? cacheDir.setResourceValues(cacheValues)
+        serverCacheDirectory = cacheDir
+
         UIDevice.current.isBatteryMonitoringEnabled = true
         let recorder = ActivityRecorder(store: store)
         recorder.batteryPercent = {
@@ -38,6 +55,33 @@ final class AppModel {
         tracker = LocationTracker(recorder: recorder)
         auth = AuthManager()
         sync = SyncService(store: store, auth: auth)
+    }
+
+    /// The history of the account (TDD-0011): the server, the copy on this device and the local files.
+    func history() -> HistoryRepository {
+        let server = auth.normalizedServerURL ?? ""
+        if let current = historyRepository, historyServerURL == server { return current }
+        let created = HistoryRepository.companion.create(
+            store: store,
+            cacheDirectory: serverCacheDirectory.path,
+            serverUrl: server
+        )
+        historyRepository = created
+        historyServerURL = server
+        return created
+    }
+
+    /// Throws the copy of the server away: the session ended, or the server changed.
+    func clearServerCache() {
+        try? FileManager.default.removeItem(at: serverCacheDirectory)
+        try? FileManager.default.createDirectory(at: serverCacheDirectory, withIntermediateDirectories: true)
+    }
+
+    /// The activities recorded by an older build get their local summary, in the background (TDD-0011).
+    func backfillLocalSummaries() {
+        DispatchQueue.global(qos: .utility).async { [store] in
+            store.backfillLocalSummaries(limit: 20)
+        }
     }
 
     /// TDD-0006 §5.1: after a kill or a relaunch by the system, continue an interruption that is recent, by

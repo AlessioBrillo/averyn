@@ -35,6 +35,12 @@ final class RecorderViewModel: ObservableObject {
     @Published var notice: String?
     @Published var history: [HistoryRow] = []
     @Published var preparedExports: [String: PreparedExport] = [:]
+    /// The list of the account (TDD-0011): the server, the copy and the activities that are only here.
+    @Published var historySnapshot: HistorySnapshot?
+    /// The activity that is open, with its analysis.
+    @Published var activityDetail: DetailSnapshot?
+    /// The activities stored on this device (TDD-0011 "dati sul dispositivo").
+    @Published var deviceActivities: [DeviceActivityItem] = []
 
     init() {
         let model = AppModel.shared
@@ -57,6 +63,60 @@ final class RecorderViewModel: ObservableObject {
         tracker.onIssue = { [weak self] message in
             DispatchQueue.main.async { self?.notice = message }
         }
+        refreshHistory()
+        // The activities of an older build get their local summary, so their numbers are there even offline.
+        model.backfillLocalSummaries()
+    }
+
+    /// The token of the session, or nil when there is none (the list then shows the copy on this device).
+    private func accessToken() async -> String? {
+        try? await AppModel.shared.auth.freshAccessToken()
+    }
+
+    /// Reads the list of the account: what the server has, plus the activities that are only here.
+    func refreshAccountHistory() async {
+        let repository = AppModel.shared.history()
+        // What is on the device comes first: the list is there at once, the server fills it in.
+        historySnapshot = try? await repository.loadCached()
+        deviceActivities = (try? await repository.deviceData()) ?? []
+        if let refreshed = try? await repository.refresh(accessToken: await accessToken()) {
+            historySnapshot = refreshed
+        }
+        deviceActivities = (try? await repository.deviceData()) ?? []
+    }
+
+    /// Reads the next page of the list.
+    func loadMoreHistory() async {
+        guard let snapshot = historySnapshot, let cursor = snapshot.nextCursor else { return }
+        let repository = AppModel.shared.history()
+        if let more = try? await repository.loadMore(accessToken: await accessToken(), cursor: cursor) {
+            historySnapshot = more
+        }
+    }
+
+    /// Opens an activity: its numbers first, its analysis right after (the server computes it on the first read).
+    func openDetail(_ item: HistoryItem) async {
+        guard let serverId = item.serverId else { return }
+        let repository = AppModel.shared.history()
+        let token = await accessToken()
+        activityDetail = try? await repository.refreshDetail(serverId: serverId, accessToken: token)
+        var current = try? await repository.refreshAnalysis(serverId: serverId, accessToken: token)
+        var attempts = 0
+        while let snapshot = current, snapshot.analysisState == .computing, attempts < 3 {
+            // A nullable number crosses the Kotlin boundary as an NSNumber.
+            let wait = snapshot.failure?.retryAfterSeconds?.int64Value ?? 5
+            try? await Task.sleep(for: .seconds(wait))
+            current = try? await repository.refreshAnalysis(serverId: serverId, accessToken: token)
+            attempts += 1
+        }
+        if let current { activityDetail = current }
+    }
+
+    /// Throws one activity off this device: the files go, the server keeps what it has.
+    func deleteLocal(_ item: DeviceActivityItem) async {
+        let repository = AppModel.shared.history()
+        try? await repository.deleteLocal(activityId: item.activityId)
+        deviceActivities = (try? await repository.deviceData()) ?? []
         refreshHistory()
     }
 

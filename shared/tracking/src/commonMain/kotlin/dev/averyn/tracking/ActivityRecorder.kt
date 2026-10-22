@@ -8,6 +8,7 @@ import dev.averyn.domain.StateEvent
 import dev.averyn.metrics.ActivityMetrics
 import dev.averyn.metrics.ActivitySnapshot
 import dev.averyn.sensors.HR_ALGORITHM_VERSION
+import dev.averyn.sensors.HeartRateMetrics
 import dev.averyn.sensors.HeartRateSample
 import kotlin.math.abs
 
@@ -115,6 +116,14 @@ class ActivityRecorder(
     /** True once at least one HR sample has been stored for this activity (diagnostics stamps hr-v1). */
     private var hrRecorded = false
 
+    /**
+     * The heart-rate metric of the activity (`hr-v2`), fed with the samples of the recording state only.
+     *
+     * It is the same accumulator the analysis uses (docs/metrics/heart-rate.md), so the numbers of the local
+     * summary and the ones of the server cannot drift apart.
+     */
+    private var heartRateMetrics = HeartRateMetrics()
+
     private fun resetDiagnosticsCounters() {
         totalSamples = 0
         recordingSamples = 0
@@ -188,6 +197,7 @@ class ActivityRecorder(
         qualityAssessor = QualityAssessor()
         qualityAccumulator = QualityReportAccumulator()
         metrics = ActivityMetrics()
+        heartRateMetrics = HeartRateMetrics()
         resetDiagnosticsCounters()
         trackLastKnown(elapsedRealtimeMs, timeMs)
         // New files are always format version 2 (ADR-0020): the reader accepts `HR ` records, whether or not
@@ -259,6 +269,9 @@ class ActivityRecorder(
             return
         }
         store.appendHeartRate(id, sample)
+        // The metric counts the samples of the recording state only: the ones of a paused activity are stored
+        // but are not part of `hr-v2` (docs/metrics/heart-rate.md).
+        if (state == ActivityState.RECORDING) heartRateMetrics.onSample(sample.bpm)
         hrRecorded = true
         emit()
     }
@@ -335,10 +348,32 @@ class ActivityRecorder(
         listener?.invoke(snapshot())
     }
 
-    private fun buildCompletedActivity(): CompletedActivity =
-        CompletedActivity(activityId!!, sport!!, metrics.snapshot(), qualityAccumulator.build(), buildDiagnostics())
+    private fun buildCompletedActivity(): CompletedActivity {
+        val metricsSnapshot = metrics.snapshot()
+        val quality = qualityAccumulator.build()
+        val diagnostics = buildDiagnostics(metricsSnapshot, quality)
+        // The local summary (TDD-0011): the numbers of an activity that is not on the server yet. It is a
+        // cache of derived data, so a failure to write it must not fail the activity.
+        val recordingMs = (metricsSnapshot.elapsedMs - metricsSnapshot.pausedMs).coerceAtLeast(0L)
+        val summary =
+            buildLocalSummary(
+                activityId = activityId!!,
+                sport = sport!!.name,
+                startedAtMs = startedAtMs,
+                metrics = metricsSnapshot,
+                quality = quality,
+                diagnostics = diagnostics,
+                heartRate = if (hrRecorded) heartRateMetrics.snapshot(recordingMs) else null,
+                endedAtMs = lastKnownTimeMs,
+            )
+        store.writeLocalSummary(summary)
+        return CompletedActivity(activityId!!, sport!!, metricsSnapshot, quality, diagnostics)
+    }
 
-    private fun buildDiagnostics(): DiagnosticsReport =
+    private fun buildDiagnostics(
+        metrics: ActivitySnapshot,
+        quality: QualityReport,
+    ): DiagnosticsReport =
         diagnosticsReport(
             activityId = activityId!!,
             sport = sport!!,
@@ -347,8 +382,8 @@ class ActivityRecorder(
             recordingSamples = recordingSamples,
             recordLosses = recordLosses.toMap(),
             recoveries = recoveries,
-            metrics = metrics.snapshot(),
-            quality = qualityAccumulator.build(),
+            metrics = metrics,
+            quality = quality,
             batteryStartPercent = batteryStartPercent,
             batteryEndPercent = batteryEndPercent,
             batteryReadingCount = batteryReadingCount,
@@ -377,6 +412,8 @@ class ActivityRecorder(
         metrics = replayed.metrics
         qualityAssessor = replayed.assessor
         qualityAccumulator = replayed.quality
+        // The heart-rate metric of the activity so far: the samples of the recording state are already in it.
+        heartRateMetrics = replayed.heartRate
         resetDiagnosticsCounters()
         totalSamples = replayed.totalSamples
         recordingSamples = replayed.recordingSamples
