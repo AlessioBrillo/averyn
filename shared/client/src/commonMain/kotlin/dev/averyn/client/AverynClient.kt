@@ -15,6 +15,8 @@ import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 
 /**
  * The read path of the server (TDD-0011): the list of the activities, one activity, its track and its analysis.
@@ -85,10 +87,14 @@ class AverynClient(
         get(
             path = "/v1/consents",
             token = accessToken,
-        ) {
-            when (val element = json.decodeFromString(kotlinx.serialization.json.JsonElement.serializer(), it)) {
-                is kotlinx.serialization.json.JsonArray ->
-                    element.map { json.decodeFromString(ConsentGrant.serializer(), it.toString()) }
+        ) { body ->
+            val element = json.decodeFromString(JsonElement.serializer(), body)
+            when (element) {
+                is JsonArray ->
+                    element.map { item ->
+                        val itemStr = item.toString()
+                        json.decodeFromString(ConsentGrant.serializer(), itemStr)
+                    }
                 else -> emptyList()
             }
         }

@@ -291,9 +291,7 @@ class HistoryRepositoryTest {
                 ?: analysis?.let { ApiResult(it) }
                 ?: ApiResult(failure = ApiFailure(ApiFailureKind.NOT_FOUND, status = 404))
 
-        override suspend fun consents(
-            accessToken: String,
-        ): ApiResult<List<ConsentGrant>> =
+        override suspend fun consents(accessToken: String): ApiResult<List<ConsentGrant>> =
             failure?.let { ApiResult(failure = it) } ?: ApiResult(emptyList())
     }
 }

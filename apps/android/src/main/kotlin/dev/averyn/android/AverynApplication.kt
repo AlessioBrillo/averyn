@@ -4,6 +4,7 @@ import android.app.Application
 import android.os.BatteryManager
 import dev.averyn.android.auth.AuthManager
 import dev.averyn.android.ble.BleHrAdapter
+import dev.averyn.api.ConsentGrant
 import dev.averyn.client.HistoryRepository
 import dev.averyn.sensors.HeartRateSample
 import dev.averyn.sensors.RrInterval
@@ -89,17 +90,18 @@ class AverynApplication : Application() {
      */
     fun refreshConsents() {
         appScope.launch {
-            val granted =
+            val token = auth.freshAccessToken() ?: return@launch
+            val scopes: Set<String> =
                 try {
-                    val token = auth.freshAccessToken() ?: return@launch
-                    val server = auth.serverUrl ?: return@launch
                     val client = history().client
-                    client.consents(token).value?.map { it.scope }?.toSet() ?: emptySet()
+                    val result = client.consents(token)
+                    val grants = result.value ?: listOf<ConsentGrant>()
+                    grants.map { it.scope }.toSet()
                 } catch (e: Exception) {
                     // The answer is the server's; without it nothing is granted, and the app keeps recording.
-                    emptySet()
+                    emptySet<String>()
                 }
-            setRrConsent(granted.contains(rrConsentScope))
+            setRrConsent(scopes.contains(rrConsentScope))
         }
     }
 
