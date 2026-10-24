@@ -4,6 +4,7 @@ import dev.averyn.analysis.ActivityAnalysis
 import dev.averyn.api.ActivityPage
 import dev.averyn.api.ActivitySummary
 import dev.averyn.api.ClientConfig
+import dev.averyn.api.ConsentGrant
 import dev.averyn.api.Track
 import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Sport
@@ -289,5 +290,10 @@ class HistoryRepositoryTest {
             failure?.let { ApiResult(failure = it) }
                 ?: analysis?.let { ApiResult(it) }
                 ?: ApiResult(failure = ApiFailure(ApiFailureKind.NOT_FOUND, status = 404))
+
+        override suspend fun consents(
+            accessToken: String,
+        ): ApiResult<List<ConsentGrant>> =
+            failure?.let { ApiResult(failure = it) } ?: ApiResult(emptyList())
     }
 }

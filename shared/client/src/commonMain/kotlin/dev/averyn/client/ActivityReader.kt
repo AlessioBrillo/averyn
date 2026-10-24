@@ -4,6 +4,7 @@ import dev.averyn.analysis.ActivityAnalysis
 import dev.averyn.api.ActivityPage
 import dev.averyn.api.ActivitySummary
 import dev.averyn.api.ClientConfig
+import dev.averyn.api.ConsentGrant
 import dev.averyn.api.Track
 
 /**
@@ -40,4 +41,8 @@ interface ActivityReader {
         accessToken: String,
         id: String,
     ): ApiResult<ActivityAnalysis>
+
+    /** The caller's active consent grants (ADR-0021). Fail-closed: an empty list when the server
+     *  cannot be reached or answers unsuccessfully. */
+    suspend fun consents(accessToken: String): ApiResult<List<ConsentGrant>>
 }

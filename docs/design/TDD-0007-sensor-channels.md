@@ -93,11 +93,11 @@ Backend `consents` table + API; device cache fail-closed; adapter checks before 
 | Q2 | RR sidecar uploaded with the activity or independently after? | Sync flow | Open — decided at B6 |
 | Q3 | `deleted_rr` tombstone cleaned up after N days? | Retention ADR | Open |
 
-## 10. What is implemented (2026-10-19)
+## 10. What is implemented (2026-10-24)
 
 The channel is landed on Android, with the parts that were still missing closed:
 
-- **R1 (partly):** the Android `BleHrAdapter` implements the `SensorAdapter` interface; the **iOS `CoreBluetooth` adapter does not exist yet** and is a separate increment. iOS is therefore not covered by the sensor channel.
+- **R1:** the Android `BleHrAdapter` and the iOS `HeartRateMonitor` (CoreBluetooth) both implement the `shared/sensors` `SensorAdapter` interface. Standard GATT only: `0x180D` / `0x2A37`, no vendor-specific code.
 - **R2:** new files are written as `formatVersion 2` and the server refuses a format version it does not know.
 - **R3:** the sidecar is created with its own META line, from the activity's own metadata, before the first interval; the device reads the server's grants and fails closed.
 - **R4:** revoking `rr_recording` deletes the stored sidecars and leaves a `deleted_rr` tombstone; the device deletes its local copy when the upload is refused.

@@ -14,6 +14,10 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
     /// Called when something the user must know happens (permission lost, accuracy reduced). Any queue.
     var onIssue: ((String) -> Void)?
 
+    /// Called when the first GPS fix arrives and the activity enters RECORDING. Used to start the
+    /// heart-rate adapter (TDD-0007).
+    var onGpsReady: (() -> Void)?
+
     init(recorder: ActivityRecorder) {
         self.recorder = recorder
         super.init()
@@ -87,6 +91,7 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
         for location in locations {
             if recorder.currentState == .preparing {
                 recorder.gpsReady(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs())
+                onGpsReady?()
             }
             // Always forward the fix: ActivityRecorder.onSample stores it in every non-terminal state (F5)
             // and only feeds live metrics while RECORDING — gating the call itself here would silently lose
