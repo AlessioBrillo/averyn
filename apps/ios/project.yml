@@ -33,13 +33,14 @@ targets:
         UILaunchScreen: {}
         # TDD-0001 §5.5: background location mode, required for recording with the screen locked.
         # `processing`: the background sync task (TDD-0002 §5.7).
-        UIBackgroundModes: [location, processing]
+        UIBackgroundModes: [location, processing, bluetooth-central]
         BGTaskSchedulerPermittedIdentifiers: [dev.averyn.app.sync]
         # Redirect scheme of the sign-in flow; must match infrastructure/compose/idp-init.sh.
         CFBundleURLTypes:
           - CFBundleURLSchemes: [dev.averyn.app]
         NSLocationWhenInUseUsageDescription: "Averyn uses your location to record your activity's route, distance and pace."
         NSLocationAlwaysAndWhenInUseUsageDescription: "Averyn uses your location to keep recording your activity while your phone is locked or the app is in the background."
+        NSBluetoothAlwaysUsageDescription: "Averyn uses Bluetooth to connect to a heart-rate strap while recording an activity, also with the screen locked."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.averyn.app

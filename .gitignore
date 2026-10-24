@@ -5,6 +5,7 @@ Thumbs.db
 *.iml
 .vscode/*
 !.vscode/extensions.json
+.claude/
 
 # Secrets — never commit
 .env

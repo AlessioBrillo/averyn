@@ -57,7 +57,7 @@ final class RecorderViewModel: ObservableObject {
             : nil
         notice = model.resumedAtLaunch ? "Recording resumed after an interruption" : nil
 
-        recorder.listener = { [weak self] newSnapshot in
+        AppModel.shared.addRecorderListener { [weak self] newSnapshot in
             DispatchQueue.main.async { self?.snapshot = newSnapshot }
         }
         tracker.onIssue = { [weak self] message in

@@ -4,6 +4,7 @@ import dev.averyn.analysis.ActivityAnalysis
 import dev.averyn.api.ActivityPage
 import dev.averyn.api.ActivitySummary
 import dev.averyn.api.ClientConfig
+import dev.averyn.api.ConsentGrant
 import dev.averyn.api.Track
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpTimeout
@@ -14,6 +15,8 @@ import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 
 /**
  * The read path of the server (TDD-0011): the list of the activities, one activity, its track and its analysis.
@@ -77,6 +80,24 @@ class AverynClient(
             token = accessToken,
             busyOnServiceUnavailable = true,
         ) { json.decodeFromString(ActivityAnalysis.serializer(), it) }
+
+    /** The caller's active consent grants (ADR-0021). Fail-closed: an empty list when the server cannot
+     *  be reached or answers unsuccessfully, so the adapter never self-grants RR recording. */
+    override suspend fun consents(accessToken: String): ApiResult<List<ConsentGrant>> =
+        get(
+            path = "/v1/consents",
+            token = accessToken,
+        ) { body ->
+            val element = json.decodeFromString(JsonElement.serializer(), body)
+            when (element) {
+                is JsonArray ->
+                    element.map { item ->
+                        val itemStr = item.toString()
+                        json.decodeFromString(ConsentGrant.serializer(), itemStr)
+                    }
+                else -> emptyList()
+            }
+        }
 
     /**
      * One GET, with the repetitions of a temporary failure.

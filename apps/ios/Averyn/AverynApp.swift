@@ -18,7 +18,12 @@ struct AverynApp: App {
         }
         .onChange(of: scenePhase) { _, phase in
             // Anything finished earlier and not uploaded yet (offline, killed, signed out) goes up now.
-            if phase == .active { Task { await AppModel.shared.sync.syncNow() } }
+            if phase == .active {
+                Task {
+                    await AppModel.shared.sync.syncNow()
+                    AppModel.shared.refreshConsents()
+                }
+            }
         }
     }
 }

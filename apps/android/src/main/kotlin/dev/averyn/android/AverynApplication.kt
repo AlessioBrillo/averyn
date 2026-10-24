@@ -4,7 +4,7 @@ import android.app.Application
 import android.os.BatteryManager
 import dev.averyn.android.auth.AuthManager
 import dev.averyn.android.ble.BleHrAdapter
-import dev.averyn.android.consent.ConsentClient
+import dev.averyn.api.ConsentGrant
 import dev.averyn.client.HistoryRepository
 import dev.averyn.sensors.HeartRateSample
 import dev.averyn.sensors.RrInterval
@@ -80,24 +80,28 @@ class AverynApplication : Application() {
     /** The scope the heart-rate sidecar needs: without it the raw intervals are never recorded. */
     private val rrConsentScope = "rr_recording"
 
-    private val consentClient by lazy { ConsentClient(auth) { auth.serverUrl } }
-
     /** Work that outlives an activity: the consent refresh runs here. */
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
      * Asks the server which consents the user has and caches them (ADR-0021). The server is authoritative:
-     * a revocation there stops the recording here at the next refresh.
+     * a revocation there stops the recording here at the next refresh. Uses the shared client so the
+     * consent read path is implemented once, not per platform.
      */
     fun refreshConsents() {
         appScope.launch {
-            try {
-                val granted = consentClient.grantedScopes()
-                setRrConsent(granted.contains(rrConsentScope))
-            } catch (e: Exception) {
-                // The answer is the server's; without it nothing is granted, and the app keeps recording.
-                setRrConsent(false)
-            }
+            val token = auth.freshAccessToken() ?: return@launch
+            val scopes: Set<String> =
+                try {
+                    val client = history().client
+                    val result = client.consents(token)
+                    val grants = result.value ?: listOf<ConsentGrant>()
+                    grants.map { it.scope }.toSet()
+                } catch (e: Exception) {
+                    // The answer is the server's; without it nothing is granted, and the app keeps recording.
+                    emptySet<String>()
+                }
+            setRrConsent(scopes.contains(rrConsentScope))
         }
     }
 

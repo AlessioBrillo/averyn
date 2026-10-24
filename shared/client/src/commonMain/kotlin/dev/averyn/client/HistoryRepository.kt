@@ -32,7 +32,7 @@ internal data class LocalActivity(
 class HistoryRepository(
     private val store: ActivityStore,
     private val cache: ActivityCache,
-    private val client: ActivityReader,
+    val client: ActivityReader,
     private val statuses: SyncStatusStore = SyncStatusStore(store),
     private val nowMs: () -> Long = { currentTimeMillis() },
 ) {

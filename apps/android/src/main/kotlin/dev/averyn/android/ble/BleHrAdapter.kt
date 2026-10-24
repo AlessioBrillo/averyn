@@ -72,9 +72,9 @@ class BleHrAdapter(
     private val scanner: BluetoothLeScanner? = bluetoothAdapter?.bluetoothLeScanner
 
     /** Set by the caller from the cached consent before [start] (fail-closed: default false). */
-    var recordRrIntervals = false
+    override var recordRrIntervals = false
 
-    override val consentRequired: Boolean
+    override val supportsRr: Boolean
         get() = true // this adapter can produce RR intervals (Health class); consent gates them.
 
     override val isAvailable: Boolean
