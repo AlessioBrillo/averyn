@@ -120,7 +120,16 @@ export interface AnalysisSeries {
     bpm: number[]
     /** The stretch of samples of each point: a change of number is a dropout of the sensor. */
     segment: number[]
+    /** The time at each bpm (`series-v2`): timeMs[i] is the time at fromBpm + i bpm. */
+    timeAtBpm?: { fromBpm: number; timeMs: number[] }
   }
+}
+
+/** The time in each of five heart-rate zones for the maximum heart rate of the profile (`hr-zones-v1`). */
+export interface HeartRateZones {
+  algorithmVersion: string
+  maxHrBpm: number
+  zones: { zone: number; fromBpm: number; toBpm: number | null; timeMs: number }[]
 }
 
 /** Everything the analysis of one activity holds (TDD-0009). */
@@ -135,6 +144,8 @@ export interface ActivityAnalysis {
   /** The fastest window of each target distance of the sport (TDD-0010). */
   bestEfforts: BestEffort[]
   series: AnalysisSeries
+  /** Absent without a heart rate or without a maximum heart rate in the profile. */
+  heartRateZones?: HeartRateZones | null
 }
 
 export interface ActivityPage {

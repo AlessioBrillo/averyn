@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import type uPlot from 'uplot'
-import type { ActivityAnalysis } from './api'
+import type { ActivityAnalysis, HeartRateZones } from './api'
 import { elevationSeries, heartRateSeries } from './analysisSeries'
 import {
   distanceUnit,
@@ -16,6 +16,47 @@ import {
   formatTargetDistance,
 } from './format'
 import 'uplot/dist/uPlot.min.css'
+
+/**
+ * The time in each heart-rate zone, with a bar for the share. Without a zone result the reason is the profile:
+ * the zones are cut from the maximum heart rate of the user (TDD-0012).
+ */
+export function HeartRateZonesTable({ zones }: { zones: HeartRateZones | null }) {
+  if (zones === null) {
+    return <p className="small">Set your maximum heart rate in your account to see the time in each zone.</p>
+  }
+  const total = zones.zones.reduce((sum, z) => sum + z.timeMs, 0)
+  return (
+    <div className="table-scroll">
+      <table>
+        <caption>{`Time in each zone, for a maximum heart rate of ${formatHeartRate(zones.maxHrBpm)}`}</caption>
+        <thead>
+          <tr>
+            <th scope="col">Zone</th>
+            <th scope="col">Heart rate</th>
+            <th scope="col">Time</th>
+            <th scope="col">Share</th>
+          </tr>
+        </thead>
+        <tbody>
+          {zones.zones.map((z) => {
+            const share = total > 0 ? (z.timeMs / total) * 100 : 0
+            return (
+              <tr key={z.zone}>
+                <th scope="row">Z{z.zone}</th>
+                <td>{z.toBpm === null ? `${z.fromBpm}+ bpm` : `${z.fromBpm}–${z.toBpm} bpm`}</td>
+                <td>{formatDuration(z.timeMs)}</td>
+                <td>
+                  <meter min={0} max={100} value={share} aria-label={`Zone ${z.zone}`} /> {formatCoverage(share)}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
 
 /** The colour of the track, used for the charts too. */
 const ACCENT = '#e4572e'
@@ -200,6 +241,7 @@ export function Analysis({
         <>
           <h4>Heart rate</h4>
           <Chart prepare={heartRatePrepare} label={heartLabel} />
+          <HeartRateZonesTable zones={analysis.heartRateZones ?? null} />
         </>
       )}
       {analysis.splits.length > 0 && (
