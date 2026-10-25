@@ -45,7 +45,7 @@ services:
   # same hostname resolve to this container inside the Compose network, so the backend and the phone / browser
   # see one identical issuer (the `iss` claim must match exactly). Zitadel also listens on IDP_PORT.
   idp:
-    image: ghcr.io/zitadel/zitadel:v4.19.4
+    image: ghcr.io/zitadel/zitadel:v4.20.0
     restart: unless-stopped
     command: start-from-init --masterkey "${ZITADEL_MASTERKEY:?set ZITADEL_MASTERKEY in .env (32 characters)}" --tlsMode disabled
     depends_on:
