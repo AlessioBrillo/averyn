@@ -305,6 +305,36 @@ paths:
         "204": { description: Revoked; the data it covered is deleted }
         "400": { description: Missing or unknown scope }
         "401": { description: Missing or invalid token }
+  /v1/profile:
+    get:
+      summary: The caller's profile, the settings every client shares (TDD-0012)
+      description: An account that never saved a profile gets the defaults (metric units, no maximum heart rate).
+      security: [{ oidc: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserProfile" }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+    put:
+      summary: Replace the caller's profile (TDD-0012)
+      security: [{ oidc: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UserProfile" }
+      responses:
+        "200":
+          description: Stored; the body is the stored profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserProfile" }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "422": { description: Not a valid profile (unknown unit system, maximum heart rate out of 100–230); nothing was stored }
   /v1/me:
     delete:
       summary: Delete all of the caller's data held by Averyn (idempotent; the identity at the IdP is not touched, ADR-0017)
@@ -320,7 +350,7 @@ paths:
         Entries: raw/{clientActivityId}.jsonl (byte-for-byte), original/{clientActivityId}.gpx (the file an
         imported activity was imported from), rr/{clientActivityId}.rr.jsonl (the heart-rate sidecar),
         gpx/{clientActivityId}.gpx, analysis/{clientActivityId}.json (the splits, the elevation, the series
-        and the best efforts of the activity, TDD-0009 and TDD-0010), consents.json, records.json (the personal
+        and the best efforts of the activity, TDD-0009 and TDD-0010), profile.json, consents.json, records.json (the personal
         records of the account, TDD-0010) and activities.json (summaries and skipped-line counts, written
         last). Streamed.
       security: [{ oidc: [] }]
@@ -582,6 +612,11 @@ components:
         points: { type: [integer, "null"], description: "The number of track points; null when the file was not parsed (a duplicate)" }
         ignoredExtensions: { type: object, additionalProperties: { type: integer }, description: "The extensions found in the file and not imported, by name" }
         parserVersion: { type: string }
+    UserProfile:
+      type: object
+      properties:
+        units: { type: string, enum: [metric, imperial], default: metric }
+        maxHrBpm: { type: [integer, "null"], minimum: 100, maximum: 230, default: null }
     ConsentGrant:
       type: object
       required: [scope, grantedAt, revokedAt]
