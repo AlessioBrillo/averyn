@@ -179,20 +179,20 @@ struct ContentView: View {
     @ViewBuilder
     private func elevationChart(_ series: AnalysisSeries) -> some View {
         // A nullable number crosses the Kotlin boundary as an NSNumber.
-        let elevations = series.elevationM.compactMap { $0?.doubleValue }
+        let elevations = series.elevationM.compactMap { ($0 as? NSNumber)?.doubleValue }
         if elevations.count > 1 {
             Text("Elevation profile (\(Int(elevations.min() ?? 0))–\(Int(elevations.max() ?? 0)) m)")
-            seriesChart(elevations.map { Float($0) }, segments: series.segment)
+            seriesChart(elevations.map { Float($0) }, segments: series.segment.map { $0.int32Value })
         }
     }
 
     /// The curve of the heart rate of the activity.
     @ViewBuilder
     private func heartRateChart(_ series: AnalysisSeries) -> some View {
-        let bpm = series.heartRate.bpm
+        let bpm = series.heartRate.bpm.map { $0.intValue }
         if bpm.count > 1 {
             Text("Heart rate (\(bpm.min() ?? 0)–\(bpm.max() ?? 0) bpm)")
-            seriesChart(bpm.map { Float($0) }, segments: series.heartRate.segment)
+            seriesChart(bpm.map { Float($0) }, segments: series.heartRate.segment.map { $0.int32Value })
         }
     }
 
