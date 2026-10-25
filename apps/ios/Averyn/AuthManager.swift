@@ -1,5 +1,6 @@
 @preconcurrency import AppAuth
 import Foundation
+import Shared
 import UIKit
 
 enum AuthError: Error {

@@ -34,7 +34,7 @@ flowchart LR
 ```mermaid
 flowchart TB
   subgraph device["Device"]
-    ui[Native UI<br/>SwiftUI · Compose] --> sh[shared/ KMP ✅<br/>domain · tracking · metrics · sync · analysis]
+    ui[Native UI<br/>SwiftUI · Compose] --> sh[shared/ KMP ✅<br/>domain · tracking · metrics · sensors · sync · analysis · api]
     nat[Native adapters<br/>location · background · BLE] --> sh
     sh --> local[(Local store)]
     cli[shared/client ✅<br/>AverynClient · ActivityCache] --> sh
@@ -60,9 +60,9 @@ flowchart TB
 
 - **Separation:** acquisition → raw storage → normalization → analysis → sync → presentation → integrations ([report §26](../product/reference-report-v0.1.md)). Raw data is immutable; derived data is versioned.
 - **Shared rules:** metrics and validation are one Kotlin implementation used by both device and server ([ADR-0004](../adr/0004-kotlin-multiplatform-shared-native-ui.md)).
-- **One deployable server** for both self-hosted and managed cloud ([ADR-0005](../adr/0005-ktor-modular-monolith.md)). This includes any third-party sensor ecosystem: Averyn is the only system of record for users, devices and sessions; a vendor's cloud (e.g. Synapse's) is at most an optional, stateless inference worker Averyn calls, never a second backend ([ADR-0010](../adr/0010-ecosystem-boundary.md)).
-- **Identity:** Averyn is an OIDC relying party, not its own identity provider ([ADR-0011](../adr/0011-identity-oidc.md), the default bundled IdP is still to be picked).
-- **Sync** is offline-first, idempotent and resumable (design doc to be written at MVP-1 start; requirements in [report §9](../product/reference-report-v0.1.md)).
+- **One deployable server** for both self-hosted and managed cloud ([ADR-0005](../adr/0005-ktor-modular-monolith.md)). This includes any third-party sensor ecosystem: Averyn is the only system of record for users, devices and sessions; a vendor's cloud (e.g. Synapse's) is at most an optional, stateless inference worker Averyn calls, never a second backend ([ADR-0010](../adr/0010-ecosystem-boundary.md), [ADR-0026](../adr/0026-averyn-synapse-link.md)).
+- **Identity:** Averyn is an OIDC relying party, not its own identity provider ([ADR-0011](../adr/0011-identity-oidc.md), the default bundled IdP is Zitadel).
+- **Sync** is offline-first, idempotent and resumable ([TDD-0002](../design/TDD-0002-activity-sync.md)).
 - **One contract, one implementation:** the DTOs of the API live in `shared/api` (used by the server and by the apps), and the read path of the apps is in `shared/client` ([TDD-0011](../design/TDD-0011-mobile-read-path.md)).
 
 ## Related

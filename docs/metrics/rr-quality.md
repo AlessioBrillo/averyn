@@ -1,6 +1,6 @@
 # Metric: RR interval quality
 
-- **Status:** draft
+- **Status:** draft (specified, not implemented; not part of the launch scope, see [TDD-0007](../design/TDD-0007-sensor-channels.md))
 - **Current algorithm version:** `rr-quality-v1`
 
 ## Definition

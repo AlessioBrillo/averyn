@@ -1,7 +1,7 @@
 package dev.averyn.api
 
 /**
- * How the client and the server fit together (TDD-0011 §"versioni"). The warning is never blocking: the read
+ * How the client and the server fit together (TDD-0011, "versions"). The warning is never blocking: the read
  * path is additive, so an app that is a version behind still reads the server.
  */
 enum class ClientCompatibility {

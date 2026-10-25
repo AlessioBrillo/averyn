@@ -1,4 +1,4 @@
-# ADR-0025: La copia del server sul dispositivo — una cache con una fine, non un mirror
+# ADR-0025: The server's copy on the device — a cache with an end, not a mirror
 
 - **Status:** accepted
 - **Date:** 2026-10-22
@@ -6,87 +6,89 @@
 
 ## Context and problem
 
-TDD-0011 chiude il ciclo: il telefono legge la lista delle attività dell'account e il dettaglio di ciascuna.
-Il telefono è, però, un dispositivo che va in treno, in montagna e in metrotro: senza connessione la lista non
-si apre, e il lavoro di registrazione — l'unica cosa che il prodotto fa davvero — diventa scollegato da tutto
-il resto.
+TDD-0011 closes the loop: the phone reads the list of the account's activities and the detail of each one. But a
+phone is a device that goes on trains, up mountains and into metro tunnels: without a connection the list does
+not open, and recording — the one thing the product really does — becomes disconnected from everything else.
 
-Il server ha già i dati, e li ha con un contratto semplice (`GET /v1/activities`, `/{id}`, `/{id}/track`,
-`/{id}/analysis`). La domanda è se il dispositivo debba tenere una copia, e di che copia.
+The server already has the data, behind a simple contract (`GET /v1/activities`, `/{id}`, `/{id}/track`,
+`/{id}/analysis`). The question is whether the device should keep a copy, and what kind of copy.
 
-Le copie hanno un costo che va detto adesso, perché è il punto vero:
+Copies have a cost that must be stated now, because it is the real point:
 
-1. **Il tracciato èRestricted.** Le coordinate di una corsa sono dati personali, non un numero. Una copia sul
-   telefono allunga il tempo in cui quei dati esistono fuori dal controllo del server.
-2. **Il telefono si perde, si ruba, si presta.** Un dispositivo finito in mano sbagliata mostra la storia
-   completa di un account.
-3. **Il backup.** Un backup automatico del telefono che porta via la copia porta via anche le coordinate,
-   fuori dal perimetro che l'utente crede di avere scelto.
+1. **The track is Restricted.** The coordinates of a run are personal data, not a number. A copy on the phone
+   lengthens the time those data exist outside the server's control.
+2. **Phones get lost, stolen, lent.** A device in the wrong hands shows the whole history of an account.
+3. **Backups.** An automatic phone backup that carries the copy away also carries the coordinates, outside the
+   perimeter the user thinks they chose.
 
-D'altra parte, il telefono **è già** un dispositivo che tiene i dati delle attività: il file grezzo del
-telefono contiene i campioni GPS di ogni attività (ADR-0015), e il sidecar HR tiene i campioni del battito
-(ADR-0020/0021). La copia del server non introduce una classe di dati nuova sul dispositivo: ne introduce una
-**nuova provenienza** (un'altra attività, o un'attività di un altro dispositivo), e quindi una copia che il
-telefono non si è guadagnato da solo.
+On the other hand, the phone **already** keeps activity data: the raw file on the phone holds the GPS samples of
+every activity (ADR-0015), and the HR sidecar holds the heart-rate samples (ADR-0020/0021). The server's copy
+does not introduce a new class of data on the device: it introduces a **new provenance** (another activity, or
+an activity from another device), and therefore a copy the phone did not earn by itself.
 
-Infine, i numeri locali (`<id>.summary.json`) sono una cosa diversa: sono derivati dall'attività che il
-telefono ha registrato, non una copia di un'altra attività. Non c'è scelta: o si calcolano e si salvano, o la
-riga di un'attività non ancora sincronizzata resta senza numeri.
+Finally, the local numbers (`<id>.summary.json`) are a different thing: they are derived from the activity the
+phone recorded, not a copy of another activity. There is no choice: either they are computed and saved, or the
+row of an activity not yet synced stays without numbers.
 
 ## Options considered
 
-1. **Nessuna copia.** Il telefono legge tutto dal server. La cosa più semplice e la più privata, e la più
-   inutile: senza rete non c'è history, e la metà delle attività (quelle non ancora caricate) non c'è comunque.
-2. **Un mirror completo dell'account.** Il server manda tutto al dispositivo, e il telefono diventa il secondo
-   sistema di record. Tanti dati, tanto lavoro, due fonti di verità che divergono (un'attività cancellata sul
-   server resta sul telefono per sempre, per esempio) e la superficie di privacy più grande possibile.
-3. **Una copia con una fine, limitata a quello che l'utente ha aperto.** Il dispositivo tiene i riassunti della
-   lista e gli ultimi dettagli aperti, con un limite di numero e di volume, e la copia finisce con la sessione.
-4. **Solo i numeri, nessun tracciato.** La copia si limita ai riassunti: la lista si legge offline, il dettaglio
-   no. Meno dati, ma il dettaglio è la metà del valore.
+1. **No copy.** The phone reads everything from the server. The simplest and the most private, and the most
+   useless: without a network there is no history, and half the activities (those not yet uploaded) are not
+   there anyway.
+2. **A full mirror of the account.** The server sends everything to the device, and the phone becomes a second
+   system of record. A lot of data, a lot of work, two sources of truth that diverge (an activity deleted on the
+   server stays on the phone forever, for example) and the largest possible privacy surface.
+3. **A copy with an end, limited to what the user has opened.** The device keeps the summaries of the list and
+   the last details opened, with a limit on count and volume, and the copy ends with the session.
+4. **Numbers only, no track.** The copy is limited to summaries: the list reads offline, the detail does not.
+   Less data, but the detail is half the value.
 
 ## Decision
 
-We choose **Option 3**: una copia con una fine.
+We choose **Option 3**: a copy with an end.
 
-- **Cosa viene copiato.** I riassunti della lista (`ActivitySummary`) e, per le attività che l'utente apre, il
-  dettaglio: riassunto, tracciato (GeoJSON) e analisi. Nient'altro: nessun file grezzo, nessun token, nessun
-  intervallo RR (dato "Health", ADR-0013).
-- **Quanto.** 10 dettagli, 50 MB, 500 riassunti. Il meno recente esce per fare spazio. La copia è
-  best-effort: il sistema operativo può toglierla, e va bene così — è una copia, non il sistema di record.
-- **Quando finisce.** Alla fine della sessione (sign-out, o un refresh token che il provider rifiuta) e quando
-  cambia il server. Il manifest della copia ricorda a quale server appartiene: la copia di un altro server non
-  viene mai mostrata.
-- **Il backup.** La copia è esclusa dal backup del dispositivo (`isExcludedFromBackup` su iOS, `allowBackup=false`
-  su Android). Il telefono non porta via la copia del server nel cloud di Apple o di Google.
-- **L'utente può cancellarla.** La schermata dell'account mostra quanto occupa e la cancella con un tocco.
-- **Il server resta l'autorità.** La copia è datata e lo dice: ogni schermata che mostra una copia dice da
-  quando. Un `404` cancella il dettaglio copiato; un'attività cancellata sul server sparisce dalla lista, e i
-  suoi file restano sul dispositivo fino a che l'utente li elimina.
-- **Il summary locale è un'altra cosa.** I numeri di un'attività registrata dal telefono sono derivati da
-  quello che il telefono ha misurato: non sono una copia, sono un calcolo, e non hanno le implicazioni di
-  privacy di una copia di un'altra attività. Restano accanto al file dell'attività, con la stessa vita.
+- **What is copied.** The summaries of the list (`ActivitySummary`) and, for the activities the user opens, the
+  detail: summary, track (GeoJSON) and analysis. Nothing else: no raw file, no token, no RR interval ("Health"
+  data, ADR-0013).
+- **How much.** 10 details, 50 MB, 500 summaries. The least recent one leaves to make room. The copy is best
+  effort: the operating system may remove it, and that is fine — it is a copy, not the system of record.
+- **When it ends.** At the end of the session (sign-out, or a refresh token the provider refuses) and when the
+  server changes. The manifest of the copy remembers which server it belongs to: the copy of another server is
+  never shown.
+- **The backup.** The copy is excluded from the device backup (`isExcludedFromBackup` on iOS,
+  `allowBackup=false` on Android). The phone does not carry the server's copy to Apple's or Google's cloud.
+- **The user can delete it.** The account screen shows how much it takes and deletes it with a tap.
+- **The server stays the authority.** The copy is dated and says so: every screen that shows a copy says since
+  when. A `404` deletes the copied detail; an activity deleted on the server disappears from the list, and its
+  files stay on the device until the user removes them.
+- **The local summary is another thing.** The numbers of an activity recorded by the phone are derived from what
+  the phone measured: they are not a copy, they are a computation, and do not have the privacy implications of a
+  copy of another activity. They stay next to the activity file, with the same life.
 
 ## Consequences
 
-- Good: la history si legge senza rete, e le attività appena registrate mostrano i numeri subito.
-- Good: la superficie dei dati nuovi è limitata e dichiarata: tracciati e serie HR di ciò che l'utente ha
-  aperto, nient'altro.
-- Good: la copia non può diventare una seconda fonte di verità: è datata, limitata e cancellabile.
-- Bad / costs: il dispositivo tiene una copia di dati che l'utente non ha creato lì (un'attività importata da
-  un GPX, un'attività registrata su un altro telefono). Il threat model lo dice (ADR-0025 → threat model).
-- Bad / costs: la copia è un altro posto dove il formato può evolvere. Per questo ha un `schemaVersion`: una
-  copia di un'altra versione viene buttata e ricostruita.
-- Bad / costs: senza rete la lista può mostrare attività che il server ha già cancellato, fino al prossimo
-  refresh. È il prezzo di una copia, ed è dichiarato a schermo.
-- Follow-ups: il tracciato copiato non è ancora disegnato (la mappa è lo slice successivo); se la mappa arriva,
-  la copia le serve così com'è.
+- Good: the history reads without a network, and freshly recorded activities show their numbers at once.
+- Good: the surface of new data is limited and declared: tracks and HR series of what the user opened, nothing
+  else.
+- Good: the copy cannot become a second source of truth: it is dated, bounded and deletable.
+- Bad / costs: the device keeps a copy of data the user did not create there (an activity imported from a GPX, an
+  activity recorded on another phone). The threat model says so (ADR-0025 → threat model).
+- Bad / costs: the copy is another place where the format can evolve. For that it has a `schemaVersion`: a copy
+  of another version is thrown away and rebuilt.
+- Bad / costs: without a network the list can show activities the server has already deleted, until the next
+  refresh. It is the price of a copy, and it is declared on screen.
+- Follow-ups: the copied track is not drawn yet (the map is the next slice); when the map arrives, the copy
+  serves it as it is.
 
 ## Revisit when
 
-- Il volume reale della copia supera il limite (i 50 MB) su un account vero: allora il limite va cambiato, o
-  la copia diventa selettiva (per esempio solo i riassunti).
-- La copia viene eseguita da un servizio in background (per una notifica push, o per un widget): allora la sua
-  vita non è più legata alla sessione e la decisione va rifatta da capo.
-- Entra in scena un dato "Health" (gli intervalli RR): la copia non può contenerli senza un consenso e una
-  revisione dedicated (ADR-0013, ADR-0021).
+- The real volume of the copy exceeds the limit (50 MB) on a real account: then the limit changes, or the copy
+  becomes selective (for example summaries only).
+- The copy is run by a background service (for a push notification, or a widget): then its life is no longer tied
+  to the session and the decision must be made again from scratch.
+- A "Health" datum (the RR intervals) comes into play: the copy cannot hold them without a consent and a
+  dedicated review (ADR-0013, ADR-0021).
+
+---
+
+Editorial note, 2026-10-25: translated from Italian to English, typos fixed; no change of the decision.

@@ -36,6 +36,12 @@ final class AppModel {
     private var recorderListeners: [(LiveSnapshot) -> Void] = []
     private let recorderListenersLock = NSLock()
 
+    /// Asks the server for the consent again while an activity is recording, so a consent withdrawn in the
+    /// meantime stops the RR intervals without the app coming to the foreground (ADR-0021; same period as the
+    /// Android watchdog). The background location session keeps this run loop alive.
+    private var consentTimer: Timer?
+    private static let consentRefreshInterval: TimeInterval = 2 * 60
+
     private init() {
         let dir = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -72,6 +78,7 @@ final class AppModel {
         recorder.listener = { [weak self] snapshot in
             if snapshot.state.isTerminal {
                 Task { await self?.heartRate.stop() }
+                Task { @MainActor in self?.stopConsentRefresh() }
             }
             self?.recorderListenersLock.lock()
             let listeners = self?.recorderListeners ?? []
@@ -96,6 +103,7 @@ final class AppModel {
     /// never stops GPS tracking.
     private func startHeartRate() {
         guard let activityId = recorder.currentActivityId else { return }
+        startConsentRefresh()
         heartRate.onSample = { [weak self] sample in
             self?.feedHeartRate(sample)
         }
@@ -139,6 +147,18 @@ final class AppModel {
                 setRrConsent(false)
             }
         }
+    }
+
+    private func startConsentRefresh() {
+        consentTimer?.invalidate()
+        consentTimer = Timer.scheduledTimer(withTimeInterval: Self.consentRefreshInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refreshConsents() }
+        }
+    }
+
+    private func stopConsentRefresh() {
+        consentTimer?.invalidate()
+        consentTimer = nil
     }
 
     private func setRrConsent(_ granted: Bool) {

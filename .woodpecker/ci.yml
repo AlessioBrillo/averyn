@@ -2,7 +2,7 @@
 # (needs macOS); compose smoke not included (needs docker-in-docker). Local: `ci-local`.
 # The jvm step mounts the Docker socket for the backend Testcontainers tests.
 when:
-  - event: [push, manual]
+  - event: [push, pull_request, manual]
 
 steps:
   - name: jvm-android

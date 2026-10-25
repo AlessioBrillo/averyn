@@ -1,187 +1,192 @@
-# TDD-0011: Il server sul telefono — lettura, copia offline e summary locale
+# TDD-0011: The server on the phone — reading, offline copy and local summary
 
 - **Status:** implemented
 - **Version:** 0.1
 - **Author:** @AlessioBrillo
 - **Date:** 2026-10-22
-- **Related:** ADR-0015 (store locale), ADR-0020/0021 (canale HR e consenso), ADR-0025 (copia del server sul
-  dispositivo), TDD-0002 (sync), TDD-0009 (analisi)
+- **Related:** ADR-0015 (local store), ADR-0020/0021 (HR channel and consent), ADR-0025 (copy of the server on
+  the device), TDD-0002 (sync), TDD-0009 (analysis)
 
 ## 1. Summary
 
-Fino a TDD-0010 il telefono registra e carica, ma non legge: la storia di un account si vede solo sul web.
-Questo incremento chiude il ciclo — il telefono legge la lista delle attività e il dettaglio di ciascuna — e
-rende la lettura possibile senza connessione, con due pezzi di dati derivati che vivono sul dispositivo:
+Until TDD-0010 the phone records and uploads but does not read: the history of an account is only visible on the
+web. This increment closes the loop — the phone reads the list of activities and the detail of each one — and
+makes reading possible without a connection, with two pieces of derived data that live on the device:
 
-- la **copia del server** (cache): i riassunti della lista e gli ultimi dettagli aperti, con una scadenza per
-  volume e per numero (ADR-0025);
-- il **summary locale** (`<id>.summary.json`): i numeri di un'attività appena conclusa, scritti accanto al
-  file dell'attività, così una corsa non ancora sincronizzata mostra distanza e passo anche offline.
+- the **copy of the server** (cache): the summaries of the list and the last details opened, bounded by volume
+  and by count (ADR-0025);
+- the **local summary** (`<id>.summary.json`): the numbers of an activity that has just finished, written next to
+  the activity file, so a run not yet synced shows distance and pace even offline.
 
-Nessun endpoint nuovo: il server espone già `GET /v1/activities`, `/{id}`, `/{id}/track` e `/{id}/analysis`.
-L'unico cambiamento di contratto è additivo: `apiVersion` e `minClientVersion` in `/v1/client-config`, che
-producono un avviso non bloccante quando app e server non combaciano.
+No new endpoint: the server already exposes `GET /v1/activities`, `/{id}`, `/{id}/track` and
+`/{id}/analysis`. The only contract change is additive: `apiVersion` and `minClientVersion` in
+`/v1/client-config`, which produce a non-blocking warning when app and server do not match.
 
 ## 2. Goals and non-goals
 
-### Obiettivi
+### Goals
 
-1. Il telefono mostra la lista delle attività dell'account (quelle del server e quelle non ancora caricate) e il
-   dettaglio di ciascuna (numeri, split, curva del profilo altimetrico, curva del battito).
-2. Senza connessione la lista e i dettagli già aperti restano leggibili, e la schermata dice che sono una copia.
-3. Un'attività conclusa sul dispositivo mostra i suoi numeri anche prima (e senza) la sincronizzazione.
-4. Un'attività cancellata sul server sparisce dalla lista e resta nei "dati sul dispositivo", fino a che l'utente
-   la elimina.
-5. Un'analisi che il server sta calcolando è uno stato ("in calcolo"), non un errore.
-6. App e server che non combaciano producono un avviso, mai un blocco.
+1. The phone shows the list of the account's activities (those on the server and those not yet uploaded) and the
+   detail of each one (numbers, splits, elevation curve, heart-rate curve).
+2. Offline, the list and the details already opened stay readable, and the screen says they are a copy.
+3. An activity finished on the device shows its numbers before (and without) sync.
+4. An activity deleted on the server disappears from the list and stays in "on this device" until the user
+   removes it.
+5. An analysis the server is still computing is a state ("being computed"), not an error.
+6. An app and a server that do not match produce a warning, never a block.
 
-### Fuori perimetro
+### Non-goals
 
-- La mappa: nessuna basemap e nessun MapLibre Native in questo incremento. Il tracciato viene copiato lo
-  stesso (è il GeoJSON del server), pronto per lo slice successivo.
-- I record personali, il profilo, le unità di misura e il massimo HR: fuori.
-- Il sensore HR su iOS: fuori (l'app iOS non ha adapter BLE).
-- La cancellazione di un'attività **sul server** dal telefono: il mobile è in sola lettura sul server.
-- L'analisi calcolata in locale per un'attività non ancora sincronizzata: il dettaglio locale mostra il
-  summary, gli split arrivano con la sincronizzazione.
+- The map: no basemap and no MapLibre Native in this increment. The track is still copied (it is the server's
+  GeoJSON), ready for the next slice.
+- Personal records, the profile, units and maximum HR.
+- The HR sensor on iOS (the iOS app had no BLE adapter at the time of this increment).
+- Deleting an activity **on the server** from the phone: mobile is read-only on the server.
+- Analysis computed locally for an activity not yet synced: the local detail shows the summary, the splits
+  arrive with the sync.
 
 ## 3. Functional requirements
 
-| # | Requisito | Come è soddisfatto |
+| # | Requirement | How it is met |
 |---|---|---|
-| F1 | Lista delle attività dell'account | `GET /v1/activities?limit=50`, cursore opaco, `nextCursor` |
-| F2 | Dettaglio di un'attività | `GET /v1/activities/{id}` (+ `/{id}/track`, `/{id}/analysis`) |
-| F3 | Lista senza connessione | copia dei riassunti (`summaries.json`), con il timestamp della copia |
-| F4 | Dettaglio senza connessione | copia degli ultimi dettagli aperti (`details/<id>.json`) |
-| F5 | Numeri di un'attività locale | summary locale `<id>.summary.json` |
-| F6 | Attività cancellata sul server | sparisce dalla lista, resta nei "dati sul dispositivo" |
-| F7 | Analisi in calcolo | `503` + `Retry-After` → stato "in calcolo", nuova lettura dopo l'attesa |
-| F8 | Versioni incompatibili | `apiVersion`/`minClientVersion` in `/v1/client-config` → banner non bloccante |
-| F9 | Cancellazione locale | rimuove file grezzo, summary, stato di sync e sidecar HR |
+| F1 | List of the account's activities | `GET /v1/activities?limit=50`, opaque cursor, `nextCursor` |
+| F2 | Detail of an activity | `GET /v1/activities/{id}` (+ `/{id}/track`, `/{id}/analysis`) |
+| F3 | List offline | copy of the summaries (`summaries.json`), with the time of the copy |
+| F4 | Detail offline | copy of the last details opened (`details/<id>.json`) |
+| F5 | Numbers of a local activity | local summary `<id>.summary.json` |
+| F6 | Activity deleted on the server | disappears from the list, stays in "on this device" |
+| F7 | Analysis being computed | `503` + `Retry-After` → "being computed" state, read again after the wait |
+| F8 | Incompatible versions | `apiVersion`/`minClientVersion` in `/v1/client-config` → non-blocking banner |
+| F9 | Local deletion | removes the raw file, the summary, the sync state and the HR sidecar |
 
 ## 4. Non-functional requirements
 
-- **Privacy.** La copia contiene coordinate e serie HR: è della stessa classe dei dati di origine
-  (`docs/privacy/data-classification.md`). Nessun token nella copia, nessun file grezzo, nessun dato HR
-  "Health" (intervalli RR). La copia è esclusa dal backup, si cancella a ogni fine sessione e l'utente può
-  cancellarla a mano (ADR-0025).
-- **Consistenza.** Il server è l'autorità. La copia è sempre "best effort": può essere più vecchia del server,
-  e ogni schermata dice quando quello che mostra è una copia.
-- **Prestazioni.** Tutto il I/O della copia e dello store locale gira fuori dal thread principale
-  (`Dispatchers.Default`); nessuna operazione proporzionale alla lunghezza dell'attività gira nel ciclo della UI.
-- **Batteria.** Nessun polling in background: la copia si aggiorna quando l'utente apre la schermata.
-- **Self-hosting.** Nessuna modifica allo schema del database; una variabile d'ambiente in più
-  (`AVERYN_MIN_CLIENT_VERSION`), facoltativa.
+- **Privacy.** The copy holds coordinates and HR series: it is in the same class as the source data
+  (`docs/privacy/data-classification.md`). No token in the copy, no raw file, no "Health" HR data (RR
+  intervals). The copy is excluded from the backup, is wiped at the end of each session, and the user can delete
+  it by hand (ADR-0025).
+- **Consistency.** The server is the authority. The copy is always best effort: it can be older than the server,
+  and every screen says when what it shows is a copy.
+- **Performance.** All I/O of the copy and of the local store runs off the main thread (`Dispatchers.Default`);
+  no operation proportional to the length of an activity runs in the UI loop.
+- **Battery.** No background polling: the copy is refreshed when the user opens the screen.
+- **Self-hosting.** No database schema change; one more, optional environment variable
+  (`AVERYN_MIN_CLIENT_VERSION`).
 
 ## 5. Design
 
-### 5.1 I moduli
+### 5.1 The modules
 
 ```text
 backend ─────────────► shared:api   (ActivitySummary, ActivityPage, Track, ClientConfig, Api)
    │
-   └─────────────────► shared:analysis (ActivityAnalysis, già condiviso)
+   └─────────────────► shared:analysis (ActivityAnalysis, already shared)
 
-apps Android/iOS ───► shared:client (AverynClient, ActivityCache, HistoryRepository)
+Android/iOS apps ───► shared:client (AverynClient, ActivityCache, HistoryRepository)
                         ├──► shared:api
                         ├──► shared:analysis
                         ├──► shared:tracking  (ActivityStore, LocalActivitySummary)
                         └──► shared:sync      (SyncStatusStore)
 ```
 
-`shared:api` è puro: solo DTO e costanti, nessun Ktor. Il backend dipende da `shared:api` e non da
-`shared:client`: il contratto vive in un posto solo, e il client Ktor vive solo dove serve.
+`shared:api` is pure: only DTOs and constants, no Ktor. The backend depends on `shared:api` and not on
+`shared:client`: the contract lives in one place, and the Ktor client lives only where it is needed.
 
-### 5.2 Il merge della lista
+### 5.2 The merge of the list
 
-La lista è **guidata dal server**: una riga è un'attività del server. Si aggiungono le attività che sono solo
-sul dispositivo e che il server non ha ancora (non caricate, in coda, o rifiutate). Un'attività che il server ha
-e che il dispositivo ha pure è **una riga sola**, con i numeri del server.
+The list is **driven by the server**: a row is an activity of the server. Activities that exist only on the
+device and that the server does not have yet (not uploaded, queued, or refused) are added. An activity that both
+the server and the device have is **one row**, with the server's numbers.
 
-Un'attività locale `READY` che il server non ha più (è stata cancellata lì) **non compare nella lista**: resta
-nei "dati sul dispositivo", dove l'utente può cancellarla. Un `410` del server (attività già cancellata)produce
-lo stesso effetto.
-
-```text
-server ──► [ attività del server ] ──┐
-                                     ├──► merge ──► lista
-locale ──► [ solo qui, non ancora ] ─┘
-```
-
-### 5.3 La copia sul dispositivo (ADR-0025)
+A local `READY` activity that the server no longer has (it was deleted there) **does not appear in the list**: it
+stays in "on this device", where the user can delete it. A `410` from the server (activity already deleted)
+has the same effect.
 
 ```text
-<cache>/manifest.json          versione dello schema e server a cui appartiene
-<cache>/summaries.json         i riassunti caricati, il cursore, quando sono stati letti
-<cache>/details/<id>.json      il dettaglio aperto: riassunto, tracciato, analisi
-<cache>/details/index.json     quando l'ultima volta è stato aperto, quanti byte occupa
+server ──► [ activities of the server ] ──┐
+                                          ├──► merge ──► list
+local ───► [ only here, not yet ]       ──┘
 ```
 
-- Scritture atomiche (file temporaneo + rinomina): un kill lascia il file precedente, mai mezzo JSON.
-- Limiti: 10 dettagli, 50 MB, 500 riassunti. Il più vecchio esce per fare spazio.
-- Il manifest legge il server: una copia di un altro server non viene mai mostrata (e viene cancellata).
-- Un `404` su un dettaglio cancella il dettaglio copiato e il riassunto dalla lista.
-- Il tracciato è copiato ma **non disegnato**: la mappa arriva con lo slice successivo.
+### 5.3 The copy on the device (ADR-0025)
 
-### 5.4 Il summary locale
+```text
+<cache>/manifest.json          schema version and the server it belongs to
+<cache>/summaries.json         the summaries loaded, the cursor, when they were read
+<cache>/details/<id>.json      the detail opened: summary, track, analysis
+<cache>/details/index.json     when each was last opened, how many bytes it takes
+```
 
-`<id>.summary.json`, accanto a `<id>.jsonl`. Non è un'attività: non viene caricato, non viene esportato e non
-contiene coordinate — solo i numeri che la lista mostra.
+- Atomic writes (temporary file + rename): a kill leaves the previous file, never half a JSON.
+- Limits: 10 details, 50 MB, 500 summaries. The oldest one leaves to make room.
+- The manifest reads the server: a copy from another server is never shown (and is deleted).
+- A `404` on a detail deletes the copied detail and the summary from the list.
+- The track is copied but **not drawn**: the map arrives with the next slice.
 
-È scritto in `ActivityRecorder.buildCompletedActivity()`, che copre l'arresto normale, il recupero di
-un'attività rimasta in `STOPPING` e la chiusura delle attività più vecchie. I numeri vengono dagli stessi
-strumenti del server (`ActivitySnapshot`, `QualityReport`, `HeartRateMetrics` con `hr-v2`), così il summary
-locale e quello del server non possono divergere. Le attività registrate da una build precedente lo ricevono da
-un ricalcolo al primo avvio (`backfillLocalSummaries`).
+### 5.4 The local summary
 
-### 5.5 Le versioni
+`<id>.summary.json`, next to `<id>.jsonl`. It is not an activity: it is not uploaded, not exported, and holds no
+coordinates — only the numbers the list shows.
 
-`/v1/client-config` espone `apiVersion` (la versione del contratto che il server parla) e `minClientVersion`
-(la versione minima dell'app che l'istanza supporta, facoltativa). L'app confronta i numeri con la propria
-versione e mostra un banner: il server è più vecchio, il server è più nuovo, l'app è sotto il minimo. Il
-contratto è additivo dentro `apiVersion = 1`, quindi un client vecchio continua a funzionare.
+It is written in `ActivityRecorder.buildCompletedActivity()`, which covers the normal stop, the recovery of an
+activity left in `STOPPING`, and the closing of older activities. The numbers come from the same tools as the
+server (`ActivitySnapshot`, `QualityReport`, `HeartRateMetrics` with `hr-v2`), so the local summary and the
+server's cannot diverge. Activities recorded by an earlier build get it from a recomputation at first launch
+(`backfillLocalSummaries`).
 
-### 5.6 I stati dell'analisi
+### 5.5 The versions
 
-`GET /v1/activities/{id}/analysis` risponde `503` con `Retry-After: 5` quando il server sta calcolando. Per il
-client quello è uno stato, non un errore: il dettaglio mostra "in calcolo" e rilegge dopo l'attesa indicata
-(al massimo tre volte, poi un pulsante "Riprova"). Le altre risposte temporanee (429, 502, 504, rete) sono
-ripetute dal client, sempre aspettando quanto chiesto dal server.
+`/v1/client-config` exposes `apiVersion` (the version of the contract the server speaks) and `minClientVersion`
+(the minimum app version the instance supports, optional). The app compares the numbers with its own version
+and shows a banner: the server is older, the server is newer, the app is below the minimum. The contract is
+additive within `apiVersion = 1`, so an old client keeps working.
+
+### 5.6 The states of the analysis
+
+`GET /v1/activities/{id}/analysis` answers `503` with `Retry-After: 5` while the server is computing. For the
+client that is a state, not an error: the detail shows "being computed" and reads again after the indicated wait
+(at most three times, then a "Retry" button). The other temporary answers (429, 502, 504, network) are retried by
+the client, always waiting as long as the server asks.
 
 ## 6. Test strategy
 
-| Livello | Cosa copre |
+| Level | What it covers |
 |---|---|
-| `shared:api` | decoding del contratto, campi sconosciuti ignorati, confronto delle versioni |
-| `shared:client` | cache (limiti, LRU, schema, server diverso, file rotto), client (401/404/429/503, `Retry-After`), merge della lista, 404, analisi in calcolo |
-| `shared:tracking` | il summary locale: scrittura, pausa, recovery, delete, ricalcolo, backfill |
-| `backend` | `/v1/client-config` espone le versioni; un minimo non valido è ignorato |
-| device matrix | S23–S28 (vedi `docs/testing/device-matrix.md`) |
+| `shared:api` | decoding of the contract, unknown fields ignored, comparison of versions |
+| `shared:client` | cache (limits, LRU, schema, other server, broken file), client (401/404/429/503, `Retry-After`), merge of the list, 404, analysis being computed |
+| `shared:tracking` | the local summary: write, pause, recovery, delete, recomputation, backfill |
+| `backend` | `/v1/client-config` exposes the versions; an invalid minimum is ignored |
+| device matrix | S23–S28 (see `docs/testing/device-matrix.md`) |
 
 ## 7. Rollout and migration
 
-- Nessuna migrazione: il database non cambia e il formato dei file locali non cambia (il summary è un file
-  nuovo, accanto agli altri).
-- La copia del server è nuova e vuota: si riempie al primo avvio della schermata.
-- Il summary locale manca per le attività registrate prima: il ricalcolo al primo avvio (in background) lo
-  scrive; se non è ancora successo, l'attività mostra i numeri appena il server li ha.
-- Il banner delle versioni compare solo se le versioni non combaciano: un server e un app della stessa versione
-  non mostrano nulla.
+- No migration: the database does not change and the format of the local files does not change (the summary is
+  a new file, next to the others).
+- The copy of the server is new and empty: it fills at the first launch of the screen.
+- The local summary is missing for activities recorded before: the recomputation at first launch (in the
+  background) writes it; if that has not happened yet, the activity shows the numbers as soon as the server has
+  them.
+- The version banner appears only if the versions do not match: a server and an app of the same version show
+  nothing.
 
 ## 8. Risks and mitigations
 
-| Rischio | Mitigazione |
+| Risk | Mitigation |
 |---|---|
-| Una copia di dati che il dispositivo non aveva | ADR-0025, wipe a ogni fine sessione, esclusione dal backup, cancellazione a mano |
-| Numeri locali che divergono da quelli del server | stessi algoritmi (`hr-v2`, `distance-v1`…), versioni nel summary, il server vince sempre, il summary locale è etichettato |
-| Una copia che non coincide con il server | il server è l'autorità, il `404` rimuove, la schermata mostra il timestamp |
-| Il volume della copia | 10 dettagli, 50 MB, 500 riassunti, LRU |
-| L'app e il server che non combaciano | avviso non bloccante, contratto additivo |
-| Il lavoro che si accumula in `shared:client` | moduli separati (`shared:api` puro, `shared:client` Ktor), nessuna dipendenza dal backend |
+| A copy of data the device did not have | ADR-0025, wipe at the end of each session, exclusion from the backup, manual deletion |
+| Local numbers that diverge from the server's | same algorithms (`hr-v2`, `distance-v1`…), versions in the summary, the server always wins, the local summary is labelled |
+| A copy that does not match the server | the server is the authority, `404` removes, the screen shows the timestamp |
+| The volume of the copy | 10 details, 50 MB, 500 summaries, LRU |
+| App and server that do not match | non-blocking warning, additive contract |
+| Work piling up in `shared:client` | separate modules (`shared:api` pure, `shared:client` Ktor), no dependency on the backend |
 
 ## 9. Open questions
 
-- Il tracciato copiato non è ancora disegnato: la mappa (MapLibre Native) è lo slice successivo e userà la copia
-  che questa slice lascia sul dispositivo.
-- L'analisi calcolata in locale per le attività non sincronizzate non è in questo incremento: si valuta quando il
-  costo di un replay sul telefono è misurato su un dispositivo vero.
+- The copied track is not drawn yet: the map (MapLibre Native) is the next slice and will use the copy this slice
+  leaves on the device (planned in the [launch checklist](../product/mvp-launch.md)).
+- Analysis computed locally for unsynced activities is not in this increment: to be considered when the cost of
+  a replay on the phone is measured on a real device.
+
+---
+
+Editorial note, 2026-10-25: translated from Italian to English; no change of content.
