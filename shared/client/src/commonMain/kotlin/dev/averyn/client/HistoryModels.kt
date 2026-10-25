@@ -2,6 +2,8 @@ package dev.averyn.client
 
 import dev.averyn.analysis.ActivityAnalysis
 import dev.averyn.api.ActivitySummary
+import dev.averyn.api.UnitSystem
+import dev.averyn.api.UserProfile
 import dev.averyn.tracking.LocalActivitySummary
 
 /** Where an activity of the list comes from. */
@@ -137,4 +139,18 @@ data class DeviceActivityItem(
     val localBytes: Long = 0,
     /** True when the heart-rate sidecar is next to it (ADR-0020). */
     val hasHeartRateSidecar: Boolean = false,
+)
+
+/**
+ * The profile as the screen needs it (TDD-0012): the settings of the account when the server answered, and the unit
+ * system either way (the last one the server said, or metric if it never did).
+ */
+data class ProfileSnapshot(
+    /** The profile the server answered; null when it could not be read. */
+    val profile: UserProfile? = null,
+    /** The unit system to write numbers in. */
+    val units: UnitSystem = UnitSystem.METRIC,
+    /** True when [units] comes from the cache and not from the server. */
+    val fromCache: Boolean = false,
+    val failure: ApiFailure? = null,
 )

@@ -3,6 +3,7 @@ package dev.averyn.client
 import dev.averyn.analysis.ActivityAnalysis
 import dev.averyn.api.ActivitySummary
 import dev.averyn.api.Track
+import dev.averyn.api.UnitSystem
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
@@ -52,6 +53,16 @@ data class CachedActivityDetail(
     val trackFetchedAtMs: Long? = null,
     /** When the analysis was read; null when it was not read yet. */
     val analysisFetchedAtMs: Long? = null,
+)
+
+/**
+ * The unit system of the account (TDD-0012). It is all the cache keeps of the profile: the maximum heart rate is
+ * health-adjacent and stays on the server (the zones come inside the analysis that is already cached).
+ */
+@Serializable
+private data class CachedUnits(
+    val schemaVersion: Int = CACHE_SCHEMA_VERSION,
+    val units: UnitSystem = UnitSystem.METRIC,
 )
 
 /** What the cache holds, for the "offline data" line of the account screen. */
@@ -123,6 +134,18 @@ class ActivityCache(
             Path(directory, SUMMARIES_FILE),
             CachedSummaries(savedAtMs = savedAtMs, nextCursor = nextCursor, items = kept),
         )
+    }
+
+    /** The unit system the profile last said, or null when it was never read (or the cache is of another server). */
+    fun readUnits(): UnitSystem? {
+        if (!isUsable()) return null
+        return readJson<CachedUnits>(Path(directory, UNITS_FILE))?.units
+    }
+
+    /** Remembers the unit system, so that the phone writes distances the same way without a connection. */
+    fun writeUnits(units: UnitSystem) {
+        if (!isUsable()) return
+        writeJson(Path(directory, UNITS_FILE), CachedUnits(units = units))
     }
 
     /** Removes one activity from the cached list (the server deleted it). */
@@ -299,6 +322,7 @@ class ActivityCache(
     private companion object {
         const val MANIFEST_FILE = "manifest.json"
         const val SUMMARIES_FILE = "summaries.json"
+        const val UNITS_FILE = "units.json"
         const val DETAILS_DIR = "details"
         const val INDEX_FILE = "index.json"
 

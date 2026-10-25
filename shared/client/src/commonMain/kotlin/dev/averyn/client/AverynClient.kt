@@ -6,11 +6,16 @@ import dev.averyn.api.ActivitySummary
 import dev.averyn.api.ClientConfig
 import dev.averyn.api.ConsentGrant
 import dev.averyn.api.Track
+import dev.averyn.api.UserProfile
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.bearerAuth
-import io.ktor.client.request.get
+import io.ktor.client.request.request
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.HttpMethod
+import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -21,7 +26,8 @@ import kotlinx.serialization.json.JsonElement
 /**
  * The read path of the server (TDD-0011): the list of the activities, one activity, its track and its analysis.
  *
- * Every call is a GET, so every call is safe to repeat. A temporary failure is repeated at most
+ * Every call is a GET, so every call is safe to repeat; the one exception is the save of the profile, a PUT that
+ * replaces the whole document, which is just as safe to repeat. A temporary failure is repeated at most
  * [MAX_RETRIES] times, waiting as long as the server asks (`Retry-After`); the analysis is the exception: a
  * `503` there means "it is being computed", not "it failed", and it is reported as such instead of being
  * retried in a loop.
@@ -99,8 +105,24 @@ class AverynClient(
             }
         }
 
+    /** The profile of the account (TDD-0012). */
+    override suspend fun profile(accessToken: String): ApiResult<UserProfile> =
+        get(path = "/v1/profile", token = accessToken) { json.decodeFromString(UserProfile.serializer(), it) }
+
+    /** Replaces the profile (TDD-0012): the server stores it whole, so repeating the call is harmless. */
+    override suspend fun saveProfile(
+        accessToken: String,
+        profile: UserProfile,
+    ): ApiResult<UserProfile> =
+        get(
+            path = "/v1/profile",
+            token = accessToken,
+            method = HttpMethod.Put,
+            body = json.encodeToString(UserProfile.serializer(), profile),
+        ) { json.decodeFromString(UserProfile.serializer(), it) }
+
     /**
-     * One GET, with the repetitions of a temporary failure.
+     * One call, with the repetitions of a temporary failure.
      *
      * @param busyOnServiceUnavailable when true, a `503` is reported as "busy" instead of being repeated: the
      *   analysis endpoint answers `503` while it computes.
@@ -109,6 +131,8 @@ class AverynClient(
         path: String,
         token: String?,
         busyOnServiceUnavailable: Boolean = false,
+        method: HttpMethod = HttpMethod.Get,
+        body: String? = null,
         decode: (String) -> T,
     ): ApiResult<T> {
         var attempt = 0
@@ -116,8 +140,13 @@ class AverynClient(
             attempt++
             val response =
                 try {
-                    http.get("$baseUrl$path") {
+                    http.request("$baseUrl$path") {
+                        this.method = method
                         token?.let { bearerAuth(it) }
+                        if (body != null) {
+                            contentType(ContentType.Application.Json)
+                            setBody(body)
+                        }
                     }
                 } catch (e: CancellationException) {
                     throw e
@@ -130,10 +159,10 @@ class AverynClient(
                 }
             val status = response.status.value
             // The body is read in every case: an unread body would keep the connection busy.
-            val body = response.bodyAsText()
+            val text = response.bodyAsText()
             if (response.status.isSuccess()) {
                 return try {
-                    ApiResult(value = decode(body))
+                    ApiResult(value = decode(text))
                 } catch (e: Exception) {
                     ApiResult(failure = ApiFailure(ApiFailureKind.UNEXPECTED, status = status))
                 }
@@ -209,6 +238,11 @@ class AverynClient(
         /** A client for a server, with the default HTTP client. */
         fun create(serverUrl: String): AverynClient = AverynClient(serverUrl)
 
-        private val json = Json { ignoreUnknownKeys = true }
+        private val json =
+            Json {
+                ignoreUnknownKeys = true
+                // The profile is sent whole, defaults included: the server replaces the document.
+                encodeDefaults = true
+            }
     }
 }

@@ -6,6 +6,8 @@ import dev.averyn.api.ActivitySummary
 import dev.averyn.api.ClientConfig
 import dev.averyn.api.ConsentGrant
 import dev.averyn.api.Track
+import dev.averyn.api.UnitSystem
+import dev.averyn.api.UserProfile
 import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Sport
 import dev.averyn.sync.SyncStatusStore
@@ -255,6 +257,52 @@ class HistoryRepositoryTest {
     }
 
     /** The server, as the tests want it. */
+    @Test
+    fun `the unit system of the profile is remembered for the next time without a connection`() =
+        runBlocking {
+            assertEquals(UnitSystem.METRIC, repository.cachedUnits())
+            reader.profile = UserProfile(UnitSystem.IMPERIAL, 187)
+
+            val online = repository.refreshProfile("token")
+
+            assertEquals(UserProfile(UnitSystem.IMPERIAL, 187), online.profile)
+            assertEquals(UnitSystem.IMPERIAL, online.units)
+            reader.failure = ApiFailure(ApiFailureKind.TRANSIENT)
+            val offline = repository.refreshProfile("token")
+            assertNull(offline.profile)
+            assertTrue(offline.fromCache)
+            assertEquals(UnitSystem.IMPERIAL, offline.units)
+            assertEquals(UnitSystem.IMPERIAL, repository.cachedUnits())
+        }
+
+    @Test
+    fun `without a token the profile is not asked for and the cached units are used`() =
+        runBlocking {
+            reader.profile = UserProfile(UnitSystem.IMPERIAL, 187)
+            repository.refreshProfile("token")
+
+            val snapshot = repository.refreshProfile(null)
+
+            assertNull(snapshot.profile)
+            assertEquals(UnitSystem.IMPERIAL, snapshot.units)
+        }
+
+    @Test
+    fun `a saved profile changes the units and a refused one changes nothing`() =
+        runBlocking {
+            val saved = repository.saveProfile("token", UserProfile(UnitSystem.IMPERIAL, 190))
+            assertEquals(UserProfile(UnitSystem.IMPERIAL, 190), saved.profile)
+            assertEquals(UnitSystem.IMPERIAL, repository.cachedUnits())
+
+            reader.failure = ApiFailure(ApiFailureKind.UNEXPECTED, status = 422)
+            val refused = repository.saveProfile("token", UserProfile(UnitSystem.METRIC, 99))
+
+            assertNull(refused.profile)
+            assertEquals(422, refused.failure?.status)
+            assertEquals(UnitSystem.IMPERIAL, refused.units)
+            assertEquals(UnitSystem.IMPERIAL, repository.cachedUnits())
+        }
+
     private class FakeReader : ActivityReader {
         var page: ActivityPage = ActivityPage(emptyList(), null)
         var activity: ActivitySummary? = null
@@ -293,5 +341,19 @@ class HistoryRepositoryTest {
 
         override suspend fun consents(accessToken: String): ApiResult<List<ConsentGrant>> =
             failure?.let { ApiResult(failure = it) } ?: ApiResult(emptyList())
+
+        var profile = UserProfile()
+
+        override suspend fun profile(accessToken: String): ApiResult<UserProfile> =
+            failure?.let { ApiResult(failure = it) } ?: ApiResult(profile)
+
+        override suspend fun saveProfile(
+            accessToken: String,
+            profile: UserProfile,
+        ): ApiResult<UserProfile> {
+            failure?.let { return ApiResult(failure = it) }
+            this.profile = profile
+            return ApiResult(profile)
+        }
     }
 }

@@ -1,6 +1,7 @@
 package dev.averyn.client
 
 import dev.averyn.api.ActivitySummary
+import dev.averyn.api.UnitSystem
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
@@ -157,5 +158,40 @@ class ActivityCacheTest {
         val index = Path(Path(dir.toString(), "details"), "index.json")
         if (SystemFileSystem.exists(index)) SystemFileSystem.delete(index)
         assertEquals(1, cache.stats().detailCount)
+    }
+
+    @Test
+    fun `the unit system is remembered and is the only thing of the profile the cache keeps`() {
+        assertNull(cache.readUnits())
+
+        cache.writeUnits(UnitSystem.IMPERIAL)
+
+        assertEquals(UnitSystem.IMPERIAL, cache.readUnits())
+        val files =
+            dir
+                .toFile()
+                .walkTopDown()
+                .filter { it.isFile }
+                .map { it.readText() }
+                .toList()
+        assertTrue(files.none { it.contains("maxHr") }, "the maximum heart rate must not be on the device")
+    }
+
+    @Test
+    fun `the unit system of another server is not read`() {
+        cache.writeUnits(UnitSystem.IMPERIAL)
+
+        val other = ActivityCache(Path(dir.toString()), "https://other.example")
+
+        assertNull(other.readUnits())
+    }
+
+    @Test
+    fun `clearing the cache forgets the unit system`() {
+        cache.writeUnits(UnitSystem.IMPERIAL)
+
+        cache.clear()
+
+        assertNull(cache.readUnits())
     }
 }

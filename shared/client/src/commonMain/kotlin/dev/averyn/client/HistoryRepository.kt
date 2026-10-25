@@ -1,6 +1,8 @@
 package dev.averyn.client
 
 import dev.averyn.api.ActivitySummary
+import dev.averyn.api.UnitSystem
+import dev.averyn.api.UserProfile
 import dev.averyn.sync.SyncState
 import dev.averyn.sync.SyncStatus
 import dev.averyn.sync.SyncStatusStore
@@ -274,6 +276,48 @@ class HistoryRepository(
             store.deleteRr(activityId)
             statuses.delete(activityId)
             statuses.deleteRr(activityId)
+        }
+
+    /** The unit system as the device last knew it: the cached one, or metric. Never touches the network. */
+    suspend fun cachedUnits(): UnitSystem =
+        withContext(Dispatchers.Default) {
+            cache.readUnits() ?: UnitSystem.METRIC
+        }
+
+    /**
+     * Reads the profile from the server (TDD-0012). The unit system is remembered, so that the numbers are written
+     * the same way without a connection; the maximum heart rate is not kept on the device.
+     */
+    suspend fun refreshProfile(accessToken: String?): ProfileSnapshot =
+        withContext(Dispatchers.Default) {
+            val cached = cache.readUnits() ?: UnitSystem.METRIC
+            if (accessToken.isNullOrBlank()) return@withContext ProfileSnapshot(units = cached, fromCache = true)
+            val result = client.profile(accessToken)
+            val profile = result.value
+            if (profile == null) {
+                return@withContext ProfileSnapshot(units = cached, fromCache = true, failure = result.failure)
+            }
+            cache.writeUnits(profile.units)
+            ProfileSnapshot(profile = profile, units = profile.units)
+        }
+
+    /** Saves the profile (TDD-0012). Only what the server stored is kept: a refused profile changes nothing here. */
+    suspend fun saveProfile(
+        accessToken: String,
+        profile: UserProfile,
+    ): ProfileSnapshot =
+        withContext(Dispatchers.Default) {
+            val result = client.saveProfile(accessToken, profile)
+            val stored = result.value
+            if (stored == null) {
+                return@withContext ProfileSnapshot(
+                    units = cache.readUnits() ?: UnitSystem.METRIC,
+                    fromCache = true,
+                    failure = result.failure,
+                )
+            }
+            cache.writeUnits(stored.units)
+            ProfileSnapshot(profile = stored, units = stored.units)
         }
 
     /** Throws the copy of the server away (the user asked for it, or the session ended). */
