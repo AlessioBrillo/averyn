@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { afterEach, expect, test } from 'vitest'
-import { Analysis } from './Analysis'
+import { Analysis, HeartRateZonesTable } from './Analysis'
 import { elevationSeries, heartRateSeries } from './analysisSeries'
 import type { ActivityAnalysis } from './api'
 import { setUnits } from './format'
@@ -157,4 +157,34 @@ test('the analysis shows the best efforts of the activity', () => {
   expect(html).toContain('0:06:00')
   expect(html).toContain('6:00 /km')
   expect(html).toContain('best-efforts-v1')
+})
+
+test('the zones are a table with the time and the share of each, and say what the maximum was', () => {
+  const html = renderToString(
+    createElement(HeartRateZonesTable, {
+      zones: {
+        algorithmVersion: 'hr-zones-v1',
+        maxHrBpm: 190,
+        zones: [
+          { zone: 1, fromBpm: 0, toBpm: 113, timeMs: 60_000 },
+          { zone: 2, fromBpm: 114, toBpm: 132, timeMs: 0 },
+          { zone: 3, fromBpm: 133, toBpm: 151, timeMs: 120_000 },
+          { zone: 4, fromBpm: 152, toBpm: 170, timeMs: 0 },
+          { zone: 5, fromBpm: 171, toBpm: null, timeMs: 20_000 },
+        ],
+      },
+    }),
+  )
+
+  expect(html).toContain('maximum heart rate of 190 bpm')
+  expect(html).toContain('133–151 bpm')
+  expect(html).toContain('171+ bpm')
+  expect(html).toContain('0:02:00') // zone 3
+  expect(html).toContain('60%') // 120 s of 200 s
+})
+
+test('without zones the page says where to set the maximum heart rate', () => {
+  const html = renderToString(createElement(HeartRateZonesTable, { zones: null }))
+
+  expect(html).toContain('Set your maximum heart rate in your account')
 })

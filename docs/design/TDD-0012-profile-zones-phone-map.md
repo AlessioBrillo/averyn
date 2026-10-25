@@ -99,3 +99,4 @@ V12 adds a table; nothing existing changes. The analysis schema bump (5.2) makes
 - **Profile (P1–P3):** the API, #83.
 - **Profile on the web (P4, web part):** the Account page edits the units and the maximum heart rate; every distance, pace, speed and elevation of the web, and the axes of the elevation chart, follow the units. The records keep their names in kilometres ("the 5 km record") and the splits stay per kilometre (`splits-v1`). The phones follow.
 - **Zones (Z1, Z2):** the histogram (`series-v2`), `hr-zones-v1` and the zones in the analysis response. The clients show them next.
+- **Zones on the web:** a table under the heart-rate chart (time and share per zone, the maximum used), or a hint to set the maximum in the account when there is none.
