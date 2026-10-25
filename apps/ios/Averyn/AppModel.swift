@@ -1,5 +1,5 @@
 import Foundation
-import Shared
+@preconcurrency import Shared
 import UIKit
 
 /// The few long-lived objects the UI and the background tasks share. The recorder and the location tracker live
