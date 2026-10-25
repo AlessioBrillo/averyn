@@ -1,5 +1,5 @@
 import Foundation
-import Shared
+@preconcurrency import Shared
 import UIKit
 
 /// The few long-lived objects the UI and the background tasks share. The recorder and the location tracker live
@@ -36,6 +36,12 @@ final class AppModel {
     private var recorderListeners: [(LiveSnapshot) -> Void] = []
     private let recorderListenersLock = NSLock()
 
+    /// Asks the server for the consent again while an activity is recording, so a consent withdrawn in the
+    /// meantime stops the RR intervals without the app coming to the foreground (ADR-0021; same period as the
+    /// Android watchdog). The background location session keeps this run loop alive.
+    private var consentTimer: Timer?
+    private static let consentRefreshInterval: TimeInterval = 2 * 60
+
     private init() {
         let dir = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -46,7 +52,7 @@ final class AppModel {
 
         // The copy of the server holds the coordinates of the activities of the account: it is not in the
         // backup of the device (TDD-0011).
-        let cacheDir = FileManager.default
+        var cacheDir = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("server-cache", isDirectory: true)
         try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
@@ -71,7 +77,8 @@ final class AppModel {
         // listeners (e.g. RecorderViewModel) are called after the internal logic.
         recorder.listener = { [weak self] snapshot in
             if snapshot.state.isTerminal {
-                Task { await self?.heartRate.stop() }
+                Task { try? await self?.heartRate.stop() }
+                Task { @MainActor in self?.stopConsentRefresh() }
             }
             self?.recorderListenersLock.lock()
             let listeners = self?.recorderListeners ?? []
@@ -96,6 +103,7 @@ final class AppModel {
     /// never stops GPS tracking.
     private func startHeartRate() {
         guard let activityId = recorder.currentActivityId else { return }
+        startConsentRefresh()
         heartRate.onSample = { [weak self] sample in
             self?.feedHeartRate(sample)
         }
@@ -133,12 +141,25 @@ final class AppModel {
             }
             do {
                 let result = try await history().client.consents(accessToken: token)
-                let grants = result.value ?? []
+                // A failure carries no value: no grants, so no RR (fail-closed).
+                let grants = (result.value as? [ConsentGrant]) ?? []
                 setRrConsent(grants.contains { $0.scope == "rr_recording" })
             } catch {
                 setRrConsent(false)
             }
         }
+    }
+
+    private func startConsentRefresh() {
+        consentTimer?.invalidate()
+        consentTimer = Timer.scheduledTimer(withTimeInterval: Self.consentRefreshInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refreshConsents() }
+        }
+    }
+
+    private func stopConsentRefresh() {
+        consentTimer?.invalidate()
+        consentTimer = nil
     }
 
     private func setRrConsent(_ granted: Bool) {
@@ -155,7 +176,9 @@ final class AppModel {
     func feedRrInterval(_ rr: RrInterval) {
         guard hasRrConsent, let activityId = recorder.currentActivityId else { return }
         if !store.hasRr(activityId: activityId) {
-            recorder.currentMetadata()?.let { store.createRrMetadata(metadata: $0) }
+            if let metadata = recorder.currentMetadata() {
+                store.createRrMetadata(metadata: metadata)
+            }
         }
         store.appendRrInterval(activityId: activityId, rr: rr)
     }

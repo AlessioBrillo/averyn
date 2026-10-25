@@ -1,6 +1,6 @@
 # Metric: Heart rate
 
-- **Status:** draft
+- **Status:** draft (implemented; `stable` after the device matrix row S15 is green)
 - **Current algorithm version:** `hr-v2`
 
 ## Definition

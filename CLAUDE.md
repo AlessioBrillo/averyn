@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Averyn (codename): open-source, self-hostable sports-tracking platform. iOS + Android + Web. Pre-alpha. The code of MVP-1 and of the first MVP-2 slices (analysis, GPX import, heart rate, personal records) is in place, but **the real-device campaign is the open gate**: the [device matrix](docs/testing/device-matrix.md) is empty, and no feature is "done" until the row of the matrix that covers it is green. Read `docs/README.md` for the docs system, `docs/product/roadmap.md` for scope, `docs/design/TDD-0001-tracking-engine.md` for the tracking engine and `docs/design/TDD-0010-best-efforts.md` for the last increment.
+Averyn (codename): open-source, self-hostable sports-tracking platform. iOS + Android + Web. Pre-alpha. The code of MVP-1 and of the first MVP-2 slices (analysis, GPX import, heart rate, personal records) is in place, but **the real-device campaign is the open gate**: the [device matrix](docs/testing/device-matrix.md) is empty, and no feature is "done" until the row of the matrix that covers it is green. The current target is **MVP-L, a public managed-cloud launch** (roadmap, 13 weeks from 2026-10-26, one developer, with a cut line): the live checklist is `docs/product/mvp-launch.md`. Read `docs/README.md` for the docs system, `docs/product/roadmap.md` for scope, `docs/design/TDD-0001-tracking-engine.md` for the tracking engine and `docs/adr/0026-averyn-synapse-link.md` for the Synapse link.
 
 ## Layout
 
@@ -34,7 +34,9 @@ iOS cannot be built on Windows; CI (macOS runner) verifies it. The Docker backen
 - PR titles: Conventional Commits. Tests ship with logic. No secrets in the repo.
 - Commit identity: noreply email only (`git config user.email <id>+<user>@users.noreply.github.com`), never a real address, in commit metadata or `Co-authored-by` trailers. Enforced by `.githooks/pre-push` (`git config core.hooksPath .githooks`).
 - Brand neutrality: no competitor names, no disparagement of any product or company, anywhere in the repo (code, docs, commit messages, issues). Describe the market and prior art generically. Naming an interoperability format (GPX, FIT, TCX, HealthKit, Health Connect, Bluetooth GATT profiles) is fine where it's technically required.
-- Don't scaffold ahead: later areas (maps, social, segments, watch) get code only when their milestone starts.
+- Don't scaffold ahead: later areas (social, segments, watch, offline maps) get code only when their milestone starts. No code without an issue in the current milestone; a spec without code and tests in the same increment stays `draft`.
+- A red job on `main` stops everything, iOS included: no merge on a red check, and a red `main` is fixed before any new work.
+- Accepted ADRs take editorial edits only (typo, link, translation, brand redaction), noted at the bottom with the date. Language of docs, code and commit messages: English.
 - Third-party sensor ecosystems (e.g. Synapse) are optional integrations, never a dependency of a core feature: see [ADR-0010](docs/adr/0010-ecosystem-boundary.md) and [ADR-0014](docs/adr/0014-sensor-integration-contract.md). Averyn is the only backend/system of record; a vendor's cloud is at most a stateless job worker.
 - HRV/ECG/sleep/stress-adjacent data is a special data class (health), with its own consent-per-scope and DPIA-before-launch rule: see [ADR-0013](docs/adr/0013-health-data-special-category.md).
 
@@ -45,7 +47,7 @@ GitHub Actions is not the gate. The single source of truth is `.woodpecker/ci.ym
 - **Local, no server:** `ci-local` from the repo root (Docker running). Exit 0 = green.
   Never run `woodpecker-cli exec` directly on the checkout: it bind-mounts the repo and
   install steps would overwrite host dependencies.
-- **Server:** push the branch; the check is `ci/woodpecker/push/ci` (`gh pr checks <n> --watch`).
+- **Server:** push the branch; the check is `ci/woodpecker/push/ci` (`gh pr checks <n> --watch`). The pipeline now also runs on `pull_request` events; confirm the check appears on the next PR.
 - **Not in the gate:** iOS (needs macOS), compose/compose-TLS smoke tests (need docker-in-docker), CodeQL.
 - **Status:** first green run recorded 2026-10-17 on commit a4d810b:
   `:backend:compileKotlin`, `:backend:test` (Testcontainers), `:shared:*:jvmTest`,
