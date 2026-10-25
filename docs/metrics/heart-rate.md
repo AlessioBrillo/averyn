@@ -21,7 +21,7 @@ Beats per minute (bpm), integer platform values.
 - `hr_coverage_percent = 100 × qualifying samples / expected samples` (expected = the time the activity was **recording**, the pauses excluded, at the configured 1 s sampling interval; capped at 100)
 - `hr_dropouts = expected samples − qualifying samples` (floored at 0)
 
-No interpolation across gaps; no smoothing; zones/time-in-zone require a user profile (deferred increment).
+No interpolation across gaps; no smoothing. The time in each zone is a separate metric, [`hr-zones-v1`](hr-zones.md).
 
 `hr-v1` counted the **elapsed** time of the activity in the denominator, pauses included, while the samples of a
 paused activity are not recorded: a strap that worked perfectly through a half-hour pause was reported as half
@@ -53,7 +53,7 @@ Derived-reliable. Optical straps under-report during high-cadence motion; chest 
 
 ## Known limitations
 
-No motion-artifact filtering in v1; chest-strap vs optical not distinguished; zones require max HR (user profile) which does not exist yet.
+No motion-artifact filtering in v1; chest-strap vs optical not distinguished; the zones need the maximum heart rate of the profile ([hr-zones.md](hr-zones.md)).
 
 ## Reference tests
 

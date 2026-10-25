@@ -24,6 +24,9 @@ private const val MAX_HEART_RATE_POINTS = 1000
 /** Two heart-rate samples further apart than this are not the same stretch: the sensor was silent in between. */
 private const val HR_MAX_GAP_MS = 2_000L
 
+/** How long the last sample of a stretch holds its bpm: the configured sampling interval (hr-v2). */
+private const val HR_NOMINAL_INTERVAL_MS = 1_000L
+
 private const val HR_MIN_BPM = 1
 
 private const val HR_MAX_BPM = 240
@@ -341,6 +344,7 @@ private fun buildHeartRateSeries(
 ): AnalysisHeartRateSeries {
     val usable = heartRate.filter { it.bpm in HR_MIN_BPM..HR_MAX_BPM }
     if (usable.isEmpty()) return AnalysisHeartRateSeries(emptyList(), emptyList(), emptyList())
+
     val groups = mutableListOf<MutableList<HeartRateSample>>()
     var previous: HeartRateSample? = null
     for (sample in usable) {
@@ -351,6 +355,7 @@ private fun buildHeartRateSeries(
         groups.last().add(sample)
         previous = sample
     }
+    val timeAtBpm = buildHistogram(groups)
     val elapsed = mutableListOf<Long>()
     val bpm = mutableListOf<Int>()
     val segment = mutableListOf<Int>()
@@ -380,7 +385,27 @@ private fun buildHeartRateSeries(
             segment.add(index)
         }
     }
-    return AnalysisHeartRateSeries(elapsedMs = elapsed, bpm = bpm, segment = segment)
+    return AnalysisHeartRateSeries(elapsedMs = elapsed, bpm = bpm, segment = segment, timeAtBpm = timeAtBpm)
+}
+
+/**
+ * The time at each bpm, from the stretches *before* they are decimated: a sample holds its bpm until the next
+ * sample of the same stretch, and the last sample of a stretch holds it for one nominal interval. A silence of
+ * the sensor is a break between stretches, so it is in no bpm.
+ */
+private fun buildHistogram(groups: List<List<HeartRateSample>>): AnalysisHeartRateHistogram {
+    val all = groups.flatten()
+    if (all.isEmpty()) return AnalysisHeartRateHistogram()
+    val from = all.minOf { it.bpm }
+    val time = LongArray(all.maxOf { it.bpm } - from + 1)
+    for (group in groups) {
+        group.forEachIndexed { index, sample ->
+            val next = group.getOrNull(index + 1)
+            val held = if (next == null) HR_NOMINAL_INTERVAL_MS else next.elapsedRealtimeMs - sample.elapsedRealtimeMs
+            time[sample.bpm - from] += held
+        }
+    }
+    return AnalysisHeartRateHistogram(fromBpm = from, timeMs = time.toList())
 }
 
 /**

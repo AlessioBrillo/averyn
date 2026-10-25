@@ -1,7 +1,7 @@
 # Metric: Activity analysis (the display series)
 
 - **Status:** draft
-- **Current algorithm version:** `series-v1`
+- **Current algorithm version:** `series-v2`
 
 ## Definition
 
@@ -47,6 +47,7 @@ An altitude that was not measured is a null in the series, and the chart shows t
 | Version | Date | Change |
 |---|---|---|
 | series-v1 | 2026-10-20 | Initial: 2 000 track points, 1 000 heart-rate points, LTTB, segments |
+| series-v2 | 2026-10-25 | The heart-rate series also carries the time spent at each bpm (`timeAtBpm`), counted before the decimation: a sample holds its bpm until the next sample of its stretch, the last sample of a stretch holds it for 1 s, a silence of the sensor is in no bpm. The points and their bounds do not change. It is what the [heart-rate zones](hr-zones.md) are made of. |
 
 ## Reliability level
 

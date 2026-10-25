@@ -1,10 +1,13 @@
 package dev.averyn.backend.activities
 
+import dev.averyn.analysis.ActivityAnalysis
+import dev.averyn.analysis.heartRateZones
 import dev.averyn.backend.auth.AccountDeletedException
 import dev.averyn.backend.auth.OIDC_AUTH
 import dev.averyn.backend.auth.userIdFor
 import dev.averyn.backend.consent.ConsentScope
 import dev.averyn.backend.consent.ConsentStore
+import dev.averyn.backend.profile.ProfileStore
 import dev.averyn.backend.storage.RawObjectStore
 import io.ktor.http.ContentDisposition
 import io.ktor.http.ContentType
@@ -85,6 +88,7 @@ fun Application.activities(
     analysisService: AnalysisService = AnalysisService(db, raw),
     userData: UserData = UserData(db, raw, analysisService = analysisService),
     recordStore: PersonalRecordStore = PersonalRecordStore(db),
+    profileStore: ProfileStore = ProfileStore(db),
 ) {
     val ingest = ActivityIngest(db, raw, quotaBytes)
     install(RateLimit) {
@@ -316,7 +320,11 @@ fun Application.activities(
                             ?: return@get call.respond(HttpStatusCode.BadRequest, errorBody("malformed activity id"))
                     val owner = call.owner(db) ?: return@get
                     when (val outcome = withContext(Dispatchers.IO) { analysisService.analysisFor(owner, id) }) {
-                        is AnalysisOutcome.Ready -> call.respond(outcome.analysis)
+                        is AnalysisOutcome.Ready -> {
+                            // The zones depend on a setting of the user: they are computed here, never stored.
+                            val maxHr = withContext(Dispatchers.IO) { profileStore.get(owner).maxHrBpm }
+                            call.respond(outcome.analysis.withZones(maxHr))
+                        }
                         AnalysisOutcome.NotFound -> call.respond(HttpStatusCode.NotFound, errorBody("not found"))
                         AnalysisOutcome.Busy -> {
                             call.response.header(HttpHeaders.RetryAfter, "5")
@@ -434,4 +442,14 @@ internal suspend fun ApplicationCall.receiveToFile(
         }
     }
     return digest.digest().joinToString("") { "%02x".format(it) }
+}
+
+/** The analysis with the heart-rate zones of the user's maximum (`hr-zones-v1`), when there is both. */
+private fun ActivityAnalysis.withZones(maxHrBpm: Int?): ActivityAnalysis {
+    val histogram = series.heartRate.timeAtBpm
+    return if (maxHrBpm == null || histogram.timeMs.isEmpty()) {
+        this
+    } else {
+        copy(heartRateZones = heartRateZones(histogram, maxHrBpm))
+    }
 }

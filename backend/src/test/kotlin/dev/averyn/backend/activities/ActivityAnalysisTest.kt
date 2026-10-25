@@ -6,8 +6,10 @@ import dev.averyn.backend.TestStack
 import dev.averyn.backend.auth.TestIssuer
 import dev.averyn.backend.auth.auth
 import dev.averyn.backend.content
+import dev.averyn.backend.profile.profile
 import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Sport
+import dev.averyn.sensors.HeartRateSample
 import dev.averyn.tracking.ActivityRecorder
 import dev.averyn.tracking.ActivityStore
 import io.ktor.client.HttpClient
@@ -18,7 +20,9 @@ import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import kotlinx.io.files.Path
 import kotlinx.serialization.json.Json
@@ -70,6 +74,7 @@ class ActivityAnalysisTest {
     private fun record(
         steps: Int = 12,
         withAltitude: Boolean = true,
+        withHeartRate: Boolean = false,
     ): Pair<UUID, ByteArray> {
         val id = UUID.randomUUID()
         val recorder = ActivityRecorder(ActivityStore(Path(dir.toString())))
@@ -88,6 +93,12 @@ class ActivityAnalysisTest {
                     altitudeM = if (withAltitude) 100.0 + i else null,
                 ),
             )
+            // Three beats of the sensor, a second apart, at 150 bpm: a stretch of its own every ten seconds.
+            if (withHeartRate) {
+                for (k in 0..2) {
+                    recorder.onHeartRate(HeartRateSample(1_700_000_000_000 + t + k * 1_000L, t + k * 1_000L, 150))
+                }
+            }
         }
         val end = steps * 10_000L
         recorder.stop(end, 1_700_000_000_000 + end)
@@ -100,6 +111,7 @@ class ActivityAnalysisTest {
                 content()
                 auth(idp.config, idp.jwks)
                 activities(db, raw)
+                profile(db)
             }
             client.block()
         }
@@ -122,6 +134,93 @@ class ActivityAnalysisTest {
         db.connection.use { conn ->
             conn.createStatement().executeQuery(sql).use { rs -> if (rs.next()) rs.getLong(1) else 0 }
         }
+
+    private suspend fun HttpClient.saveProfile(maxHrBpm: Int?) {
+        val body = if (maxHrBpm == null) """{"units":"metric"}""" else """{"units":"metric","maxHrBpm":$maxHrBpm}"""
+        put("/v1/profile") {
+            bearerAuth(alice)
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }
+    }
+
+    /** Uploads a recording and returns the id the server gave the activity. */
+    private suspend fun HttpClient.store(
+        clientId: UUID,
+        bytes: ByteArray,
+    ): String {
+        val response = upload(clientId, bytes)
+        assertEquals(HttpStatusCode.Created, response.status)
+        return json.decodeFromString(ActivitySummary.serializer(), response.bodyAsText()).id
+    }
+
+    private suspend fun HttpClient.analysisOf(id: String): ActivityAnalysis =
+        json.decodeFromString(
+            ActivityAnalysis.serializer(),
+            get("/v1/activities/$id/analysis") { bearerAuth(alice) }.bodyAsText(),
+        )
+
+    @Test
+    fun theZonesFollowTheMaximumHeartRateOfTheProfileWithoutRecomputingTheAnalysis() {
+        app {
+            val (clientId, bytes) = record(withHeartRate = true)
+            val id = store(clientId, bytes)
+
+            // No maximum yet: the time at each bpm is there, the zones are not.
+            val without = analysisOf(id)
+            assertNull(without.heartRateZones)
+            assertEquals(150, without.series.heartRate.timeAtBpm.fromBpm)
+            assertEquals(
+                36_000L,
+                without.series.heartRate.timeAtBpm.timeMs
+                    .sum(),
+            )
+            val computedAt = scalar("SELECT computed_at FROM activity_analyses")
+
+            saveProfile(180) // 150 / 180 = 83 %: zone 4
+            val zones = assertNotNull(analysisOf(id).heartRateZones)
+            assertEquals("hr-zones-v1", zones.algorithmVersion)
+            assertEquals(180, zones.maxHrBpm)
+            assertEquals(listOf(0L, 0L, 0L, 36_000L, 0L), zones.zones.map { it.timeMs })
+
+            saveProfile(200) // 150 / 200 = 75 %: zone 3, and the stored analysis is the same row
+            assertEquals(
+                listOf(0L, 0L, 36_000L, 0L, 0L),
+                assertNotNull(analysisOf(id).heartRateZones).zones.map { it.timeMs },
+            )
+            assertEquals(computedAt, scalar("SELECT computed_at FROM activity_analyses"))
+
+            saveProfile(null) // the maximum is withdrawn: the zones go away
+            assertNull(analysisOf(id).heartRateZones)
+        }
+    }
+
+    @Test
+    fun anActivityWithoutAHeartRateHasNoZonesWhateverTheMaximum() {
+        app {
+            val (clientId, bytes) = record()
+            val id = store(clientId, bytes)
+            saveProfile(180)
+
+            assertNull(analysisOf(id).heartRateZones)
+        }
+    }
+
+    @Test
+    fun theZonesOfOneUserAreNotComputedFromAnotherUsersMaximum() {
+        app {
+            val (clientId, bytes) = record(withHeartRate = true)
+            val id = store(clientId, bytes)
+            // Bob sets a maximum; Alice never did.
+            put("/v1/profile") {
+                bearerAuth(bob)
+                contentType(ContentType.Application.Json)
+                setBody("""{"units":"metric","maxHrBpm":180}""")
+            }
+
+            assertNull(analysisOf(id).heartRateZones)
+        }
+    }
 
     @Test
     fun theAnalysisIsComputedWhenTheActivityIsStored() {
