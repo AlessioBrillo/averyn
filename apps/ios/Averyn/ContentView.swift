@@ -190,9 +190,10 @@ struct ContentView: View {
     private func zonesView(_ zones: HeartRateZones?) -> some View {
         if let zones {
             Text("Time in each zone (maximum \(zones.maxHrBpm) bpm)")
-            ForEach(zones.zones, id: \.zone) { zone in
+            // The zones are always the five of `hr-zones-v1`, in order: the position is the number of the zone.
+            ForEach(Array(zones.zones.enumerated()), id: \.offset) { index, zone in
                 let range = zone.toBpm.map { "\(zone.fromBpm)–\($0.intValue)" } ?? "\(zone.fromBpm)+"
-                Text("Z\(zone.zone) \(range) bpm — \(formatDuration(zone.timeMs))")
+                Text("Z\(index + 1) \(range) bpm — \(formatDuration(zone.timeMs))")
             }
         } else {
             Text("Set your maximum heart rate in the account to see the time in each zone.")
