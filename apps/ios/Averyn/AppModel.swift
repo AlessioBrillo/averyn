@@ -52,7 +52,7 @@ final class AppModel {
 
         // The copy of the server holds the coordinates of the activities of the account: it is not in the
         // backup of the device (TDD-0011).
-        let cacheDir = FileManager.default
+        var cacheDir = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("server-cache", isDirectory: true)
         try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
@@ -77,7 +77,7 @@ final class AppModel {
         // listeners (e.g. RecorderViewModel) are called after the internal logic.
         recorder.listener = { [weak self] snapshot in
             if snapshot.state.isTerminal {
-                Task { await self?.heartRate.stop() }
+                Task { try? await self?.heartRate.stop() }
                 Task { @MainActor in self?.stopConsentRefresh() }
             }
             self?.recorderListenersLock.lock()
@@ -141,7 +141,8 @@ final class AppModel {
             }
             do {
                 let result = try await history().client.consents(accessToken: token)
-                let grants = result.value ?? []
+                // A failure carries no value: no grants, so no RR (fail-closed).
+                let grants = (result.value as? [ConsentGrant]) ?? []
                 setRrConsent(grants.contains { $0.scope == "rr_recording" })
             } catch {
                 setRrConsent(false)
@@ -175,7 +176,9 @@ final class AppModel {
     func feedRrInterval(_ rr: RrInterval) {
         guard hasRrConsent, let activityId = recorder.currentActivityId else { return }
         if !store.hasRr(activityId: activityId) {
-            recorder.currentMetadata()?.let { store.createRrMetadata(metadata: $0) }
+            if let metadata = recorder.currentMetadata() {
+                store.createRrMetadata(metadata: metadata)
+            }
         }
         store.appendRrInterval(activityId: activityId, rr: rr)
     }
