@@ -104,3 +104,4 @@ V12 adds a table; nothing existing changes. The analysis schema bump (5.2) makes
 - **Zones on the web:** a table under the heart-rate chart (time and share per zone, the maximum used), or a hint to set the maximum in the account when there is none.
 - **Shared client for the phones:** profile read and save, `UnitFormat`, the unit system in the copy. The Android and iOS screens follow.
 - **Android:** `UnitFormat` in every screen of the history, a Profile section in the account (units, maximum heart rate, the same rule as the web) and the zones under the heart-rate curve; matrix rows S32 and S33. iOS follows.
+- **iOS:** the same as Android in SwiftUI (units in every screen of the history, a Profile section in the account, the zones under the heart-rate curve); the same matrix rows S32 and S33. The map on the phone follows.

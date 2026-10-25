@@ -41,6 +41,13 @@ final class RecorderViewModel: ObservableObject {
     @Published var activityDetail: DetailSnapshot?
     /// The activities stored on this device (TDD-0011 "dati sul dispositivo").
     @Published var deviceActivities: [DeviceActivityItem] = []
+    /// The unit system the numbers are written in (TDD-0012): the one the profile last said, remembered on the
+    /// device so it holds offline.
+    @Published var units: UnitSystem = .metric
+    /// The profile of the account, once the server answered; nil until then (and without a session).
+    @Published var profile: UserProfile?
+    /// What the profile form tells the user after a save.
+    @Published var profileMessage: String?
 
     init() {
         let model = AppModel.shared
@@ -79,10 +86,43 @@ final class RecorderViewModel: ObservableObject {
         // What is on the device comes first: the list is there at once, the server fills it in.
         historySnapshot = try? await repository.loadCached()
         deviceActivities = (try? await repository.deviceData()) ?? []
+        if let cached = try? await repository.cachedUnits() { units = cached }
         if let refreshed = try? await repository.refresh(accessToken: await accessToken()) {
             historySnapshot = refreshed
         }
         deviceActivities = (try? await repository.deviceData()) ?? []
+    }
+
+    /// Reads the profile of the account (TDD-0012) and the unit system with it.
+    func loadProfile() async {
+        let repository = AppModel.shared.history()
+        guard let snapshot = try? await repository.refreshProfile(accessToken: await accessToken()) else { return }
+        units = snapshot.units
+        profile = snapshot.profile
+        profileMessage = snapshot.profile == nil ? "Could not load your profile." : nil
+    }
+
+    /// Saves the profile. The server checks it again: a profile it refuses changes nothing.
+    func saveProfile(units chosen: UnitSystem, maxHr: MaxHrInput) async {
+        guard maxHr.valid, let token = await accessToken() else {
+            profileMessage = "Sign in again to save your profile."
+            return
+        }
+        let repository = AppModel.shared.history()
+        let wanted = UserProfile(units: chosen, maxHrBpm: maxHr.value)
+        guard let saved = try? await repository.saveProfile(accessToken: token, profile: wanted) else {
+            profileMessage = "Could not save your profile."
+            return
+        }
+        if let stored = saved.profile {
+            units = saved.units
+            profile = stored
+            profileMessage = "Saved"
+        } else {
+            profileMessage = saved.failure?.status?.intValue == 422
+                ? "That is not a valid profile."
+                : "Could not save your profile."
+        }
     }
 
     /// Reads the next page of the list.

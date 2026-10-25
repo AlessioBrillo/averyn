@@ -4,6 +4,9 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var viewModel = RecorderViewModel()
 
+    /// How the numbers of the history are written (TDD-0012).
+    private var format: UnitFormat { UnitFormat(units: viewModel.units) }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
@@ -25,7 +28,7 @@ struct ContentView: View {
                     }
                 }
                 historySection
-                AccountSection(auth: AppModel.shared.auth, sync: AppModel.shared.sync)
+                AccountSection(auth: AppModel.shared.auth, sync: AppModel.shared.sync, viewModel: viewModel)
             }
             .padding()
         }
@@ -91,7 +94,7 @@ struct ContentView: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(historyTitle(item))
-                        Text(historyNumbers(item))
+                        Text(historyNumbers(item, format))
                         historyBadgesView(item)
                     }
                 }
@@ -121,11 +124,11 @@ struct ContentView: View {
                 Text("The server does not have this activity any more. The file on this device is untouched.")
             } else {
                 if let summary = detail.summary {
-                    Text("\(formatDistance(summary.distanceM)) — \(formatDuration(summary.elapsedMs))")
+                    Text("\(format.distance(meters: summary.distanceM)) — \(formatDuration(summary.elapsedMs))")
                     Text("Moving \(formatDuration(summary.movingMs)) · Paused \(formatDuration(summary.pausedMs))")
                     // A nullable number crosses the Kotlin boundary as an NSNumber.
                     if let pace = summary.paceSecPerKm?.doubleValue {
-                        Text("Pace \(formatPace(pace))")
+                        Text("Pace \(format.pace(secondsPerKm: pace))")
                     }
                     if summary.avgHrBpm > 0 {
                         Text("HR \(summary.avgHrBpm)/\(summary.maxHrBpm) bpm (\(summary.hrSource))")
@@ -160,7 +163,7 @@ struct ContentView: View {
                 Text("Splits")
                 ForEach(analysis.splits, id: \.index) { split in
                     Text(
-                        "#\(split.index) \(formatDistance(split.endDistanceM - split.startDistanceM)) — "
+                        "#\(split.index) \(format.distance(meters: split.endDistanceM - split.startDistanceM)) — "
                             + "\(formatDuration(split.movingMs))"
                             + (split.avgHrBpm.map { " — \($0.intValue) bpm" } ?? "")
                             + (split.partial ? " (partial)" : "")
@@ -168,10 +171,32 @@ struct ContentView: View {
                 }
             }
             if let elevation = analysis.elevation {
-                Text("Elevation: +\(Int(elevation.gainM)) m / -\(Int(elevation.lossM)) m")
+                Text(
+                    "Elevation: \(format.elevation(meters: elevation.gainM, signed: true)) / "
+                        + "-\(format.elevation(meters: elevation.lossM, signed: false))"
+                )
             }
             elevationChart(analysis.series)
             heartRateChart(analysis.series)
+            if analysis.series.heartRate.bpm.count > 1 {
+                zonesView(analysis.heartRateZones)
+            }
+        }
+    }
+
+    /// The time in each heart-rate zone (`hr-zones-v1`, TDD-0012), or the reason there is none: the zones are cut
+    /// from the maximum heart rate of the profile.
+    @ViewBuilder
+    private func zonesView(_ zones: HeartRateZones?) -> some View {
+        if let zones {
+            Text("Time in each zone (maximum \(zones.maxHrBpm) bpm)")
+            // The zones are always the five of `hr-zones-v1`, in order: the position is the number of the zone.
+            ForEach(Array(zones.zones.enumerated()), id: \.offset) { index, zone in
+                let range = zone.toBpm.map { "\(zone.fromBpm)–\($0.intValue)" } ?? "\(zone.fromBpm)+"
+                Text("Z\(index + 1) \(range) bpm — \(formatDuration(zone.timeMs))")
+            }
+        } else {
+            Text("Set your maximum heart rate in the account to see the time in each zone.")
         }
     }
 
@@ -181,7 +206,10 @@ struct ContentView: View {
         // A nullable number crosses the Kotlin boundary as an NSNumber.
         let elevations = series.elevationM.compactMap { ($0 as? NSNumber)?.doubleValue }
         if elevations.count > 1 {
-            Text("Elevation profile (\(Int(elevations.min() ?? 0))–\(Int(elevations.max() ?? 0)) m)")
+            Text(
+                "Elevation profile (\(format.elevation(meters: elevations.min() ?? 0, signed: false))"
+                    + "–\(format.elevation(meters: elevations.max() ?? 0, signed: false)))"
+            )
             seriesChart(elevations.map { Float($0) }, segments: series.segment.map { $0.int32Value })
         }
     }
@@ -228,7 +256,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("\(item.sport) \(formatDate(item.startedAtMs)) — \(syncLabel(item.syncState))")
             if let summary = item.summary {
-                Text("\(formatDistance(summary.distanceM)) — \(formatDuration(summary.elapsedMs))")
+                Text("\(format.distance(meters: summary.distanceM)) — \(formatDuration(summary.elapsedMs))")
             }
             if item.deletedOnServer {
                 Text("The server does not have it any more.")
@@ -283,6 +311,7 @@ struct ContentView: View {
 private struct AccountSection: View {
     @ObservedObject var auth: AuthManager
     @ObservedObject var sync: SyncService
+    @ObservedObject var viewModel: RecorderViewModel
     @Environment(\.scenePhase) private var scenePhase
     @State private var message: String?
     @State private var compatibility: ClientCompatibility = .ok
@@ -328,6 +357,7 @@ private struct AccountSection: View {
             }
             if let message { Text(message) }
             Text(sync.statusText)
+            ProfileSection(viewModel: viewModel, isSignedIn: auth.isSignedIn)
         }
         // Only while the screen is in front: nothing here is worth CPU or battery while a recording runs with the
         // screen locked. The task restarts by itself when the scene becomes active again.
@@ -367,15 +397,63 @@ private struct AccountSection: View {
     }
 }
 
+/// The settings of the account (TDD-0012): the unit system and the maximum heart rate. They live on the server, so
+/// the section needs a session; the unit system is also remembered on the device and holds offline.
+private struct ProfileSection: View {
+    @ObservedObject var viewModel: RecorderViewModel
+    let isSignedIn: Bool
+    @State private var units: UnitSystem = .metric
+    @State private var maxHr = ""
+    @State private var loaded = false
+
+    var body: some View {
+        let input = UserProfileKt.parseMaxHr(text: maxHr)
+        if isSignedIn {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Profile")
+                Picker("Units", selection: $units) {
+                    Text("Metric (km, m)").tag(UnitSystem.metric)
+                    Text("Imperial (mi, ft)").tag(UnitSystem.imperial)
+                }
+                .pickerStyle(.segmented)
+                .disabled(!loaded)
+                TextField("Maximum heart rate (bpm)", text: $maxHr)
+                    .keyboardType(.numberPad)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(!loaded)
+                if !input.valid {
+                    Text(
+                        "A whole number from \(UserProfile.companion.MIN_MAX_HR_BPM) to "
+                            + "\(UserProfile.companion.MAX_MAX_HR_BPM), or empty."
+                    )
+                }
+                Button("Save profile") {
+                    Task { await viewModel.saveProfile(units: units, maxHr: input) }
+                }
+                .disabled(!loaded || !input.valid)
+                if let message = viewModel.profileMessage { Text(message) }
+            }
+            .task(id: isSignedIn) {
+                await viewModel.loadProfile()
+                if let profile = viewModel.profile {
+                    units = profile.units
+                    maxHr = profile.maxHrBpm.map { String($0.intValue) } ?? ""
+                    loaded = true
+                }
+            }
+        }
+    }
+}
+
 /// One row of the list: the numbers of the activity and where they come from.
 private func historyTitle(_ item: HistoryItem) -> String {
     "\(item.sport) \(formatDate(item.startedAtMs))"
 }
-private func historyNumbers(_ item: HistoryItem) -> String {
-    var parts = ["\(formatDistance(item.distanceM))", formatDuration(item.elapsedMs)]
+private func historyNumbers(_ item: HistoryItem, _ format: UnitFormat) -> String {
+    var parts = [format.distance(meters: item.distanceM), formatDuration(item.elapsedMs)]
     // A nullable number crosses the Kotlin boundary as an NSNumber.
     if let pace = item.paceSecPerKm?.doubleValue {
-        parts.append(formatPace(pace))
+        parts.append(format.pace(secondsPerKm: pace))
     }
     if item.avgHrBpm > 0 {
         parts.append("HR \(item.avgHrBpm)/\(item.maxHrBpm) bpm")
@@ -439,10 +517,6 @@ private func formatDate(_ epochMs: Int64) -> String {
     return formatter.string(from: Date(timeIntervalSince1970: Double(epochMs) / 1000))
 }
 
-private func formatDistance(_ meters: Double) -> String {
-    meters >= 1000 ? String(format: "%.2f km", meters / 1000) : String(format: "%.0f m", meters)
-}
-
 private func formatDuration(_ ms: Int64) -> String {
     let total = Int(ms / 1000)
     let hours = total / 3600
@@ -451,9 +525,4 @@ private func formatDuration(_ ms: Int64) -> String {
     return hours > 0
         ? String(format: "%d:%02d:%02d", hours, minutes, seconds)
         : String(format: "%d:%02d", minutes, seconds)
-}
-
-private func formatPace(_ secondsPerKm: Double) -> String {
-    let total = Int(secondsPerKm)
-    return String(format: "%d:%02d /km", total / 60, total % 60)
 }
