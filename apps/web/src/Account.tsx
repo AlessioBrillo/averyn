@@ -1,18 +1,39 @@
 import { useEffect, useState } from 'react'
-import { ApiError, deleteAccount, downloadExport, getConsents, grantConsent, revokeConsent } from './api'
+import type { UserProfile } from './api'
+import {
+  ApiError,
+  deleteAccount,
+  downloadExport,
+  getConsents,
+  getProfile,
+  grantConsent,
+  putProfile,
+  revokeConsent,
+} from './api'
 import { signOut } from './auth'
+import { MAX_MAX_HR_BPM, MIN_MAX_HR_BPM, parseMaxHr } from './profile'
 
 /** The scope the user can grant here: the one the devices ask for (ADR-0021). */
 const GRANTABLE_SCOPE = 'rr_recording'
 
 /** The user's data: download everything, or delete it (TDD-0004). Consent for health-adjacent sensor data is
  *  server-authoritative and revocable here (ADR-0021). */
-export function Account({ onUnauthorized }: { onUnauthorized: () => void }) {
+export function Account({
+  onUnauthorized,
+  onProfileSaved,
+}: {
+  onUnauthorized: () => void
+  onProfileSaved: (profile: UserProfile) => void
+}) {
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState<string | null>(null)
   const [confirmation, setConfirmation] = useState('')
   const [consents, setConsents] = useState<{ scope: string; grantedAt: string; revokedAt: string | null }[]>([])
   const [consentsLoaded, setConsentsLoaded] = useState(false)
+  const [units, setUnits] = useState<UserProfile['units']>('metric')
+  const [maxHr, setMaxHr] = useState('')
+  const [profileLoaded, setProfileLoaded] = useState(false)
+  const [profileSaved, setProfileSaved] = useState(false)
 
   function run(action: () => Promise<void>, message: string) {
     setBusy(true)
@@ -24,6 +45,19 @@ export function Account({ onUnauthorized }: { onUnauthorized: () => void }) {
       })
       .finally(() => setBusy(false))
   }
+
+  useEffect(() => {
+    getProfile()
+      .then((profile) => {
+        setUnits(profile.units)
+        setMaxHr(profile.maxHrBpm === null ? '' : String(profile.maxHrBpm))
+        setProfileLoaded(true)
+      })
+      .catch((e: unknown) => {
+        if (e instanceof ApiError && e.status === 401) onUnauthorized()
+        else setFailed('Could not load your profile. Try again.')
+      })
+  }, [onUnauthorized])
 
   useEffect(() => {
     getConsents()
@@ -58,6 +92,17 @@ export function Account({ onUnauthorized }: { onUnauthorized: () => void }) {
       })
     }, 'Could not grant that consent. Try again.')
 
+  const parsedMaxHr = parseMaxHr(maxHr)
+
+  const saveProfile = () => {
+    if (!parsedMaxHr.ok) return
+    run(async () => {
+      const saved = await putProfile({ units, maxHrBpm: parsedMaxHr.value })
+      setProfileSaved(true)
+      onProfileSaved(saved)
+    }, 'Could not save your profile. Try again.')
+  }
+
   const download = () =>
     run(async () => {
       const link = document.createElement('a')
@@ -77,6 +122,50 @@ export function Account({ onUnauthorized }: { onUnauthorized: () => void }) {
   return (
     <>
       <h2>Your data</h2>
+      <section>
+        <h3>Profile</h3>
+        <p>
+          The unit system is used for every distance, pace and elevation. Your maximum heart rate is kept with your
+          account, deleted with it and included in your download.
+        </p>
+        <label>
+          Units{' '}
+          <select
+            value={units}
+            onChange={(e) => {
+              setUnits(e.target.value as UserProfile['units'])
+              setProfileSaved(false)
+            }}
+            disabled={busy || !profileLoaded}
+          >
+            <option value="metric">Metric (km, m)</option>
+            <option value="imperial">Imperial (mi, ft)</option>
+          </select>
+        </label>{' '}
+        <label>
+          Maximum heart rate (bpm){' '}
+          <input
+            inputMode="numeric"
+            value={maxHr}
+            placeholder={`${MIN_MAX_HR_BPM}–${MAX_MAX_HR_BPM}`}
+            onChange={(e) => {
+              setMaxHr(e.target.value)
+              setProfileSaved(false)
+            }}
+            disabled={busy || !profileLoaded}
+            aria-invalid={!parsedMaxHr.ok}
+          />
+        </label>{' '}
+        <button onClick={saveProfile} disabled={busy || !profileLoaded || !parsedMaxHr.ok}>
+          Save profile
+        </button>
+        {!parsedMaxHr.ok && (
+          <p role="alert">
+            The maximum heart rate must be a whole number from {MIN_MAX_HR_BPM} to {MAX_MAX_HR_BPM}, or empty.
+          </p>
+        )}
+        {profileSaved && <p role="status">Saved.</p>}
+      </section>
       <section>
         <h3>Download</h3>
         <p>Every recording as it was captured, a GPX file for each, and a summary list, in one ZIP.</p>

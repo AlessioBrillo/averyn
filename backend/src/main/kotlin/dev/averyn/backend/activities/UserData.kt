@@ -2,8 +2,10 @@ package dev.averyn.backend.activities
 
 import dev.averyn.analysis.ActivityAnalysis
 import dev.averyn.api.ActivitySummary
+import dev.averyn.api.UserProfile
 import dev.averyn.backend.consent.ConsentGrant
 import dev.averyn.backend.consent.ConsentStore
+import dev.averyn.backend.profile.ProfileStore
 import dev.averyn.backend.storage.RawObjectStore
 import dev.averyn.tracking.ActivityStore
 import dev.averyn.tracking.exportGpxToFile
@@ -42,6 +44,7 @@ class UserData(
     private val consentStore: ConsentStore = ConsentStore(db),
     private val analysisService: AnalysisService = AnalysisService(db, raw),
     private val recordStore: PersonalRecordStore = PersonalRecordStore(db),
+    private val profileStore: ProfileStore = ProfileStore(db),
 ) {
     /**
      * Removes one activity and remembers its id so that a device retry gets `410`. Returns false when the caller
@@ -107,7 +110,7 @@ class UserData(
         }
         raw.deletePrefix("raw/$ownerId/") // also removes objects orphaned by failed uploads
         inTransaction { conn ->
-            for (table in listOf("activities", "deleted_activities", "deleted_rr", "consents")) {
+            for (table in listOf("activities", "deleted_activities", "deleted_rr", "consents", "user_profiles")) {
                 conn.prepareStatement("DELETE FROM $table WHERE owner_id = ?").use { stmt ->
                     stmt.setObject(1, ownerId)
                     stmt.executeUpdate()
@@ -261,6 +264,10 @@ class UserData(
 
                     exported += ExportedActivity(summary, skipped)
                 }
+                // The settings of the account (TDD-0012): units and maximum heart rate.
+                zip.putNextEntry(ZipEntry("profile.json"))
+                zip.write(Json.encodeToString(UserProfile.serializer(), profileStore.get(ownerId)).toByteArray())
+                zip.closeEntry()
                 zip.putNextEntry(ZipEntry("consents.json"))
                 zip.write(
                     Json.encodeToString(consentStore.list(ownerId).map { it.toExported() }).toByteArray(),
