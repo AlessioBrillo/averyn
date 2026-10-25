@@ -1,5 +1,7 @@
 package dev.averyn.client
 
+import dev.averyn.api.UnitSystem
+import dev.averyn.api.UserProfile
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -7,7 +9,9 @@ import io.ktor.client.engine.mock.respond
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.OutgoingContent
 import io.ktor.http.headersOf
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -187,5 +191,68 @@ class AverynClientTest {
                     ?.coordinates
                     ?.isNotEmpty() == true,
             )
+        }
+
+    @Test
+    fun `the profile is read with the token`() =
+        runBlocking {
+            var seen: HttpRequestData? = null
+            val (client, _) =
+                client { request ->
+                    seen = request
+                    respond(
+                        """{"units":"imperial","maxHrBpm":187}""",
+                        HttpStatusCode.OK,
+                        headersOf(HttpHeaders.ContentType, "application/json"),
+                    )
+                }
+
+            val result = client.profile("token")
+
+            assertEquals(UserProfile(UnitSystem.IMPERIAL, 187), result.value)
+            assertEquals("/v1/profile", seen?.url?.encodedPath)
+            assertEquals(HttpMethod.Get, seen?.method)
+        }
+
+    @Test
+    fun `the profile is saved whole with a PUT`() =
+        runBlocking {
+            var seen: HttpRequestData? = null
+            var sent = ""
+            val (client, _) =
+                client { request ->
+                    seen = request
+                    sent = (request.body as OutgoingContent.ByteArrayContent).bytes().decodeToString()
+                    respond(
+                        sent,
+                        HttpStatusCode.OK,
+                        headersOf(HttpHeaders.ContentType, "application/json"),
+                    )
+                }
+
+            val result = client.saveProfile("token", UserProfile(UnitSystem.METRIC, null))
+
+            assertEquals(HttpMethod.Put, seen?.method)
+            assertEquals("Bearer token", seen?.headers?.get("Authorization"))
+            // Defaults are sent too: the server replaces the document, an absent field would not be "none".
+            assertEquals("""{"units":"metric","maxHrBpm":null}""", sent)
+            assertEquals(UserProfile(UnitSystem.METRIC, null), result.value)
+        }
+
+    @Test
+    fun `a profile the server refuses is reported with its status and not repeated`() =
+        runBlocking {
+            var calls = 0
+            val (client, _) =
+                client {
+                    calls++
+                    respond("""{"error":"maxHrBpm must be between 100 and 230"}""", HttpStatusCode.UnprocessableEntity)
+                }
+
+            val result = client.saveProfile("token", UserProfile(UnitSystem.METRIC, 99))
+
+            assertEquals(ApiFailureKind.UNEXPECTED, result.failure?.kind)
+            assertEquals(422, result.failure?.status)
+            assertEquals(1, calls)
         }
 }

@@ -54,6 +54,8 @@ CREATE TABLE user_profiles (
 
 The DTO is `shared/api` `UserProfile(units, maxHrBpm)`, validated by `UserProfile.problem()` and not by an `init` block: a rule that lives in `init` is reported by the serialization library as a decoding error, which is a different answer from the `422` this contract promises ([issue #80](https://github.com/AlessioBrillo/averyn/issues/80)).
 
+On the phones the shared client reads and saves the profile (`shared/client`), and one implementation formats the numbers (`UnitFormat`: distance, pace, speed, elevation in km or mi, m or ft). The device remembers only the **unit system** (`units.json` in the copy of the server, [ADR-0025](../adr/0025-device-side-cache-of-server-activities.md)), so numbers are written the same way offline. The maximum heart rate is never kept on the device: the zones arrive inside the analysis that the copy already holds, with the maximum they were cut from, and editing the profile needs the server anyway. The unit system is neither a coordinate nor health data, so the copy keeps the properties ADR-0025 asks for (excluded from the backup, thrown away with the session and with the server).
+
 The routes live in a new `profile` package of the backend, next to `consent`: authenticated, owner-only, `403` for a deleted account. `PUT` is an upsert; there is no `PATCH`, because the whole profile is two fields.
 
 ### 5.2 Zones (Z1, Z2)
@@ -100,3 +102,4 @@ V12 adds a table; nothing existing changes. The analysis schema bump (5.2) makes
 - **Profile on the web (P4, web part):** the Account page edits the units and the maximum heart rate; every distance, pace, speed and elevation of the web, and the axes of the elevation chart, follow the units. The records keep their names in kilometres ("the 5 km record") and the splits stay per kilometre (`splits-v1`). The phones follow.
 - **Zones (Z1, Z2):** the histogram (`series-v2`), `hr-zones-v1` and the zones in the analysis response. The clients show them next.
 - **Zones on the web:** a table under the heart-rate chart (time and share per zone, the maximum used), or a hint to set the maximum in the account when there is none.
+- **Shared client for the phones:** profile read and save, `UnitFormat`, the unit system in the copy. The Android and iOS screens follow.

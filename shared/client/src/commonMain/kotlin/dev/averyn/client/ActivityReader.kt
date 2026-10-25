@@ -6,6 +6,7 @@ import dev.averyn.api.ActivitySummary
 import dev.averyn.api.ClientConfig
 import dev.averyn.api.ConsentGrant
 import dev.averyn.api.Track
+import dev.averyn.api.UserProfile
 
 /**
  * What the repository needs from the server (TDD-0011).
@@ -45,4 +46,13 @@ interface ActivityReader {
     /** The caller's active consent grants (ADR-0021). Fail-closed: an empty list when the server
      *  cannot be reached or answers unsuccessfully. */
     suspend fun consents(accessToken: String): ApiResult<List<ConsentGrant>>
+
+    /** The profile of the account: the unit system and the maximum heart rate (TDD-0012). */
+    suspend fun profile(accessToken: String): ApiResult<UserProfile>
+
+    /** Replaces the profile; the answer is the profile the server stored. A `422` means it was not valid. */
+    suspend fun saveProfile(
+        accessToken: String,
+        profile: UserProfile,
+    ): ApiResult<UserProfile>
 }
