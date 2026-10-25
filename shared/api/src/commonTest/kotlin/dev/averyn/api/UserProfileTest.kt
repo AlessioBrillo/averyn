@@ -33,4 +33,20 @@ class UserProfileTest {
             assertNotNull(UserProfile(maxHrBpm = bad).problem(), "$bad")
         }
     }
+
+    @Test
+    fun `an empty field means no maximum and a whole number in range is that number`() {
+        assertEquals(MaxHrInput(valid = true, value = null), parseMaxHr(""))
+        assertEquals(MaxHrInput(valid = true, value = null), parseMaxHr("  "))
+        assertEquals(MaxHrInput(valid = true, value = 187), parseMaxHr("187"))
+        assertEquals(MaxHrInput(valid = true, value = 100), parseMaxHr(" 100 "))
+        assertEquals(MaxHrInput(valid = true, value = 230), parseMaxHr("230"))
+    }
+
+    @Test
+    fun `anything else in the field is refused`() {
+        for (bad in listOf("99", "231", "-5", "18.5", "1e2", "fast", "0x90", "12345", "99999999999")) {
+            assertEquals(MaxHrInput(valid = false, value = null), parseMaxHr(bad), bad)
+        }
+    }
 }

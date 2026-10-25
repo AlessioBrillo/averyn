@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import dev.averyn.analysis.ActivityAnalysis
+import dev.averyn.analysis.HeartRateZones
 import dev.averyn.client.AnalysisState
 import dev.averyn.client.ApiFailureKind
 import dev.averyn.client.DetailSnapshot
@@ -35,6 +36,7 @@ import dev.averyn.client.HistoryItem
 import dev.averyn.client.HistorySnapshot
 import dev.averyn.client.HistorySource
 import dev.averyn.client.HistorySyncState
+import dev.averyn.client.UnitFormat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -67,14 +69,18 @@ internal fun HistorySection(
     var busy by remember { mutableStateOf(false) }
     var pending by remember { mutableStateOf<String?>(null) }
     var toDelete by remember { mutableStateOf<DeviceActivityItem?>(null) }
+    val format = remember(app.units) { UnitFormat(app.units) }
 
     /** The token of the session, or null when there is none (the list then shows the cache). */
     suspend fun token(): String? = runCatching { app.auth.freshAccessToken() }.getOrNull()
 
     suspend fun reload() {
         val repository = app.history()
-        snapshot = repository.refresh(token())
+        val accessToken = token()
+        snapshot = repository.refresh(accessToken)
         deviceData = repository.deviceData()
+        // The unit system of the profile, remembered on the device for the next time without a connection.
+        app.units = repository.refreshProfile(accessToken).units
     }
 
     LaunchedEffect(refreshKey) {
@@ -83,6 +89,7 @@ internal fun HistorySection(
         // What is on the device comes first: the list is there at once, the server fills it in.
         snapshot = repository.loadCached()
         deviceData = repository.deviceData()
+        app.units = repository.cachedUnits()
         runCatching { reload() }
         busy = false
     }
@@ -179,6 +186,7 @@ internal fun HistorySection(
         rows.forEach { item ->
             HistoryRowView(
                 item = item,
+                format = format,
                 selected = item.serverId != null && item.serverId == selectedId,
                 onOpen = { openDetail(item) },
             )
@@ -192,12 +200,13 @@ internal fun HistorySection(
                 }
             }) { Text("Load more") }
         }
-        detail?.let { ActivityDetailView(it) }
+        detail?.let { ActivityDetailView(it, format) }
         if (deviceData.isNotEmpty()) {
             Text("On this device")
             deviceData.forEach { item ->
                 DeviceRowView(
                     item = item,
+                    format = format,
                     onExport = { kind ->
                         pending = item.activityId
                         when (kind) {
@@ -242,6 +251,7 @@ internal fun HistorySection(
 @Composable
 private fun HistoryRowView(
     item: HistoryItem,
+    format: UnitFormat,
     selected: Boolean,
     onOpen: () -> Unit,
 ) {
@@ -256,8 +266,8 @@ private fun HistoryRowView(
             "${item.sport} ${formatDate(item.startedAtMs)}" +
                 if (selected) " (open)" else "",
         )
-        Text("${formatDistance(item.distanceM)} — ${formatDuration(item.elapsedMs)}")
-        val pace = item.paceSecPerKm?.let { formatPace(it) }
+        Text("${format.distance(item.distanceM)} — ${formatDuration(item.elapsedMs)}")
+        val pace = item.paceSecPerKm?.let { format.pace(it) }
         val hr = if (item.avgHrBpm > 0) "HR ${item.avgHrBpm}/${item.maxHrBpm} bpm" else null
         val badges =
             listOfNotNull(
@@ -276,7 +286,10 @@ private fun HistoryRowView(
 
 /** The numbers and the analysis of one activity. */
 @Composable
-private fun ActivityDetailView(detail: DetailSnapshot) {
+private fun ActivityDetailView(
+    detail: DetailSnapshot,
+    format: UnitFormat,
+) {
     val summary = detail.summary
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text("Activity")
@@ -285,14 +298,14 @@ private fun ActivityDetailView(detail: DetailSnapshot) {
             return@Column
         }
         summary?.let {
-            Text("${formatDistance(it.distanceM)} — ${formatDuration(it.elapsedMs)}")
+            Text("${format.distance(it.distanceM)} — ${formatDuration(it.elapsedMs)}")
             Text("Moving ${formatDuration(it.movingMs)} · Paused ${formatDuration(it.pausedMs)}")
-            it.paceSecPerKm?.let { pace -> Text("Pace ${formatPace(pace)}") }
+            it.paceSecPerKm?.let { pace -> Text("Pace ${format.pace(pace)}") }
             if (it.avgHrBpm > 0) Text("HR ${it.avgHrBpm}/${it.maxHrBpm} bpm (${it.hrSource})")
             Text("Quality ${it.qualityGrade} · ${it.metricsAlgorithmVersion}")
         }
         when (detail.analysisState) {
-            AnalysisState.READY -> detail.analysis?.let { AnalysisView(it) }
+            AnalysisState.READY -> detail.analysis?.let { AnalysisView(it, format) }
             AnalysisState.COMPUTING -> Text("The analysis is being computed…")
             AnalysisState.NOT_CACHED -> Text("The analysis is not on this device.")
             AnalysisState.NOT_SYNCED -> Text("The analysis comes with the upload of the activity.")
@@ -306,13 +319,16 @@ private fun ActivityDetailView(detail: DetailSnapshot) {
 
 /** The splits and the two curves of the analysis (TDD-0009): the numbers, not a map. */
 @Composable
-private fun AnalysisView(analysis: ActivityAnalysis) {
+private fun AnalysisView(
+    analysis: ActivityAnalysis,
+    format: UnitFormat,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         if (analysis.splits.isNotEmpty()) {
             Text("Splits")
             analysis.splits.forEach { split ->
                 Text(
-                    "#${split.index} ${formatDistance(split.endDistanceM - split.startDistanceM)} — " +
+                    "#${split.index} ${format.distance(split.endDistanceM - split.startDistanceM)} — " +
                         "${formatDuration(split.movingMs)}" +
                         (split.avgHrBpm?.let { " — $it bpm" } ?: "") +
                         if (split.partial) " (partial)" else "",
@@ -320,19 +336,45 @@ private fun AnalysisView(analysis: ActivityAnalysis) {
             }
         }
         analysis.elevation?.let { elevation ->
-            Text("Elevation: +${elevation.gainM.toInt()} m / -${elevation.lossM.toInt()} m")
+            Text(
+                "Elevation: ${format.elevation(
+                    elevation.gainM,
+                    signed = true,
+                )} / -${format.elevation(elevation.lossM)}",
+            )
         }
         val series = analysis.series
         val elevationPoints = series.elevationM.filterNotNull()
         if (elevationPoints.size > 1) {
-            Text("Elevation profile (${elevationPoints.min().toInt()}–${elevationPoints.max().toInt()} m)")
+            Text(
+                "Elevation profile (${format.elevation(elevationPoints.min())}" +
+                    "–${format.elevation(elevationPoints.max())})",
+            )
             SeriesChart(elevationPoints.map { it.toFloat() }, series.segment)
         }
         val heartRate = series.heartRate
         if (heartRate.bpm.size > 1) {
             Text("Heart rate (${heartRate.bpm.min()}–${heartRate.bpm.max()} bpm)")
             SeriesChart(heartRate.bpm.map { it.toFloat() }, heartRate.segment)
+            ZonesView(analysis.heartRateZones)
         }
+    }
+}
+
+/**
+ * The time in each heart-rate zone (`hr-zones-v1`, TDD-0012), or the reason there is none: the zones are cut from
+ * the maximum heart rate of the profile, so without one the screen says where to set it.
+ */
+@Composable
+private fun ZonesView(zones: HeartRateZones?) {
+    if (zones == null) {
+        Text("Set your maximum heart rate in the account to see the time in each zone.")
+        return
+    }
+    Text("Time in each zone (maximum ${zones.maxHrBpm} bpm)")
+    zones.zones.forEach { zone ->
+        val range = zone.toBpm?.let { "${zone.fromBpm}–$it" } ?: "${zone.fromBpm}+"
+        Text("Z${zone.zone} $range bpm — ${formatDuration(zone.timeMs)}")
     }
 }
 
@@ -385,6 +427,7 @@ private fun SeriesChart(
 @Composable
 private fun DeviceRowView(
     item: DeviceActivityItem,
+    format: UnitFormat,
     onExport: (ExportKind) -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -396,7 +439,7 @@ private fun DeviceRowView(
     ) {
         Text("${item.sport} ${formatDate(item.startedAtMs)} — ${syncLabel(item.syncState)}")
         item.summary?.let {
-            Text("${formatDistance(it.distanceM)} — ${formatDuration(it.elapsedMs)}")
+            Text("${format.distance(it.distanceM)} — ${formatDuration(it.elapsedMs)}")
         }
         if (item.deletedOnServer) Text("The server does not have it any more.")
         Text("${item.localBytes / 1024} kB on this device")
@@ -423,20 +466,12 @@ private fun syncLabel(state: HistorySyncState): String =
 private fun formatDate(epochMs: Long): String =
     DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(epochMs))
 
-private fun formatDistance(meters: Double): String =
-    if (meters >= 1000) "%.2f km".format(meters / 1000) else "%.0f m".format(meters)
-
 private fun formatDuration(ms: Long): String {
     val total = ms / 1000
     val hours = total / 3600
     val minutes = (total % 3600) / 60
     val seconds = total % 60
     return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds) else "%d:%02d".format(minutes, seconds)
-}
-
-private fun formatPace(secondsPerKm: Double): String {
-    val total = secondsPerKm.toInt()
-    return "%d:%02d /km".format(total / 60, total % 60)
 }
 
 /** How many times the app comes back for an analysis the server is still computing. */

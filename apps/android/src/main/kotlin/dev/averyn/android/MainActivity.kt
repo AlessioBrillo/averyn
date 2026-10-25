@@ -21,6 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -42,6 +43,9 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import dev.averyn.api.ClientCompatibility
+import dev.averyn.api.UnitSystem
+import dev.averyn.api.UserProfile
+import dev.averyn.api.parseMaxHr
 import dev.averyn.domain.ActivityState
 import dev.averyn.domain.Sport
 import dev.averyn.sync.SyncStatusStore
@@ -417,6 +421,101 @@ private fun AccountSection(app: AverynApplication) {
         }
         message?.let { Text(it) }
         Text(syncText)
+        ProfileSection(app, signedIn)
+    }
+}
+
+/**
+ * The settings of the account (TDD-0012): the unit system and the maximum heart rate. They live on the server, so
+ * the section needs a session; the unit system is also remembered on the device and holds offline.
+ */
+@Composable
+private fun ProfileSection(
+    app: AverynApplication,
+    signedIn: Boolean,
+) {
+    val scope = rememberCoroutineScope()
+    var units by remember { mutableStateOf(app.units) }
+    var maxHr by remember { mutableStateOf("") }
+    var loaded by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    val input = parseMaxHr(maxHr)
+
+    LaunchedEffect(signedIn) {
+        if (!signedIn) {
+            loaded = false
+            return@LaunchedEffect
+        }
+        val token = runCatching { app.auth.freshAccessToken() }.getOrNull()
+        val profile = app.history().refreshProfile(token).profile
+        if (profile != null) {
+            units = profile.units
+            maxHr = profile.maxHrBpm?.toString().orEmpty()
+            loaded = true
+        } else {
+            message = "Could not load your profile."
+        }
+    }
+
+    if (!signedIn) return
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Profile")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = units == UnitSystem.METRIC,
+                onClick = { units = UnitSystem.METRIC },
+                enabled = loaded,
+                label = { Text("Metric (km, m)") },
+            )
+            FilterChip(
+                selected = units == UnitSystem.IMPERIAL,
+                onClick = { units = UnitSystem.IMPERIAL },
+                enabled = loaded,
+                label = { Text("Imperial (mi, ft)") },
+            )
+        }
+        OutlinedTextField(
+            value = maxHr,
+            onValueChange = { maxHr = it },
+            label = { Text("Maximum heart rate (bpm)") },
+            singleLine = true,
+            enabled = loaded,
+            isError = !input.valid,
+            supportingText = {
+                if (!input.valid) {
+                    Text(
+                        "A whole number from ${UserProfile.MIN_MAX_HR_BPM} to ${UserProfile.MAX_MAX_HR_BPM}, or empty.",
+                    )
+                }
+            },
+        )
+        Button(
+            enabled = loaded && input.valid,
+            onClick = {
+                scope.launch {
+                    val token = runCatching { app.auth.freshAccessToken() }.getOrNull()
+                    if (token == null) {
+                        message = "Sign in again to save your profile."
+                        return@launch
+                    }
+                    val saved = app.history().saveProfile(token, UserProfile(units, input.value))
+                    if (saved.profile != null) {
+                        app.units = saved.units
+                        message = "Saved"
+                    } else {
+                        message =
+                            if (saved.failure?.status ==
+                                422
+                            ) {
+                                "That is not a valid profile."
+                            } else {
+                                "Could not save your profile."
+                            }
+                    }
+                }
+            },
+        ) { Text("Save profile") }
+        message?.let { Text(it) }
     }
 }
 

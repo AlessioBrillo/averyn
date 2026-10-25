@@ -2,9 +2,13 @@ package dev.averyn.android
 
 import android.app.Application
 import android.os.BatteryManager
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import dev.averyn.android.auth.AuthManager
 import dev.averyn.android.ble.BleHrAdapter
 import dev.averyn.api.ConsentGrant
+import dev.averyn.api.UnitSystem
 import dev.averyn.client.HistoryRepository
 import dev.averyn.sensors.HeartRateSample
 import dev.averyn.sensors.RrInterval
@@ -61,7 +65,14 @@ class AverynApplication : Application() {
      */
     fun clearServerCache() {
         serverCacheDirectory.deleteRecursively()
+        units = UnitSystem.METRIC
     }
+
+    /**
+     * The unit system the numbers are written in (TDD-0012). It is read from the profile of the account and
+     * remembered in the copy of the server, so it holds offline; a state, so every screen follows a change.
+     */
+    var units: UnitSystem by mutableStateOf(UnitSystem.METRIC)
 
     /** BLE heart-rate adapter (standard GATT 0x180D/0x2A37). Created lazily so the app installs on
      *  devices without Bluetooth too (the adapter itself is harmless when Bluetooth is off). */
