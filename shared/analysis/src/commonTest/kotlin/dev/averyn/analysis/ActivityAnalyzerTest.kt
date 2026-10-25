@@ -300,6 +300,54 @@ class ActivityAnalyzerTest {
     }
 
     @Test
+    fun theTimeAtEachBpmHoldsASampleUntilTheNextOneOfItsStretch() {
+        // 130 bpm for 3 s, 150 bpm for 2 s, then the sensor is silent for 10 s and 150 comes back for 2 s.
+        val heartRate =
+            listOf(
+                HeartRateSample(START_MS, 0, 130),
+                HeartRateSample(START_MS + 1_000, 1_000, 130),
+                HeartRateSample(START_MS + 2_000, 2_000, 130),
+                HeartRateSample(START_MS + 3_000, 3_000, 150),
+                HeartRateSample(START_MS + 4_000, 4_000, 150),
+                HeartRateSample(START_MS + 15_000, 15_000, 150),
+                HeartRateSample(START_MS + 16_000, 16_000, 150),
+            )
+        val analysis =
+            analyzeActivity(Sport.RUN, listOf(track(steps = 17, stepM = 3.0)), heartRate, totals(48.0, 16_000))
+
+        val histogram = analysis.series.heartRate.timeAtBpm
+        assertEquals(130, histogram.fromBpm)
+        assertEquals(3_000L, histogram.timeMs[0]) // 130 bpm: 3 samples of 1 s
+        assertEquals(4_000L, histogram.timeMs[20]) // 150 bpm: 1 s + 1 s (last of the first stretch) + 2 s
+        assertEquals(21, histogram.timeMs.size)
+        // The silence is in no bpm: 3 s + 4 s of heart rate over 16 s of recording.
+        assertEquals(7_000L, histogram.timeMs.sum())
+    }
+
+    @Test
+    fun anActivityWithoutAHeartRateHasNoHistogram() {
+        val analysis =
+            analyzeActivity(Sport.RUN, listOf(track(steps = 10, stepM = 3.0)), emptyList(), totals(27.0, 9_000))
+
+        assertEquals(AnalysisHeartRateHistogram(), analysis.series.heartRate.timeAtBpm)
+    }
+
+    @Test
+    fun theHistogramIsNotDecimatedWhateverTheSeriesIs() {
+        // 5 000 s at 100 bpm: the chart keeps at most 1 000 points, the histogram keeps all the time.
+        val heartRate = List(5_000) { HeartRateSample(START_MS + it * 1_000L, it * 1_000L, 100 + (it / 1_000)) }
+        val analysis =
+            analyzeActivity(Sport.RUN, listOf(track(steps = 10, stepM = 3.0)), heartRate, totals(27.0, 9_000))
+
+        assertTrue(analysis.series.heartRate.bpm.size <= 1000)
+        assertEquals(
+            5_000_000L,
+            analysis.series.heartRate.timeAtBpm.timeMs
+                .sum(),
+        )
+    }
+
+    @Test
     fun anAltitudeThatWasNotMeasuredStaysAHole() {
         // Ten samples, only three of them with an altitude.
         val samples =

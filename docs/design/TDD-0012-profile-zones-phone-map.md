@@ -35,7 +35,7 @@ Three things the launch needs and the product does not have yet, built in this o
 ## 4. Non-functional requirements
 
 - **Privacy.** The maximum heart rate is health-adjacent personal data: Restricted class ([data classification](../privacy/data-classification.md)), never logged, deleted with the account, exported. It is not shared with anyone (there is no social feature).
-- **Reproducibility.** Zones are a metric: `hr-zones-v1`, with its spec in `docs/metrics/hr-zones.md` (written with its code), computed by one shared implementation (device and server).
+- **Reproducibility.** Zones are a metric: `hr-zones-v1`, with its spec in [`docs/metrics/hr-zones.md`](../metrics/hr-zones.md), computed by one shared implementation (device and server).
 - **No staleness.** The stored analysis never holds a zone: it holds what does not depend on the user's setting (Z1), so a change of the maximum heart rate needs no recomputation of any activity.
 - **Self-hosting.** One migration, no new service.
 
@@ -60,7 +60,7 @@ The routes live in a new `profile` package of the backend, next to `consent`: au
 
 Five zones by share of the maximum heart rate: Z1 below 60 %, Z2 from 60 % to below 70 %, Z3 from 70 % to below 80 %, Z4 from 80 % to below 90 %, Z5 from 90 %. Every bpm belongs to exactly one zone, so the zones always add up to the time with a heart rate.
 
-The analysis gains a histogram of the milliseconds spent at each bpm (the schema version of the analysis goes from 2 to 3, which the store already handles by recomputing a stale analysis when it is read, [ADR-0023](../adr/0023-activity-analysis-storage.md)). `GET /v1/activities/{id}/analysis` adds the zones, computed at read time from the histogram and the profile. The spec of the metric is written with its code, in the pull request that implements this part.
+The heart-rate series of the analysis gains a histogram of the milliseconds spent at each bpm, `timeAtBpm`, counted before the series is decimated. That is a new version of the series (`series-v2`); the store already treats an analysis made with an older version as stale and recomputes it when it is read ([ADR-0023](../adr/0023-activity-analysis-storage.md)), so no migration and no change of the store are needed. `GET /v1/activities/{id}/analysis` adds `heartRateZones`, computed at read time from the histogram and the maximum heart rate of the profile, and absent when either is missing. The metric is specified in [`docs/metrics/hr-zones.md`](../metrics/hr-zones.md).
 
 ### 5.3 The map on the phone (M1)
 
@@ -98,3 +98,4 @@ V12 adds a table; nothing existing changes. The analysis schema bump (5.2) makes
 
 - **Profile (P1–P3):** the API, #83.
 - **Profile on the web (P4, web part):** the Account page edits the units and the maximum heart rate; every distance, pace, speed and elevation of the web, and the axes of the elevation chart, follow the units. The records keep their names in kilometres ("the 5 km record") and the splits stay per kilometre (`splits-v1`). The phones follow.
+- **Zones (Z1, Z2):** the histogram (`series-v2`), `hr-zones-v1` and the zones in the analysis response. The clients show them next.

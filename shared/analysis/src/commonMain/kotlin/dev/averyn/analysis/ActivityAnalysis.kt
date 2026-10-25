@@ -9,7 +9,7 @@ const val SPLITS_ALGORITHM_VERSION = "splits-v1"
 const val ELEVATION_ALGORITHM_VERSION = "elevation-v1"
 
 /** Version of the display series (the decimation). Spec: docs/metrics/activity-analysis.md. */
-const val SERIES_ALGORITHM_VERSION = "series-v1"
+const val SERIES_ALGORITHM_VERSION = "series-v2"
 
 /** Version of the shape of the JSON the API returns. A new shape is a new number, never an edit. */
 const val ANALYSIS_SCHEMA_VERSION = 2
@@ -99,6 +99,18 @@ data class AnalysisHeartRateSeries(
     val bpm: List<Int>,
     /** The stretch of samples each point belongs to: a change of number is a gap of the sensor, not a pause. */
     val segment: List<Int>,
+    /** The time spent at each bpm: what the zones are made of (`series-v2`). Not decimated, unlike the points. */
+    val timeAtBpm: AnalysisHeartRateHistogram = AnalysisHeartRateHistogram(),
+)
+
+/**
+ * The milliseconds of heart rate at each bpm: `timeMs[i]` is the time spent at `fromBpm + i` bpm. It does not
+ * depend on the maximum heart rate of the user, so a change of the maximum needs no recomputation of any activity.
+ */
+@Serializable
+data class AnalysisHeartRateHistogram(
+    val fromBpm: Int = 0,
+    val timeMs: List<Long> = emptyList(),
 )
 
 /**
@@ -135,4 +147,10 @@ data class ActivityAnalysis(
      */
     val bestEfforts: List<BestEffort> = emptyList(),
     val series: AnalysisSeries,
+    /**
+     * The time in each heart-rate zone (`hr-zones-v1`). Never stored: it is computed when the analysis is read, from
+     * the histogram of the series and the maximum heart rate of the profile. Null when the activity has no heart
+     * rate or the user did not set a maximum.
+     */
+    val heartRateZones: HeartRateZones? = null,
 )

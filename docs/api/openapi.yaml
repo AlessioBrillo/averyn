@@ -458,6 +458,31 @@ components:
           description: "The fastest window of each target distance of the sport (best-efforts-v1)"
           items: { $ref: "#/components/schemas/BestEffort" }
         series: { $ref: "#/components/schemas/AnalysisSeries" }
+        heartRateZones:
+          description: >
+            The time in each of five heart-rate zones (hr-zones-v1, TDD-0012). Never stored: computed when the
+            analysis is read, from the time at each bpm of the series and the maximum heart rate of the caller's
+            profile. Absent when the activity has no heart rate or the profile has no maximum.
+          oneOf:
+            - { $ref: "#/components/schemas/HeartRateZones" }
+            - { type: "null" }
+    HeartRateZones:
+      type: object
+      required: [algorithmVersion, maxHrBpm, zones]
+      properties:
+        algorithmVersion: { type: string, description: "e.g. hr-zones-v1" }
+        maxHrBpm: { type: integer, description: "The maximum heart rate the zones were cut from" }
+        zones:
+          type: array
+          description: "Five zones, from 1 to 5"
+          items:
+            type: object
+            required: [zone, fromBpm, toBpm, timeMs]
+            properties:
+              zone: { type: integer, minimum: 1, maximum: 5 }
+              fromBpm: { type: integer }
+              toBpm: { type: [integer, "null"], description: "Null for the last zone, which has no upper limit" }
+              timeMs: { type: integer, format: int64 }
     AnalysisVersions:
       type: object
       required: [splits, elevation, series, heartRate]
@@ -596,6 +621,15 @@ components:
         segment:
           type: array
           items: { type: integer, description: "The stretch of the point: a change of number is a dropout of the sensor" }
+        timeAtBpm:
+          type: object
+          description: "The milliseconds spent at each bpm (series-v2). Not decimated: the zones are made of it"
+          properties:
+            fromBpm: { type: integer }
+            timeMs:
+              type: array
+              description: "timeMs[i] is the time at fromBpm + i bpm"
+              items: { type: integer, format: int64 }
     ImportResponse:
       type: object
       required: [activity, import]
