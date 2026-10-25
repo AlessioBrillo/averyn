@@ -38,3 +38,26 @@ data class UserProfile(
         const val MAX_MAX_HR_BPM = 230
     }
 }
+
+/** What the user typed in the "maximum heart rate" field (TDD-0012): empty means none, otherwise a valid whole number. */
+data class MaxHrInput(
+    val valid: Boolean,
+    /** The value to save; null when the field is empty (and when it is not [valid]). */
+    val value: Int?,
+)
+
+/**
+ * Reads the field: empty is "none", a whole number from [UserProfile.MIN_MAX_HR_BPM] to [UserProfile.MAX_MAX_HR_BPM]
+ * is that number, anything else is not valid. The same rule as the web form and the server (which checks again).
+ */
+fun parseMaxHr(text: String): MaxHrInput {
+    val trimmed = text.trim()
+    if (trimmed.isEmpty()) return MaxHrInput(valid = true, value = null)
+    if (!trimmed.all { it in '0'..'9' } || trimmed.length > 4) return MaxHrInput(valid = false, value = null)
+    val number = trimmed.toInt()
+    return if (number in UserProfile.MIN_MAX_HR_BPM..UserProfile.MAX_MAX_HR_BPM) {
+        MaxHrInput(valid = true, value = number)
+    } else {
+        MaxHrInput(valid = false, value = null)
+    }
+}

@@ -75,7 +75,7 @@ MapLibre Native on both apps, in the detail of an activity, with `mapStyleUrl` f
 | `shared/api` | the validation of the profile (every bound, both sides), the JSON shape |
 | `backend` | profile: defaults, round trip, replace, validation (`422`, nothing stored), another user's profile is not visible, deleted account `403`, deletion with the account, export |
 | `shared/analysis` | the histogram; the zones: boundaries, every bpm in one zone, no heart rate, a changed maximum |
-| device matrix | rows S32–S34 (profile on the phone, zones, the map offline), added with the code of each part |
+| device matrix | rows S32 (profile on the phone), S33 (zones) and S34 (the map offline), added with the code of each part |
 
 ## 7. Rollout and migration
 
@@ -103,3 +103,4 @@ V12 adds a table; nothing existing changes. The analysis schema bump (5.2) makes
 - **Zones (Z1, Z2):** the histogram (`series-v2`), `hr-zones-v1` and the zones in the analysis response. The clients show them next.
 - **Zones on the web:** a table under the heart-rate chart (time and share per zone, the maximum used), or a hint to set the maximum in the account when there is none.
 - **Shared client for the phones:** profile read and save, `UnitFormat`, the unit system in the copy. The Android and iOS screens follow.
+- **Android:** `UnitFormat` in every screen of the history, a Profile section in the account (units, maximum heart rate, the same rule as the web) and the zones under the heart-rate curve; matrix rows S32 and S33. iOS follows.
