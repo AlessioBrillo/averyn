@@ -3,6 +3,8 @@ import type uPlot from 'uplot'
 import type { ActivityAnalysis } from './api'
 import { elevationSeries, heartRateSeries } from './analysisSeries'
 import {
+  distanceUnit,
+  elevationUnit,
   formatCoverage,
   formatDistance,
   formatDuration,
@@ -121,7 +123,7 @@ export function Analysis({
           height: CHART_HEIGHT,
           legend: { show: false },
           cursor: { drag: { x: false, y: false } },
-          axes: [axisOptions(colors, 'km'), axisOptions(colors, 'm')],
+          axes: [axisOptions(colors, distanceUnit()), axisOptions(colors, elevationUnit())],
           series: [{ }, { spanGaps: false, stroke: ACCENT, width: 2, fill: 'rgba(228, 87, 46, 0.12)' }],
         },
       }

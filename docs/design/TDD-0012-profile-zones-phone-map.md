@@ -96,4 +96,5 @@ V12 adds a table; nothing existing changes. The analysis schema bump (5.2) makes
 
 ## 10. What is implemented
 
-- **Profile (P1–P3):** this pull request. P4 follows (web, then phones).
+- **Profile (P1–P3):** the API, #83.
+- **Profile on the web (P4, web part):** the Account page edits the units and the maximum heart rate; every distance, pace, speed and elevation of the web, and the axes of the elevation chart, follow the units. The records keep their names in kilometres ("the 5 km record") and the splits stay per kilometre (`splits-v1`). The phones follow.

@@ -1,7 +1,32 @@
 // Display only: every metric is computed by the backend (TDD-0003 W2), these just turn numbers into text.
 
+export type Units = 'metric' | 'imperial'
+
+const METERS_PER_MILE = 1609.344
+const METERS_PER_FOOT = 0.3048
+
+// The unit system of the signed-in user (TDD-0012). One value for the whole page, set when the profile is
+// loaded or saved; the app remounts its content when it changes, so no formatter needs the unit passed in.
+// ponytail: module state, a context if a second consumer ever needs to react without a remount.
+let units: Units = 'metric'
+
+export function setUnits(next: Units): void {
+  units = next
+}
+
+export const distanceUnit = (): string => (units === 'imperial' ? 'mi' : 'km')
+export const elevationUnit = (): string => (units === 'imperial' ? 'ft' : 'm')
+
+/** A distance in metres, in the unit of the user (km or mi), as a number. */
+export const metersToDistanceUnit = (meters: number): number =>
+  units === 'imperial' ? meters / METERS_PER_MILE : meters / 1000
+
+/** An altitude or a climb in metres, in the unit of the user (m or ft), as a number. */
+export const metersToElevationUnit = (meters: number): number =>
+  units === 'imperial' ? meters / METERS_PER_FOOT : meters
+
 export function formatDistance(meters: number): string {
-  return `${(meters / 1000).toFixed(2)} km`
+  return `${metersToDistanceUnit(meters).toFixed(2)} ${distanceUnit()}`
 }
 
 /** h:mm:ss, truncated to whole seconds. */
@@ -13,15 +38,17 @@ export function formatDuration(ms: number): string {
   return `${h}:${mm}:${ss}`
 }
 
-/** m:ss per km; an em dash when there is no pace (nothing moved). */
+/** m:ss per km (or per mile); an em dash when there is no pace (nothing moved). */
 export function formatPace(secPerKm: number | null): string {
   if (secPerKm === null) return '—'
-  const total = Math.round(secPerKm)
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')} /km`
+  const total = Math.round(units === 'imperial' ? (secPerKm * METERS_PER_MILE) / 1000 : secPerKm)
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')} /${distanceUnit()}`
 }
 
 export function formatSpeed(metersPerSecond: number): string {
-  return `${(metersPerSecond * 3.6).toFixed(1)} km/h`
+  return units === 'imperial'
+    ? `${((metersPerSecond * 3600) / METERS_PER_MILE).toFixed(1)} mph`
+    : `${(metersPerSecond * 3.6).toFixed(1)} km/h`
 }
 
 /** Pace for foot sports, speed for rides. */
@@ -42,15 +69,15 @@ export function formatQuality(grade: string): string {
   return grade === 'UNKNOWN' ? 'unknown (accuracy not measured)' : grade.toLowerCase()
 }
 
-/** An altitude, in metres. */
+/** An altitude, in metres or feet. */
 export function formatElevation(meters: number): string {
-  return `${Math.round(meters)} m`
+  return `${Math.round(metersToElevationUnit(meters))} ${elevationUnit()}`
 }
 
 /** A climb, with its sign: "+120 m", "-35 m". */
 export function formatElevationDelta(meters: number): string {
   const sign = meters > 0 ? '+' : meters < 0 ? '−' : ''
-  return `${sign}${Math.round(Math.abs(meters))} m`
+  return `${sign}${Math.round(metersToElevationUnit(Math.abs(meters)))} ${elevationUnit()}`
 }
 
 /** A share, in percent: "98%". */
@@ -65,7 +92,8 @@ export function formatHeartRate(bpm: number): string {
 
 /**
  * A target distance of a record: "1 km", "21.1 km". The distances of the records are the standard ones of
- * the sport, so they are shown as they are and not rounded to two decimals like a measurement.
+ * the sport, so they are shown as they are and not rounded to two decimals like a measurement. They stay in
+ * kilometres whatever the unit system: "the 5 km record" is a name, not a measurement (TDD-0012).
  */
 export function formatTargetDistance(meters: number): string {
   const km = meters / 1000

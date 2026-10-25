@@ -269,6 +269,18 @@ export const revokeConsent = (scope: string) =>
 export const grantConsent = (scope: string) =>
   request(`/v1/consents/${encodeURIComponent(scope)}`, 'POST')
 
+/** The settings every client of the account shares (TDD-0012). */
+export interface UserProfile {
+  units: 'metric' | 'imperial'
+  maxHrBpm: number | null
+}
+
+export const getProfile = () => get<UserProfile>('/v1/profile')
+
+/** Replaces the profile; the server answers with the stored one. A 422 means it was not valid. */
+export const putProfile = async (profile: UserProfile): Promise<UserProfile> =>
+  (await (await request('/v1/profile', 'PUT', JSON.stringify(profile), 'application/json')).json()) as UserProfile
+
 /** The fastest effort of a distance, and the activity that holds it (TDD-0010). */
 export interface PersonalRecord {
   activityId: string
