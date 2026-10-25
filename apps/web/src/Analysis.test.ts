@@ -1,9 +1,12 @@
 import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
-import { expect, test } from 'vitest'
+import { afterEach, expect, test } from 'vitest'
 import { Analysis } from './Analysis'
 import { elevationSeries, heartRateSeries } from './analysisSeries'
 import type { ActivityAnalysis } from './api'
+import { setUnits } from './format'
+
+afterEach(() => setUnits('metric'))
 
 const analysis: ActivityAnalysis = {
   schemaVersion: 2,
@@ -97,6 +100,15 @@ test('the elevation profile breaks where the activity was paused', () => {
   expect(series.x).toEqual([0, 0.5, 1, 1.5])
   // The first point of the second recording interval is a hole: the profile does not cross the pause.
   expect(series.y).toEqual([100, 101, null, 103])
+})
+
+test('the elevation profile is drawn in miles and feet for an imperial profile', () => {
+  setUnits('imperial')
+  const series = elevationSeries(analysis)
+
+  expect(series.x[2]).toBeCloseTo(1000 / 1609.344, 6)
+  expect(series.y[0]).toBeCloseTo(100 / 0.3048, 6)
+  expect(series.y[2]).toBeNull()
 })
 
 test('an altitude that was not measured is a hole and not a line', () => {
