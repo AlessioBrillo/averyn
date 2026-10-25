@@ -211,7 +211,7 @@ final class HeartRateMonitor: NSObject, @unchecked Sendable, SensorAdapter, CBCe
             data: bytes, offset: 0, elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs()
         )
 
-        for case let complete as ParseResultComplete in (parsed.first as? [Any]) ?? [] {
+        for case let complete as ParseResult.Complete in (parsed.first as? [Any]) ?? [] {
             if let sample = complete.heartRate {
                 onSample?(sample)
             }
@@ -220,7 +220,7 @@ final class HeartRateMonitor: NSObject, @unchecked Sendable, SensorAdapter, CBCe
                     onRrInterval?(interval)
                 }
             }
-            // A `ParseResultIncomplete` (truncated frame) is dropped: the next notification brings a whole one.
+            // A `ParseResult.Incomplete` (truncated frame) is dropped: the next notification brings a whole one.
         }
     }
 }
