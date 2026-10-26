@@ -116,6 +116,8 @@ data class DetailSnapshot(
     /** The local estimate of the numbers, when the activity is not on the server (yet). */
     val localSummary: LocalActivitySummary? = null,
     val analysis: ActivityAnalysis? = null,
+    /** The track for the map (TDD-0012): null when the activity has none, or it was never read. */
+    val track: TrackMap? = null,
     val analysisState: AnalysisState = AnalysisState.UNAVAILABLE,
     /** True when what is shown comes from the cache and not from the server. */
     val fromCache: Boolean = false,

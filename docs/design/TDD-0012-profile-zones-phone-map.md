@@ -66,7 +66,12 @@ The heart-rate series of the analysis gains a histogram of the milliseconds spen
 
 ### 5.3 The map on the phone (M1)
 
-MapLibre Native on both apps, in the detail of an activity, with `mapStyleUrl` from the client configuration and the track from the copy of the server on the device (ADR-0025): no new endpoint. The track is drawn as one line, with the pauses as breaks, like the web.
+MapLibre Native on both apps (Android `org.maplibre.gl:android-sdk`, iOS the `MapLibre` Swift package), in the detail of an activity. No new endpoint: the track is the one the server already serves and the copy of the server on the device already holds ([ADR-0025](../adr/0025-device-side-cache-of-server-activities.md)).
+
+- **Shared:** `trackMapOf(track)` (`shared/client`) turns the track into what both SDKs need: a GeoJSON built from the valid points only (a bad coordinate is dropped, never fatal) and the bounding box for the camera. The detail snapshot carries it, from the server or from the copy.
+- **Style:** the app keeps the `mapStyleUrl` of the server's client configuration, next to the other values it already remembers. Whoever serves the style and the tiles sees the area the user looks at: a real instance sets its own ([ADR-0027](../adr/0027-managed-cloud-baseline.md)); the demo style is only the development default.
+- **Drawing:** one line layer; a pause is a break in the line (one line per recording interval); the camera fits the box with padding.
+- **Offline:** the line comes from the copy and the app draws it; the base map needs the network (offline tiles are MVP-3), so offline the line is drawn on the style's background and the screen says the map is not available offline.
 
 ## 6. Test strategy
 
@@ -105,3 +110,4 @@ V12 adds a table; nothing existing changes. The analysis schema bump (5.2) makes
 - **Shared client for the phones:** profile read and save, `UnitFormat`, the unit system in the copy. The Android and iOS screens follow.
 - **Android:** `UnitFormat` in every screen of the history, a Profile section in the account (units, maximum heart rate, the same rule as the web) and the zones under the heart-rate curve; matrix rows S32 and S33. iOS follows.
 - **iOS:** the same as Android in SwiftUI (units in every screen of the history, a Profile section in the account, the zones under the heart-rate curve); the same matrix rows S32 and S33. The map on the phone follows.
+- **Map, shared part:** `trackMapOf` and the track in the detail snapshot (this is what both phones will draw).
