@@ -19,7 +19,7 @@ admin() { curl -fsS -H "Authorization: Bearer ${pat}" -H 'Content-Type: applicat
 user=$(admin -X POST "${base}/management/v1/users/machine" \
   -d '{"userName":"e2e","name":"e2e","accessTokenType":"ACCESS_TOKEN_TYPE_JWT"}')
 user_id=$(printf '%s' "${user}" | first userId)
-secret=$(admin -X POST "${base}/management/v1/users/${user_id}/secret" -d '{}')
+secret=$(admin -X PUT "${base}/management/v1/users/${user_id}/secret" -d '{}')
 client_id=$(printf '%s' "${secret}" | first clientId)
 client_secret=$(printf '%s' "${secret}" | first clientSecret)
 
