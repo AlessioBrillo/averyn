@@ -341,6 +341,7 @@ private fun AccountSection(app: AverynApplication) {
     // How this app and the server fit together (TDD-0011): a warning, never a refusal.
     var compatibility by remember { mutableStateOf(app.auth.compatibility()) }
     var cacheSize by remember { mutableStateOf("") }
+    var confirmDelete by remember { mutableStateOf(false) }
 
     // The configuration of the server is public: it can be read without a session, and it says which versions
     // are in play. A failure is not fatal: the last known answer is kept.
@@ -419,10 +420,76 @@ private fun AccountSection(app: AverynApplication) {
                 }
             }) { Text("Delete the offline copy") }
         }
+        if (signedIn) {
+            Button(onClick = { confirmDelete = true }) { Text("Delete my account") }
+        }
         message?.let { Text(it) }
         Text(syncText)
         ProfileSection(app, signedIn)
     }
+
+    if (confirmDelete) {
+        DeleteAccountDialog(
+            onDismiss = { confirmDelete = false },
+            onConfirm = {
+                confirmDelete = false
+                scope.launch {
+                    val token = runCatching { app.auth.freshAccessToken() }.getOrNull()
+                    if (token == null) {
+                        message = "Sign in again to delete your account."
+                        return@launch
+                    }
+                    if (app.history().deleteAccount(token).failure == null) {
+                        app.auth.signOut()
+                        signedIn = false
+                        cacheSize = ""
+                        message =
+                            "Your account and its data were deleted from the server. The recordings on this " +
+                            "device stay. Your sign-in at the identity provider is not removed."
+                    } else {
+                        message = "Could not delete your account. Try again."
+                    }
+                }
+            },
+        )
+    }
+}
+
+/**
+ * Asks for the last confirmation of an account deletion (ADR-0017): the user types the word, so a stray tap cannot
+ * delete an account. What is deleted and what is not is written where the choice is made.
+ */
+@Composable
+private fun DeleteAccountDialog(
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    var typed by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete your account?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "This removes all your activities and their recorded data from the server for good. " +
+                        "The recordings on this device stay. Your sign-in at the identity provider is not " +
+                        "removed: close it there if you want it gone. Export your data first if you want a copy.",
+                )
+                OutlinedTextField(
+                    value = typed,
+                    onValueChange = { typed = it },
+                    label = { Text("Type delete to confirm") },
+                    singleLine = true,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm, enabled = typed.trim().equals("delete", ignoreCase = true)) {
+                Text("Delete my account")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 /**

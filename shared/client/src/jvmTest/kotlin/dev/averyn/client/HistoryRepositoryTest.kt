@@ -329,6 +329,35 @@ class HistoryRepositoryTest {
             assertNull(repository.refreshDetail("s1", "token").track)
         }
 
+    @Test
+    fun `deleting the account clears the copy of the server and keeps the recordings on the device`() =
+        runBlocking {
+            reader.page = ActivityPage(listOf(summary("s1")), null)
+            repository.refresh("token")
+            assertEquals(1, repository.loadCached().items.size)
+
+            val result = repository.deleteAccount("token")
+
+            assertNull(result.failure)
+            assertTrue(reader.accountDeleted)
+            assertEquals(0, repository.loadCached().items.size)
+        }
+
+    @Test
+    fun `a failed deletion leaves the copy where it is so the user can try again`() =
+        runBlocking {
+            reader.page = ActivityPage(listOf(summary("s1")), null)
+            repository.refresh("token")
+            reader.failure = ApiFailure(ApiFailureKind.TRANSIENT)
+
+            val result = repository.deleteAccount("token")
+
+            assertEquals(ApiFailureKind.TRANSIENT, result.failure?.kind)
+            assertEquals(false, reader.accountDeleted)
+            reader.failure = null
+            assertEquals(1, repository.loadCached().items.size)
+        }
+
     private class FakeReader : ActivityReader {
         var page: ActivityPage = ActivityPage(emptyList(), null)
         var activity: ActivitySummary? = null
@@ -369,6 +398,13 @@ class HistoryRepositoryTest {
             failure?.let { ApiResult(failure = it) } ?: ApiResult(emptyList())
 
         var profile = UserProfile()
+        var accountDeleted = false
+
+        override suspend fun deleteAccount(accessToken: String): ApiResult<Unit> {
+            failure?.let { return ApiResult(failure = it) }
+            accountDeleted = true
+            return ApiResult(Unit)
+        }
 
         override suspend fun profile(accessToken: String): ApiResult<UserProfile> =
             failure?.let { ApiResult(failure = it) } ?: ApiResult(profile)

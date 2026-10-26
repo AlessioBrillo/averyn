@@ -125,6 +125,22 @@ final class RecorderViewModel: ObservableObject {
         }
     }
 
+    /// Deletes the account on the server (ADR-0017) and ends the session. The copy of the server goes with it; the
+    /// recordings on this device stay. False when the server could not be asked: nothing was deleted, try again.
+    func deleteAccount() async -> Bool {
+        guard let token = await accessToken() else { return false }
+        let repository = AppModel.shared.history()
+        guard let result = try? await repository.deleteAccount(accessToken: token), result.failure == nil else {
+            return false
+        }
+        AppModel.shared.auth.signOut()
+        historySnapshot = nil
+        activityDetail = nil
+        profile = nil
+        units = .metric
+        return true
+    }
+
     /// Reads the next page of the list.
     func loadMoreHistory() async {
         guard let snapshot = historySnapshot, let cursor = snapshot.nextCursor else { return }
