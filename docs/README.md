@@ -34,6 +34,7 @@ Docs live in the repo, are reviewed like code, and are checked in CI (markdownli
 | [0011](design/TDD-0011-mobile-read-path.md) | The server on the phone: reading, offline copy, local summary | implemented |
 | [0012](design/TDD-0012-profile-zones-phone-map.md) | Profile, heart-rate zones and the map on the phone | implemented |
 | [0013](design/TDD-0013-fit-import.md) | FIT import and archive import | implemented |
+| [0014](design/TDD-0014-health-platforms.md) | Saving an activity to HealthKit and Health Connect | implemented |
 
 ## Rules
 

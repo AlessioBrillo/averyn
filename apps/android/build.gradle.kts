@@ -63,6 +63,7 @@ dependencies {
     implementation(libs.androidx.work.runtime)
     implementation(libs.appauth)
     implementation(libs.maplibre.android)
+    implementation(libs.androidx.health.connect)
 
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:${libs.versions.kotlin.get()}")
 }

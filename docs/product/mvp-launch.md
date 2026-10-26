@@ -11,7 +11,7 @@ Legend: ✅ in place · 🟡 partly · ⬜ not started · 🔒 needs something o
 | Device validation | 🟡 protocol ready, matrix empty | tester builds; 4 devices × S1–S28; the fixes the campaign finds; `distance-v2` from the data | 3 weeks, in parallel | Filled rows in the [device matrix](../testing/device-matrix.md) |
 | Distribution | 🟡 Android signing wired, never run; iOS manual | secrets 🔒, Play internal, TestFlight, signing team in `project.yml` | 2–3 days + store waits | A tester build installed from each store |
 | CI | 🟡 GitHub green except iOS; Woodpecker did not run on PRs | iOS build fixed, all shared modules tested on iOS, end-to-end job with the real IdP | 2 days | A green PR check, iOS job included |
-| Mobile | 🟡 sign-in, sync, history, detail, HR, profile and units, zones, map (rows S32–S34 open) | in-app account deletion, onboarding, IT/EN, HealthKit / Health Connect write, accessibility basics | 4 weeks | Matrix rows for each; store review passed |
+| Mobile | 🟡 sign-in, sync, history, detail, HR, profile and units, zones, map (rows S32–S34 open) | onboarding, IT/EN, HealthKit / Health Connect write is done in code (rows S38, S39) but the store declarations for the health permissions are not, accessibility basics | 4 weeks | Matrix rows for each; store review passed |
 | Web | 🟡 list, detail, map, analysis, zones, records, GPX / FIT / archive import, account, profile | legal pages, IT/EN, sign-up page | 1.5 weeks | Page checks + web tests |
 | Backend | 🟡 ingest, analysis, records, consents, quotas, export, deletion | FIT decoder and archive import, user profile, `devices` table, Synapse sidecar | 2.5 weeks | Backend tests (Testcontainers) |
 | Sensors | 🟡 standard HR on both platforms | adapter unit tests; Synapse feature frame (beta); `rr-quality-v1` is after launch | 1.5 weeks | Rows S15, S16, S29–S31 |
@@ -31,7 +31,7 @@ Each increment lists its files and the matrix rows it needs. The schedule is in 
 | 2 ✅ | Profile and phone map (done in code) | `backend/.../V12__user_profile.sql`, `shared/api`, `shared/metrics` (`hr-zones-v1`), `apps/android`, `apps/ios` | new rows |
 | 3 ✅ | FIT and archive import (done in code) | `backend/.../imports/`, `apps/web` import page | new rows |
 | 4 | Account, onboarding, i18n, legal pages (account deletion on the phones: done in code, row S37) | app string resources, `apps/web` | new rows |
-| 5 | HealthKit / Health Connect (write) | `HealthKitExporter.swift`, `HealthConnectExporter.kt` | new rows |
+| 5 ✅ | HealthKit / Health Connect (write): done in code | `HealthKitExporter.swift`, `HealthConnectExporter.kt`, `WorkoutExport.kt` | S38, S39 |
 | 6 | Synapse feature frame (beta) | `shared/sensors`, both native adapters, `V13__devices.sql` | S29–S31 |
 | 7 | Managed cloud and closed beta | `infrastructure/compose/`, `docs/runbooks/incident.md` | beta feedback |
 | 8 | Compliance and stores | `docs/privacy/dpia.md`, store listings | — |

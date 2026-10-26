@@ -20,6 +20,7 @@ coreKtx = "1.19.1"
 appauth = "0.11.1"
 workManager = "2.12.0"
 maplibre = "13.7.1"
+healthConnect = "1.1.0"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -64,6 +65,7 @@ androidx-activity-compose = { module = "androidx.activity:activity-compose", ver
 androidx-work-runtime = { module = "androidx.work:work-runtime", version.ref = "workManager" }
 appauth = { module = "net.openid:appauth", version.ref = "appauth" }
 maplibre-android = { module = "org.maplibre.gl:android-sdk", version.ref = "maplibre" }
+androidx-health-connect = { module = "androidx.health.connect:connect-client", version.ref = "healthConnect" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
 
 # Used by build-logic to put plugins on the convention plugins' classpath
