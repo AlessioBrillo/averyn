@@ -353,7 +353,11 @@ class TrackingService : Service() {
 
     private fun createNotificationChannel() {
         val channel =
-            NotificationChannel(NOTIFICATION_CHANNEL_ID, "Activity tracking", NotificationManager.IMPORTANCE_LOW)
+            NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                getString(R.string.channel_tracking),
+                NotificationManager.IMPORTANCE_LOW,
+            )
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
@@ -367,8 +371,8 @@ class TrackingService : Service() {
             )
         return NotificationCompat
             .Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("Recording activity")
-            .setContentText("Tap to return to Averyn")
+            .setContentTitle(getString(R.string.notif_recording_title))
+            .setContentText(getString(R.string.notif_recording_text))
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setOngoing(true)
             .setOnlyAlertOnce(true)

@@ -29,7 +29,7 @@ internal fun postInterruptedNotification(context: Context) {
     manager.createNotificationChannel(
         NotificationChannelCompat
             .Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_DEFAULT)
-            .setName("Interrupted activity")
+            .setName(context.getString(R.string.channel_interrupted))
             .build(),
     )
     val open =
@@ -42,8 +42,8 @@ internal fun postInterruptedNotification(context: Context) {
     val notification =
         NotificationCompat
             .Builder(context, CHANNEL_ID)
-            .setContentTitle("Activity interrupted")
-            .setContentText("Tap to resume or finish it.")
+            .setContentTitle(context.getString(R.string.notif_interrupted_title))
+            .setContentText(context.getString(R.string.notif_interrupted_text))
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setContentIntent(open)
             .setAutoCancel(true)
