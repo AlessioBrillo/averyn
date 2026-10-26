@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { ApiError, importArchive, importFile } from './api'
 import type { ArchiveReport, ImportResponse } from './api'
-import { importKind, maxBytesFor, messageFor, entryReason, sportRequired } from './importRules'
+import { formatSport } from './format'
+import { t } from './i18n'
+import { importKind, maxBytesFor, messageFor, entryReason, sportRequired, statusLabel } from './importRules'
 
 const SPORTS = ['RUN', 'RIDE', 'WALK', 'HIKE'] as const
 
@@ -36,24 +38,24 @@ export function ImportFile({
   function fail(e: unknown) {
     setBusy(false)
     if (e instanceof ApiError && e.status === 401) onUnauthorized()
-    else setFailed(e instanceof ApiError ? messageFor(e) : 'The file could not be imported.')
+    else setFailed(e instanceof ApiError ? messageFor(e) : t('The file could not be imported.'))
   }
 
   function submit() {
     if (!file) {
-      setFailed('Choose a file.')
+      setFailed(t('Choose a file.'))
       return
     }
     if (!kind) {
-      setFailed('Choose a GPX file, a FIT file or a ZIP archive.')
+      setFailed(t('Choose a GPX file, a FIT file or a ZIP archive.'))
       return
     }
     if (sportRequired(kind) && !sport) {
-      setFailed('Choose the sport of the activity.')
+      setFailed(t('Choose the sport of the activity.'))
       return
     }
     if (file.size > maxBytesFor(kind)) {
-      setFailed(`The file is too large. The limit is ${maxBytesFor(kind) / (1024 * 1024)} MB.`)
+      setFailed(t('The file is too large. The limit is {mb} MB.', { mb: maxBytesFor(kind) / (1024 * 1024) }))
       return
     }
     setBusy(true)
@@ -78,14 +80,15 @@ export function ImportFile({
 
   return (
     <>
-      <h2>Import activities</h2>
+      <h2>{t('Import activities')}</h2>
       <p>
-        A GPX file, a FIT file from a watch or a bike computer, or a ZIP archive of them. The file is uploaded as it
-        is and kept next to the activity. The numbers are computed by the server, from the track it reads.
+        {t(
+          'A GPX file, a FIT file from a watch or a bike computer, or a ZIP archive of them. The file is uploaded as it is and kept next to the activity. The numbers are computed by the server, from the track it reads.',
+        )}
       </p>
       <p>
         <label>
-          File{' '}
+          {t('File')}{' '}
           <input
             type="file"
             accept=".gpx,.fit,.zip,application/gpx+xml,application/zip"
@@ -95,22 +98,22 @@ export function ImportFile({
       </p>
       <p>
         <label>
-          Sport{' '}
+          {t('Sport')}{' '}
           <select value={sport} onChange={(e) => setSport(e.target.value)}>
-            <option value="">{kind && !sportRequired(kind) ? 'From the file' : 'Choose…'}</option>
+            <option value="">{kind && !sportRequired(kind) ? t('From the file') : t('Choose…')}</option>
             {SPORTS.map((s) => (
               <option key={s} value={s}>
-                {s.toLowerCase()}
+                {formatSport(s)}
               </option>
             ))}
           </select>
         </label>
-        {kind === 'fit' && ' A FIT file says its own sport; choose one only to override it.'}
-        {kind === 'zip' && ' Used for the files that do not say a sport (every GPX file).'}
+        {kind === 'fit' && ` ${t('A FIT file says its own sport; choose one only to override it.')}`}
+        {kind === 'zip' && ` ${t('Used for the files that do not say a sport (every GPX file).')}`}
       </p>
       <p>
         <button onClick={submit} disabled={busy}>
-          {busy ? 'Importing…' : 'Import'}
+          {busy ? t('Importing…') : t('Import')}
         </button>
       </p>
       {failed && <p role="alert">{failed}</p>}
@@ -118,16 +121,19 @@ export function ImportFile({
         <p role="status">
           {result.import.duplicate ? (
             <>
-              This file was already imported.{' '}
-              <a href={`/activities/${result.activity.id}`}>Open the activity that exists</a>.
+              {t('This file was already imported.')}{' '}
+              <a href={`/activities/${result.activity.id}`}>{t('Open the activity that exists')}</a>.
             </>
           ) : (
-            'Imported.'
+            t('Imported.')
           )}
-          {result.import.segments !== null && ` ${result.import.points} points in ${result.import.segments} segments.`}
-          {result.import.heartRateReadings ? ` ${result.import.heartRateReadings} heart-rate readings.` : ''}
+          {result.import.segments !== null &&
+            ` ${t('{points} points in {segments} segments.', { points: result.import.points ?? 0, segments: result.import.segments })}`}
+          {result.import.heartRateReadings
+            ? ` ${t('{n} heart-rate readings.', { n: result.import.heartRateReadings })}`
+            : ''}
           {Object.keys(ignored).length > 0 &&
-            ` Not imported: ${Object.keys(ignored).join(', ')} (the original file is kept).`}
+            ` ${t('Not imported: {names} (the original file is kept).', { names: Object.keys(ignored).join(', ') })}`}
         </p>
       )}
       {archive && <ArchiveResult report={archive} />}
@@ -139,20 +145,24 @@ export function ImportFile({
 export function ArchiveResult({ report }: { report: ArchiveReport }) {
   return (
     <section role="status" aria-labelledby="archive-heading">
-      <h3 id="archive-heading">The archive</h3>
+      <h3 id="archive-heading">{t('The archive')}</h3>
       <p>
-        {`${report.created} imported, ${report.duplicates} already imported, ${report.refused} refused`}
-        {report.skipped > 0 && `, ${report.skipped} not tried`}
-        {report.ignoredFiles > 0 && `. ${report.ignoredFiles} other files were not read`}.
+        {t('{created} imported, {duplicates} already imported, {refused} refused', {
+          created: report.created,
+          duplicates: report.duplicates,
+          refused: report.refused,
+        })}
+        {report.skipped > 0 && `, ${t('{n} not tried', { n: report.skipped })}`}
+        {report.ignoredFiles > 0 && `. ${t('{n} other files were not read', { n: report.ignoredFiles })}`}.
       </p>
       {report.entries.length > 0 && (
         <div className="table-scroll">
           <table>
-            <caption className="visually-hidden">What happened to each file of the archive</caption>
+            <caption className="visually-hidden">{t('What happened to each file of the archive')}</caption>
             <thead>
               <tr>
-                <th scope="col">File</th>
-                <th scope="col">Result</th>
+                <th scope="col">{t('File')}</th>
+                <th scope="col">{t('Result')}</th>
               </tr>
             </thead>
             <tbody>
@@ -161,11 +171,11 @@ export function ArchiveResult({ report }: { report: ArchiveReport }) {
                   <td>{entry.name}</td>
                   <td>
                     {entry.status === 'created' && entry.activityId ? (
-                      <a href={`/activities/${entry.activityId}`}>imported</a>
+                      <a href={`/activities/${entry.activityId}`}>{t('imported')}</a>
                     ) : entry.status === 'duplicate' && entry.activityId ? (
-                      <a href={`/activities/${entry.activityId}`}>already imported</a>
+                      <a href={`/activities/${entry.activityId}`}>{t('already imported')}</a>
                     ) : (
-                      `${entry.status}${entry.code ? `: ${entryReason(entry.code)}` : ''}`
+                      `${statusLabel(entry.status)}${entry.code ? `: ${entryReason(entry.code)}` : ''}`
                     )}
                   </td>
                 </tr>

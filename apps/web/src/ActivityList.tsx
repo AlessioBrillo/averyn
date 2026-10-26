@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ApiError, listActivities } from './api'
 import type { ActivitySummary } from './api'
-import { formatDistance, formatDuration, formatQuality, formatRate } from './format'
+import { formatDistance, formatDuration, formatQuality, formatRate, formatSport } from './format'
+import { t } from './i18n'
 
 export function ActivityList({
   open,
@@ -46,19 +47,19 @@ export function ActivityList({
     void fetchPage(cursor)
   }
 
-  if (accountDeleted) return <p role="alert">This account was deleted. Its data is gone from Averyn.</p>
+  if (accountDeleted) return <p role="alert">{t('This account was deleted. Its data is gone from Averyn.')}</p>
   if (failed) {
     return (
       <p role="alert">
-        Could not load your activities. <button onClick={() => load()}>Retry</button>
+        {t('Could not load your activities.')} <button onClick={() => load()}>{t('Retry')}</button>
       </p>
     )
   }
   if (!loading && items.length === 0) {
     return (
       <p>
-        No activities yet. Record one in the app and it appears here after sync, or import a GPX file.{' '}
-        <button onClick={onImport}>Import a GPX file</button>
+        {t('No activities yet. Record one in the app and it appears here after sync, or import a file.')}{' '}
+        <button onClick={onImport}>{t('Import a file')}</button>
       </p>
     )
   }
@@ -66,17 +67,17 @@ export function ActivityList({
   return (
     <>
       <p>
-        <button onClick={onImport}>Import a GPX file</button>
+        <button onClick={onImport}>{t('Import a file')}</button>
       </p>
       <table>
         <thead>
           <tr>
-            <th>Date</th>
-            <th>Sport</th>
-            <th>Distance</th>
-            <th>Moving</th>
-            <th>Pace / speed</th>
-            <th>GPS quality</th>
+            <th>{t('Date')}</th>
+            <th>{t('Sport')}</th>
+            <th>{t('Distance')}</th>
+            <th>{t('Moving')}</th>
+            <th>{t('Pace / speed')}</th>
+            <th>{t('GPS quality')}</th>
           </tr>
         </thead>
         <tbody>
@@ -92,9 +93,9 @@ export function ActivityList({
                 >
                   {new Date(a.startedAt).toLocaleString()}
                 </a>
-                {a.finalState === 'FAILED' && ' (interrupted)'}
+                {a.finalState === 'FAILED' && ` (${t('interrupted')})`}
               </td>
-              <td>{a.sport.toLowerCase()}</td>
+              <td>{formatSport(a.sport)}</td>
               <td>{formatDistance(a.distanceM)}</td>
               <td>{formatDuration(a.movingMs)}</td>
               <td>{formatRate(a.sport, a).value}</td>
@@ -103,8 +104,8 @@ export function ActivityList({
           ))}
         </tbody>
       </table>
-      {loading && <p>Loading…</p>}
-      {next && !loading && <button onClick={() => load(next)}>Load more</button>}
+      {loading && <p>{t('Loading…')}</p>}
+      {next && !loading && <button onClick={() => load(next)}>{t('Load more')}</button>}
     </>
   )
 }
