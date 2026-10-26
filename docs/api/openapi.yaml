@@ -313,6 +313,45 @@ paths:
         "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
         "503": { description: Too many imports in progress, retry after the Retry-After seconds }
         "507": { description: "Storing this file would exceed the caller's storage quota; nothing was stored" }
+  /v1/imports/archive:
+    post:
+      summary: Import the activity files of a ZIP archive (TDD-0013)
+      description: >
+        The body is the archive itself (max 256 MB). Every `.fit` and `.gpx` file in it, also gzipped (`.fit.gz`,
+        `.gpx.gz`), goes through the same import as a single upload: the same checks, the same quota, the same
+        duplicate rule, the original kept byte-for-byte. A file that cannot be imported does not stop the others:
+        it is a line of the report with its code. `sport` is optional: it wins over the sport a FIT file declares
+        and is the only sport a GPX file can have. Limits: 100 activity files per request, 5 000 entries listed,
+        32 MB per file and 256 MB in total after decompression; a bigger archive is imported in several parts.
+      security: [{ oidc: [] }]
+      parameters:
+        - name: sport
+          in: query
+          required: false
+          schema: { type: string, enum: [RUN, RIDE, WALK, HIKE] }
+      requestBody:
+        required: true
+        content:
+          application/zip:
+            schema: { type: string, format: binary }
+          application/x-zip-compressed:
+            schema: { type: string, format: binary }
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        "200":
+          description: The archive was read; the report says what happened to each file
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArchiveReport" }
+        "400": { description: Unknown sport }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted (ADR-0017) }
+        "413": { description: Body over the size limit }
+        "415": { description: The body is not a ZIP archive }
+        "422": { description: "The archive as a whole cannot be imported (zip_error, archive_too_large); nothing was stored" }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+        "503": { description: Too many imports in progress, retry after the Retry-After seconds }
   /v1/consents:
     get:
       summary: The caller's consent grants, granted and revoked (ADR-0021)
@@ -693,6 +732,26 @@ components:
         ignoredExtensions: { type: object, additionalProperties: { type: integer }, description: "The extensions found in the file and not imported, by name" }
         parserVersion: { type: string, description: "e.g. gpx-import-v1, fit-import-v1" }
         heartRateReadings: { type: [integer, "null"], description: "The number of heart-rate readings imported; null when the file was not parsed (a duplicate)" }
+    ArchiveReport:
+      type: object
+      required: [created, duplicates, refused, skipped, ignoredFiles, entries]
+      properties:
+        created: { type: integer }
+        duplicates: { type: integer, description: "Files that were already imported: nothing was stored a second time" }
+        refused: { type: integer }
+        skipped: { type: integer, description: "Files not tried because the storage quota was reached" }
+        ignoredFiles: { type: integer, description: "Files of the archive that are not activity files (notes, photos): not read" }
+        entries:
+          type: array
+          items:
+            type: object
+            required: [name, status]
+            properties:
+              name: { type: string, description: "The path of the file in the archive" }
+              status: { type: string, enum: [created, duplicate, refused, skipped] }
+              activityId: { type: [string, "null"] }
+              code: { type: [string, "null"], description: "Why the file was refused or skipped (the codes of the single imports, entry_too_large, entry_unreadable, quota_exceeded)" }
+              message: { type: [string, "null"] }
     UserProfile:
       type: object
       properties:

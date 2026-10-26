@@ -77,66 +77,12 @@ class ImportFitTest {
     /** 2026-10-26T08:00:00Z. */
     private val startMs = 1_792_999_200_000L
 
-    private fun fileId(builder: FitBuilder) =
-        builder
-            .definition(0, 0, listOf(FitField(0, 1, FitRecordLayout.BASE_ENUM)))
-            .data(0, builder.u8(4))
-
-    /** A run of [seconds] seconds going north at 3 m/s with a pause of a minute in the middle, 150 bpm. */
+    /** A run of [seconds] seconds with a pause in the middle (see [fitRun]). */
     private fun run(
         seconds: Int = 30,
         sport: Int? = 1,
         heartRate: Int? = 150,
-    ): ByteArray {
-        val builder = FitBuilder()
-        val t0 = fitSeconds(startMs)
-        fileId(builder)
-        builder
-            .definition(
-                1,
-                21,
-                listOf(
-                    FitRecordLayout.timestamp,
-                    FitField(0, 1, FitRecordLayout.BASE_ENUM),
-                    FitField(1, 1, FitRecordLayout.BASE_ENUM),
-                ),
-            ).data(1, builder.u32(t0), builder.u8(0), builder.u8(0))
-        builder.definition(
-            3,
-            20,
-            listOf(
-                FitRecordLayout.timestamp,
-                FitRecordLayout.latitude,
-                FitRecordLayout.longitude,
-                FitRecordLayout.altitude,
-                FitRecordLayout.heartRate,
-            ),
-        )
-        val metersPerDegree = 111_195.08
-
-        fun record(
-            second: Int,
-            walked: Int,
-        ) = builder.data(
-            3,
-            builder.u32(t0 + second),
-            builder.u32(semicircles(45.0 + walked * 3.0 / metersPerDegree)),
-            builder.u32(semicircles(9.19)),
-            builder.u16(((120.0 + 500.0) * 5).toInt()),
-            builder.u8(heartRate ?: 0xFF),
-        )
-        val half = seconds / 2
-        for (i in 0 until half) record(i, i)
-        builder.data(1, builder.u32(t0 + half), builder.u8(0), builder.u8(4)) // timer stop
-        builder.data(1, builder.u32(t0 + half + 60), builder.u8(0), builder.u8(0)) // timer start
-        for (i in half until seconds) record(i + 60, i)
-        if (sport != null) {
-            builder
-                .definition(2, 18, listOf(FitField(5, 1, FitRecordLayout.BASE_ENUM)))
-                .data(2, builder.u8(sport))
-        }
-        return builder.build()
-    }
+    ): ByteArray = fitRun(startMs, seconds, sport, heartRate)
 
     private fun count(subject: String): Long =
         db.connection.use { conn ->

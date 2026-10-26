@@ -46,6 +46,13 @@ private val FIT_TYPES =
         ContentType.Application.OctetStream,
     )
 
+private val ARCHIVE_TYPES =
+    listOf(
+        ContentType("application", "zip"),
+        ContentType("application", "x-zip-compressed"),
+        ContentType.Application.OctetStream,
+    )
+
 private fun ImportFormat.acceptedTypes() = if (this == ImportFormat.GPX) GPX_TYPES else FIT_TYPES
 
 /** The answer of an import: the activity that was created (or found) and what the importer read. */
@@ -72,8 +79,11 @@ fun Application.imports(
     maxBytes: Long = MAX_ACTIVITY_BYTES,
     importSlots: Semaphore = Semaphore(MAX_CONCURRENT_IMPORTS),
     quotaBytes: Long = DEFAULT_USER_QUOTA_BYTES,
+    maxArchiveBytes: Long = MAX_ARCHIVE_BYTES,
+    archiveLimits: ArchiveLimits = ArchiveLimits(),
 ) {
     val service = ImportService(ActivityIngest(db, raw, quotaBytes), quotaBytes = quotaBytes)
+    val archives = ArchiveImporter(service, archiveLimits)
 
     routing {
         authenticate(OIDC_AUTH) {
@@ -156,6 +166,61 @@ fun Application.imports(
                         } finally {
                             importSlots.release()
                         }
+                    }
+                }
+
+                post("/v1/imports/archive") {
+                    val sportName = call.request.queryParameters["sport"]
+                    val sport = Sport.entries.firstOrNull { it.name == sportName }
+                    if (sport == null && sportName != null) {
+                        return@post call.respond(
+                            HttpStatusCode.BadRequest,
+                            mapOf(
+                                "error" to "invalid_sport",
+                                "message" to "the sport must be one of ${Sport.entries.joinToString(",")}",
+                            ),
+                        )
+                    }
+                    if (ARCHIVE_TYPES.none { it.match(call.request.contentType()) }) {
+                        return@post call.respond(
+                            HttpStatusCode.UnsupportedMediaType,
+                            mapOf("error" to "unsupported_media_type", "message" to "the file must be a ZIP archive"),
+                        )
+                    }
+                    val owner = call.owner(db) ?: return@post
+                    // One slot for the whole archive: it is the heaviest request there is.
+                    if (!importSlots.tryAcquire()) {
+                        call.response.header(HttpHeaders.RetryAfter, "5")
+                        return@post call.respond(
+                            HttpStatusCode.ServiceUnavailable,
+                            errorBody("too many imports, retry later"),
+                        )
+                    }
+                    try {
+                        withContext(Dispatchers.IO) {
+                            val dir = Files.createTempDirectory("averyn-import-")
+                            try {
+                                val file = dir.resolve("upload.zip")
+                                if (call.receiveToFile(file, maxArchiveBytes) == null) {
+                                    call.respond(HttpStatusCode.PayloadTooLarge, errorBody("the archive is too large"))
+                                    return@withContext
+                                }
+                                when (val result = archives.import(owner, file, sport)) {
+                                    is ArchiveResult.Done -> call.respond(HttpStatusCode.OK, result.report)
+                                    is ArchiveResult.Invalid ->
+                                        call.respond(
+                                            HttpStatusCode.UnprocessableEntity,
+                                            mapOf("error" to result.code, "message" to result.message),
+                                        )
+                                    ArchiveResult.AccountDeleted ->
+                                        call.respond(HttpStatusCode.Forbidden, errorBody("account was deleted"))
+                                }
+                            } finally {
+                                dir.toFile().deleteRecursively()
+                            }
+                        }
+                    } finally {
+                        importSlots.release()
                     }
                 }
             }
