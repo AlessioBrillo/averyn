@@ -1,7 +1,7 @@
 # TDD-0013: FIT import and archive import
 
-- **Status:** draft
-- **Version:** 0.1
+- **Status:** implemented
+- **Version:** 0.2
 - **Author:** @AlessioBrillo
 - **Date:** 2026-10-26
 - **Related:** [TDD-0008](TDD-0008-gpx-import.md), [TDD-0009](TDD-0009-activity-analysis.md), [ADR-0014](../adr/0014-sensor-integration-contract.md), [ADR-0022](../adr/0022-imported-activity-provenance.md), [ADR-0026](../adr/0026-averyn-synapse-link.md), [heart rate](../metrics/heart-rate.md), [threat model](../privacy/threat-model.md), [launch checklist](../product/mvp-launch.md), issue #59
@@ -90,4 +90,6 @@ No migration: `activities.source` already allows `fit` ([ADR-0022](../adr/0022-i
 ## 10. What is implemented
 
 - **FIT file import (F1–F8):** the reader, the heart rate in the canonical file, the route, the export naming.
-- **Archive (F9):** `POST /v1/imports/archive`, the limits, the per-file report; the web page follows.
+- **Archive (F9):** `POST /v1/imports/archive`, the limits, the per-file report.
+- **Web:** the import page takes a GPX file, a FIT file or a ZIP archive (the kind from the name of the file); the sport is required only for GPX; an archive shows its totals and one line per file with the reason of each refusal.
+- **Not verified:** nothing of this has read a file from a real device or a real platform export (matrix rows S35 and S36), and the page was never opened in a browser.
