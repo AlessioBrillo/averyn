@@ -207,6 +207,13 @@ jobs:
           [ "$(call -X POST -H 'Content-Type: application/gpx+xml' --data-binary @tests/gps-fixtures/straight-line-1km/track.gpx "$api/v1/imports/gpx?sport=RUN")" = 201 ] || fail "import"
           [ "$(call "$api/v1/activities")" = 200 ] || fail "list"
           grep -q '"RUN"' /tmp/out || fail "the imported activity is not in the list"
+          # The restore drill (ADR-0027): back up, wipe every volume, restore, and the same token still reads the data.
+          (cd infrastructure/compose && COMPOSE='docker compose --env-file .env' sh backup.sh "$RUNNER_TEMP/backup") || fail "backup"
+          $COMPOSE down -v
+          (cd infrastructure/compose && COMPOSE='docker compose --env-file .env' sh restore.sh "$RUNNER_TEMP/backup") || fail "restore"
+          for i in $(seq 1 30); do curl -fsS "$api/ready" >/dev/null 2>&1 && break; sleep 5; done
+          [ "$(call "$api/v1/activities")" = 200 ] || fail "list after the restore"
+          grep -q '"RUN"' /tmp/out || fail "the imported activity is gone after the restore"
           [ "$(curl -sS -o /tmp/export.zip -w '%{http_code}' -H "Authorization: Bearer $token" "$api/v1/me/export")" = 200 ] || fail "export"
           unzip -l /tmp/export.zip | grep -q 'original/' || fail "the export has no original file"
           [ "$(call -X DELETE "$api/v1/me")" = 204 ] || fail "delete"

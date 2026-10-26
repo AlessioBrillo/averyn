@@ -6,6 +6,8 @@
 
 ## Steps
 
+The script `infrastructure/compose/restore.sh <backup directory>` runs steps 1 to 5 (from `infrastructure/compose`); step 6, the repeated deletions, is always yours.
+
 1. Put the configuration back: `cp "$B/.env" .`, and `cp "$B/seaweedfs-s3.local.json" .` if the backup has it.
 2. Create the containers and empty volumes without starting anything: `dc up --no-start`.
 3. Restore the volumes except the database:
