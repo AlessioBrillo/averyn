@@ -52,6 +52,13 @@ enum class RecordLossReason {
 
     /** The line didn't start with a recognized record-type tag. */
     UNKNOWN_RECORD_TYPE,
+
+    /**
+     * The line is well-formed JSON but breaks the model (a latitude of 123, a heart rate of 500): it is not a
+     * cut line and it is not a record that can be used. A recorder never writes one, so a file that has one was
+     * damaged or written by hand: the server refuses such an upload (#80).
+     */
+    INVALID_VALUE,
 }
 
 sealed interface ActivityRecord {
@@ -270,7 +277,15 @@ class ActivityStore(
                 else -> DecodeResult.Loss(RecordLossReason.UNKNOWN_RECORD_TYPE)
             }
         } catch (e: SerializationException) {
-            DecodeResult.Loss(RecordLossReason.TRUNCATED_RECORD)
+            // kotlinx.serialization 1.12 reports a value that breaks the model (`require` in a constructor) as a
+            // SerializationException whose cause is the plain IllegalArgumentException; a missing field or a wrong
+            // type has no such cause. Telling them apart by the cause keeps one answer across versions.
+            val cause = e.cause
+            val brokenModel = cause is IllegalArgumentException && cause !is SerializationException
+            DecodeResult.Loss(if (brokenModel) RecordLossReason.INVALID_VALUE else RecordLossReason.TRUNCATED_RECORD)
+        } catch (e: IllegalArgumentException) {
+            // kotlinx.serialization 1.11 lets that IllegalArgumentException through as it is.
+            DecodeResult.Loss(RecordLossReason.INVALID_VALUE)
         }
 
     fun list(): List<ActivityMetadata> =

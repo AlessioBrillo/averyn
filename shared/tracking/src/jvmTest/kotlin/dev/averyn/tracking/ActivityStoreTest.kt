@@ -91,6 +91,30 @@ class ActivityStoreTest {
     }
 
     @Test
+    fun aCompleteLineThatBreaksTheModelIsAnInvalidValueNotATruncatedLine() {
+        store.create(ActivityMetadata("a1", Sport.RUN, 0))
+        store.appendSample("a1", sample(0))
+        val path = Path(dir.toString(), "a1.jsonl")
+        SystemFileSystem.sink(path, append = true).buffered().use {
+            // Complete JSON, newline included: a latitude of 123 and a heart rate of 500 are not places or beats.
+            it.writeString(
+                "SAMPLE {\"timeMs\":2,\"elapsedRealtimeMs\":2,\"latitude\":123.0,\"longitude\":0.0," +
+                    "\"horizontalAccuracyM\":5.0}\n",
+            )
+            it.writeString("HR {\"timeMs\":3,\"elapsedRealtimeMs\":3,\"bpm\":500}\n")
+        }
+
+        val records = mutableListOf<ActivityRecord>()
+        val losses = mutableListOf<RecordLossReason>()
+        store.forEachRecord("a1", onLoss = { losses += it }) { records += it }
+
+        // Whatever the serialization library throws for a value that breaks the model, the answer is the same:
+        // counted, with its own reason, and the good records around it are still read.
+        assertEquals(1, records.size)
+        assertEquals(listOf(RecordLossReason.INVALID_VALUE, RecordLossReason.INVALID_VALUE), losses)
+    }
+
+    @Test
     fun interruptedFindsActivitiesLeftRecordingOrPausedOrStopping() {
         store.create(ActivityMetadata("recording", Sport.RUN, 0))
         store.appendEvent("recording", StateEvent(0, 0, ActivityState.RECORDING, Reason.GPS_READY))

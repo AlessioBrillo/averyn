@@ -14,6 +14,7 @@ import dev.averyn.sensors.HeartRateMetrics
 import dev.averyn.sensors.HeartRateSample
 import dev.averyn.tracking.ActivityMetadata
 import dev.averyn.tracking.ActivityStore
+import dev.averyn.tracking.RecordLossReason
 import dev.averyn.tracking.ReplayResult
 import dev.averyn.tracking.SUPPORTED_FORMAT_VERSIONS
 import dev.averyn.tracking.replay
@@ -178,6 +179,11 @@ class ActivityIngest(
                 )
         } catch (e: RuntimeException) {
             // A line that parses but violates the model (e.g. latitude out of range) is an invalid upload.
+            return IngestResult.Invalid("unreadable activity file")
+        }
+        // A line that is complete JSON but breaks the model is not a cut line (those are counted and the upload is
+        // kept): the file was damaged or written by hand, and it is refused (#80).
+        if ((replayed.recordLosses[RecordLossReason.INVALID_VALUE] ?: 0) > 0) {
             return IngestResult.Invalid("unreadable activity file")
         }
         if (replayed.lastState != ActivityState.COMPLETED && replayed.lastState != ActivityState.FAILED) {
