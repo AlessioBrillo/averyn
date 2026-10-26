@@ -6,10 +6,6 @@ updates:
     groups:
       gradle-minor-patch:
         update-types: [minor, patch]
-    ignore:
-      # 1.12 no longer fails an upload whose sample breaks the model: https://github.com/AlessioBrillo/averyn/issues/80
-      - dependency-name: "org.jetbrains.kotlinx:kotlinx-serialization-*"
-        versions: ["1.12.x"]
     commit-message: { prefix: "chore(deps)" }
   - package-ecosystem: npm
     directory: /apps/web
