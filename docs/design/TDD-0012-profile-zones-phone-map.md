@@ -1,7 +1,7 @@
 # TDD-0012: Profile, heart-rate zones and the map on the phone
 
-- **Status:** draft
-- **Version:** 0.1
+- **Status:** implemented
+- **Version:** 0.2
 - **Author:** @AlessioBrillo
 - **Date:** 2026-10-25
 - **Related:** [TDD-0009](TDD-0009-activity-analysis.md), [TDD-0011](TDD-0011-mobile-read-path.md), [ADR-0023](../adr/0023-activity-analysis-storage.md), [ADR-0025](../adr/0025-device-side-cache-of-server-activities.md), [ADR-0027](../adr/0027-managed-cloud-baseline.md), [heart rate](../metrics/heart-rate.md), [launch checklist](../product/mvp-launch.md), issue #57
@@ -113,3 +113,4 @@ V12 adds a table; nothing existing changes. The analysis schema bump (5.2) makes
 - **Map, shared part:** `trackMapOf` and the track in the detail snapshot (this is what both phones will draw).
 - **Map on Android:** `TrackMapView` (MapLibre Native 13.7.1) in the detail, the `mapStyleUrl` remembered with the other values of the server configuration, gestures off so the map does not trap the scrolling, a plain-background fallback when the style cannot be loaded; matrix row S34. iOS follows.
 - **Map on iOS:** `TrackMapView` (MapLibre Native through the `MapLibre` Swift package, stable tags from 6.31.0) with the same behaviour: one line per recording interval, camera fitted, gestures off, plain-background fallback when the style cannot be loaded; the same row S34.
+- **Not verified:** nothing of this TDD has run on a device (matrix rows S32, S33, S34), and the web pages were never opened in a browser. The zones and the track are covered by unit and integration tests; the Swift code is covered by the iOS build only.

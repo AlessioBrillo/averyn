@@ -32,7 +32,7 @@ Docs live in the repo, are reviewed like code, and are checked in CI (markdownli
 | [0009](design/TDD-0009-activity-analysis.md) | Activity analysis | implemented |
 | [0010](design/TDD-0010-best-efforts.md) | Best efforts and personal records | implemented |
 | [0011](design/TDD-0011-mobile-read-path.md) | The server on the phone: reading, offline copy, local summary | implemented |
-| [0012](design/TDD-0012-profile-zones-phone-map.md) | Profile, heart-rate zones and the map on the phone | draft (profile API implemented) |
+| [0012](design/TDD-0012-profile-zones-phone-map.md) | Profile, heart-rate zones and the map on the phone | implemented |
 
 ## Rules
 
