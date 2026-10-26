@@ -32,7 +32,7 @@ Each increment lists its files and the matrix rows it needs. The schedule is in 
 | 3 ✅ | FIT and archive import (done in code) | `backend/.../imports/`, `apps/web` import page | new rows |
 | 4 | Account, onboarding, i18n, legal pages (account deletion on the phones: done in code, row S37) | app string resources, `apps/web` | new rows |
 | 5 ✅ | HealthKit / Health Connect (write): done in code | `HealthKitExporter.swift`, `HealthConnectExporter.kt`, `WorkoutExport.kt` | S38, S39 |
-| 6 | Synapse feature frame (beta) | `shared/sensors`, both native adapters, `V13__devices.sql` | S29–S31 |
+| 6 🟡 | Synapse feature frame (beta): the parser and the pinned contract are done; adapters, sidecar and server wait for a prototype | `shared/sensors`, both native adapters, `V13__devices.sql` | S29–S31 |
 | 7 | Managed cloud and closed beta | `infrastructure/compose/`, `docs/runbooks/incident.md` | beta feedback |
 | 8 | Compliance and stores | `docs/privacy/dpia.md`, store listings | — |
 
