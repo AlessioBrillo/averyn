@@ -135,6 +135,10 @@ struct ContentView: View {
                     }
                     Text("Quality \(summary.qualityGrade) · \(summary.metricsAlgorithmVersion)")
                 }
+                // The track on a map (TDD-0012): from the copy of the server, so it is there offline too.
+                if let track = detail.track {
+                    ActivityMapSection(track: track, styleURL: AppModel.shared.auth.mapStyleURL)
+                }
                 switch detail.analysisState {
                 case .ready:
                     if let analysis = detail.analysis {
