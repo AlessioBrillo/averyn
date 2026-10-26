@@ -34,7 +34,7 @@ Out of MVP-L: TCX, reading from HealthKit / Health Connect, the Synapse inferenc
 ### What is done
 
 - **MVP-1 code:** sync, identity, web list and detail ([TDD-0002](../design/TDD-0002-activity-sync.md), [TDD-0003](../design/TDD-0003-web-activity-view.md)), data deletion and export ([TDD-0004](../design/TDD-0004-data-deletion-and-export.md)), self-host hardening ([TDD-0005](../design/TDD-0005-self-host-hardening.md)), field readiness ([TDD-0006](../design/TDD-0006-field-readiness.md)).
-- **Launch increments:** Inc 0, the realignment (#79); Inc 2, the profile (units, maximum heart rate), the heart-rate zones and the track on the map of the phone, on the web, Android and iOS ([TDD-0012](../design/TDD-0012-profile-zones-phone-map.md)).
+- **Launch increments:** Inc 0, the realignment (#79); Inc 2, the profile (units, maximum heart rate), the heart-rate zones and the track on the map of the phone, on the web, Android and iOS ([TDD-0012](../design/TDD-0012-profile-zones-phone-map.md)); Inc 3, the import of FIT files and of ZIP archives ([TDD-0013](../design/TDD-0013-fit-import.md)).
 - **MVP-2 slices:** heart-rate channel with consent-gated RR ([TDD-0007](../design/TDD-0007-sensor-channels.md), Android and iOS adapters), GPX import ([TDD-0008](../design/TDD-0008-gpx-import.md)), analysis ([TDD-0009](../design/TDD-0009-activity-analysis.md)), personal records ([TDD-0010](../design/TDD-0010-best-efforts.md)), the read path on the phone ([TDD-0011](../design/TDD-0011-mobile-read-path.md)).
 - **Not verified on a device:** all of it. The [device matrix](../testing/device-matrix.md) is empty, so every item above is "code in place", not "done".
 
@@ -45,7 +45,7 @@ Out of MVP-L: TCX, reading from HealthKit / Health Connect, the Synapse inferenc
 | 0 | 1 | Realignment: green iOS build, consent refresh on iOS, CI coverage, docs, ADR-0026 and ADR-0027 |
 | 1 | 1–2 | Tester builds (TestFlight, Play internal) and the start of the campaign |
 | 2 | 2–4 | Profile (units, max HR, zones) and the map on the phone — **done in code**, rows S32–S34 open |
-| 3 | 4–6 | FIT import and archive import |
+| 3 | 4–6 | FIT import and archive import — **done in code**, rows S35 and S36 open |
 | 4 | 6–8 | In-app account deletion, onboarding, IT/EN, legal pages on the web |
 | 5 | 7–9 | HealthKit / Health Connect (write only) |
 | 6 | 9–10 | Synapse feature frame, beta (first to cut) |

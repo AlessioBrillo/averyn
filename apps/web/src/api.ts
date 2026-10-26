@@ -169,6 +169,8 @@ export interface ImportReport {
   points: number | null
   ignoredExtensions: Record<string, number>
   parserVersion: string
+  /** The heart-rate readings imported; null for a duplicate. */
+  heartRateReadings?: number | null
 }
 
 export interface ImportResponse {
@@ -253,14 +255,45 @@ export const getAnalysis = (id: string) =>
  * Imports a GPX file as an activity (TDD-0008). The file is sent as it is; the server parses it, keeps it and
  * computes the numbers. The same file imported twice answers with the activity that already exists.
  */
-export const importGpx = async (file: File, sport: string): Promise<ImportResponse> => {
-  const response = await request(
-    `/v1/imports/gpx?sport=${encodeURIComponent(sport)}`,
-    'POST',
-    file,
-    'application/gpx+xml',
-  )
+/** What a file the user picks is: a track, an activity file of a watch, or an archive of them (TDD-0013). */
+export type ImportKind = 'gpx' | 'fit' | 'zip'
+
+const IMPORT_TYPES: Record<ImportKind, string> = {
+  gpx: 'application/gpx+xml',
+  fit: 'application/vnd.ant.fit',
+  zip: 'application/zip',
+}
+
+/** Uploads a GPX or a FIT file. The sport is required for GPX; a FIT file declares its own, so it is optional. */
+export const importFile = async (file: File, kind: 'gpx' | 'fit', sport: string | null): Promise<ImportResponse> => {
+  const query = sport ? `?sport=${encodeURIComponent(sport)}` : ''
+  const response = await request(`/v1/imports/${kind}${query}`, 'POST', file, IMPORT_TYPES[kind])
   return (await response.json()) as ImportResponse
+}
+
+/** What happened to one file of an archive. */
+export interface ArchiveEntry {
+  name: string
+  status: 'created' | 'duplicate' | 'refused' | 'skipped'
+  activityId: string | null
+  code: string | null
+  message: string | null
+}
+
+export interface ArchiveReport {
+  created: number
+  duplicates: number
+  refused: number
+  skipped: number
+  ignoredFiles: number
+  entries: ArchiveEntry[]
+}
+
+/** Uploads a ZIP archive; `sport` is only for the files that do not say one. */
+export const importArchive = async (file: File, sport: string | null): Promise<ArchiveReport> => {
+  const query = sport ? `?sport=${encodeURIComponent(sport)}` : ''
+  const response = await request(`/v1/imports/archive${query}`, 'POST', file, IMPORT_TYPES.zip)
+  return (await response.json()) as ArchiveReport
 }
 
 export interface ConsentGrant {

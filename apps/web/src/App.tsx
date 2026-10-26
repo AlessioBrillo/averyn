@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useState } from 'react'
 import { Account } from './Account'
 import { ActivityDetail } from './ActivityDetail'
 import { ActivityList } from './ActivityList'
-import { ImportGpx } from './ImportGpx'
+import { ImportFile } from './ImportFile'
 import { Records } from './Records'
 import { getProfile } from './api'
 import type { UserProfile } from './api'
@@ -113,7 +113,7 @@ export function App() {
           ) : path === '/account' ? (
             <Account onUnauthorized={expired} onProfileSaved={applyProfile} />
           ) : path === '/import' ? (
-            <ImportGpx
+            <ImportFile
               onUnauthorized={expired}
               onImported={(id) => navigate(`/activities/${id}`)}
             />
