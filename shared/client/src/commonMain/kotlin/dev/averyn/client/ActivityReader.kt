@@ -50,6 +50,12 @@ interface ActivityReader {
     /** The profile of the account: the unit system and the maximum heart rate (TDD-0012). */
     suspend fun profile(accessToken: String): ApiResult<UserProfile>
 
+    /**
+     * Deletes the account and everything the server holds for it (ADR-0017, TDD-0004). Repeating it is harmless: a
+     * deleted account answers `204` again, which is why a lost answer can be asked again.
+     */
+    suspend fun deleteAccount(accessToken: String): ApiResult<Unit>
+
     /** Replaces the profile; the answer is the profile the server stored. A `422` means it was not valid. */
     suspend fun saveProfile(
         accessToken: String,

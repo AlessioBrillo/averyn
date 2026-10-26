@@ -103,5 +103,9 @@ Backend integration tests (real PostGIS and object store, as TDD-0002): delete t
 | # | Question | Resolution path |
 |---|---|---|
 | Q1 | Export size limits and a switch to asynchronous jobs | measured on real data; additive |
-| Q2 | Export from the mobile apps (they hold the originals) | with the next app slice |
+| Q2 | Export from the mobile apps (they hold the originals) | with the next app slice (the apps export the files they hold; the full account export is on the web) |
 | Q3 | Legal retention and a deletion audit trail for a hosted service | with the DPIA, before a public hosted service |
+
+## 10. What is implemented on the phones (2026-10-26)
+
+Both apps can delete the account (a store requirement for an app that creates accounts): a button in the account section, a last confirmation in which the user types the word, `DELETE /v1/me` through the shared client (repeating it is harmless, so a lost answer can be asked again), then the session ends and the copy of the server on the device is thrown away. The text says what stays: the recordings on the device, and the sign-in at the identity provider. Matrix row S37.

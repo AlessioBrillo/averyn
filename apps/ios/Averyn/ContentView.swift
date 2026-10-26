@@ -320,6 +320,8 @@ private struct AccountSection: View {
     @State private var message: String?
     @State private var compatibility: ClientCompatibility = .ok
     @State private var cacheSize: String = ""
+    @State private var confirmingDelete = false
+    @State private var deleteWord = ""
 
     var body: some View {
         VStack(spacing: 8) {
@@ -359,9 +361,38 @@ private struct AccountSection: View {
                     }
                 }
             }
+            if auth.isSignedIn {
+                Button("Delete my account", role: .destructive) {
+                    deleteWord = ""
+                    confirmingDelete = true
+                }
+            }
             if let message { Text(message) }
             Text(sync.statusText)
             ProfileSection(viewModel: viewModel, isSignedIn: auth.isSignedIn)
+        }
+        // The last confirmation (ADR-0017): the user types the word, so a stray tap cannot delete an account.
+        .alert("Delete your account?", isPresented: $confirmingDelete) {
+            TextField("Type delete to confirm", text: $deleteWord)
+            Button("Delete my account", role: .destructive) {
+                guard deleteWord.trimmingCharacters(in: .whitespaces).lowercased() == "delete" else { return }
+                Task {
+                    if await viewModel.deleteAccount() {
+                        cacheSize = ""
+                        message = "Your account and its data were deleted from the server. The recordings on this "
+                            + "device stay. Your sign-in at the identity provider is not removed."
+                    } else {
+                        message = "Could not delete your account. Try again."
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                "This removes all your activities and their recorded data from the server for good. The recordings "
+                    + "on this device stay. Your sign-in at the identity provider is not removed: close it there if "
+                    + "you want it gone. Export your data first if you want a copy."
+            )
         }
         // Only while the screen is in front: nothing here is worth CPU or battery while a recording runs with the
         // screen locked. The task restarts by itself when the scene becomes active again.

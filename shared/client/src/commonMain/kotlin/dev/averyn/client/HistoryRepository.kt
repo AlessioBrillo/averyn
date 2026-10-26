@@ -320,6 +320,17 @@ class HistoryRepository(
             ProfileSnapshot(profile = stored, units = stored.units)
         }
 
+    /**
+     * Deletes the account on the server. When it is gone the copy of the server on this device goes too; the
+     * recordings on the device are the user's own files and stay. The caller signs out afterwards.
+     */
+    suspend fun deleteAccount(accessToken: String): ApiResult<Unit> =
+        withContext(Dispatchers.Default) {
+            val result = client.deleteAccount(accessToken)
+            if (result.failure == null) cache.clear()
+            result
+        }
+
     /** Throws the copy of the server away (the user asked for it, or the session ended). */
     suspend fun clearCache() =
         withContext(Dispatchers.Default) {

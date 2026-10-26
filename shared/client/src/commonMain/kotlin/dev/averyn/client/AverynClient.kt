@@ -109,6 +109,10 @@ class AverynClient(
     override suspend fun profile(accessToken: String): ApiResult<UserProfile> =
         get(path = "/v1/profile", token = accessToken) { json.decodeFromString(UserProfile.serializer(), it) }
 
+    /** Deletes the account (ADR-0017): idempotent on the server, so a failed call can be repeated. */
+    override suspend fun deleteAccount(accessToken: String): ApiResult<Unit> =
+        get(path = "/v1/me", token = accessToken, method = HttpMethod.Delete) { }
+
     /** Replaces the profile (TDD-0012): the server stores it whole, so repeating the call is harmless. */
     override suspend fun saveProfile(
         accessToken: String,

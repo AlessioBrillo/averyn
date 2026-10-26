@@ -17,6 +17,7 @@ import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** The read path of the server: the answers, the repetitions and the states (TDD-0011). */
@@ -237,6 +238,47 @@ class AverynClientTest {
             // Defaults are sent too: the server replaces the document, an absent field would not be "none".
             assertEquals("""{"units":"metric","maxHrBpm":null}""", sent)
             assertEquals(UserProfile(UnitSystem.METRIC, null), result.value)
+        }
+
+    @Test
+    fun `the account is deleted with a DELETE and a 204 is a success`() =
+        runBlocking {
+            var seen: HttpRequestData? = null
+            val (client, _) =
+                client { request ->
+                    seen = request
+                    respond("", HttpStatusCode.NoContent)
+                }
+
+            val result = client.deleteAccount("token")
+
+            assertNull(result.failure)
+            assertEquals(HttpMethod.Delete, seen?.method)
+            assertEquals("/v1/me", seen?.url?.encodedPath)
+            assertEquals("Bearer token", seen?.headers?.get("Authorization"))
+        }
+
+    @Test
+    fun `a failed deletion is repeated because the server answers 204 again`() =
+        runBlocking {
+            var calls = 0
+            val (client, waits) =
+                client {
+                    calls++
+                    if (calls ==
+                        1
+                    ) {
+                        respond("", HttpStatusCode.ServiceUnavailable)
+                    } else {
+                        respond("", HttpStatusCode.NoContent)
+                    }
+                }
+
+            val result = client.deleteAccount("token")
+
+            assertNull(result.failure)
+            assertEquals(2, calls)
+            assertEquals(1, waits.size)
         }
 
     @Test
