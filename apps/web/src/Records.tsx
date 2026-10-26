@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { ApiError, getRecords } from './api'
 import type { PersonalRecords } from './api'
-import { formatDuration, formatQuality, formatRate, formatTargetDistance } from './format'
+import { formatDuration, formatQuality, formatRate, formatSport, formatTargetDistance } from './format'
+import { t } from './i18n'
 
 /**
  * The personal records of the account (TDD-0010): the fastest effort of every distance of every sport.
@@ -44,10 +45,10 @@ export function Records({
     }
   }, [onUnauthorized])
 
-  if (accountDeleted) return <p role="alert">This account was deleted. Its data is gone from Averyn.</p>
-  if (failed) return <p role="alert">Could not load your records. Try again in a moment.</p>
-  if (loading) return <p>Loading…</p>
-  if (!records) return <p>Loading…</p>
+  if (accountDeleted) return <p role="alert">{t('This account was deleted. Its data is gone from Averyn.')}</p>
+  if (failed) return <p role="alert">{t('Could not load your records. Try again in a moment.')}</p>
+  if (loading) return <p>{t('Loading…')}</p>
+  if (!records) return <p>{t('Loading…')}</p>
 
   return <RecordsView records={records} open={open} />
 }
@@ -63,10 +64,11 @@ export function RecordsView({
   if (records.sports.length === 0) {
     return (
       <>
-        <h2>Records</h2>
+        <h2>{t('Records')}</h2>
         <p>
-          No record yet. A record is the fastest kilometre (or five, or ten) of one of your activities: record
-          something, and it will be here.
+          {t(
+            'No record yet. A record is the fastest kilometre (or five, or ten) of one of your activities: record something, and it will be here.',
+          )}
         </p>
       </>
     )
@@ -74,26 +76,28 @@ export function RecordsView({
 
   return (
     <>
-      <h2>Records</h2>
+      <h2>{t('Records')}</h2>
       {records.pendingActivities > 0 && (
         <p role="status">
-          {records.pendingActivities} of your activities have not been analysed yet: the records below can be
-          incomplete. Open them, or run the backfill of the server, and they will be complete.
+          {t(
+            '{n} of your activities have not been analysed yet: the records below can be incomplete. Open them, or run the backfill of the server, and they will be complete.',
+            { n: records.pendingActivities },
+          )}
         </p>
       )}
       {records.sports.map((sport) => (
         <section key={sport.sport} aria-labelledby={`records-${sport.sport}`}>
-          <h3 id={`records-${sport.sport}`}>{sport.sport.toLowerCase()}</h3>
+          <h3 id={`records-${sport.sport}`}>{formatSport(sport.sport)}</h3>
           <div className="table-scroll">
             <table>
-              <caption className="visually-hidden">The records of {sport.sport.toLowerCase()}</caption>
+              <caption className="visually-hidden">{t('The records of {sport}', { sport: formatSport(sport.sport) })}</caption>
               <thead>
                 <tr>
-                  <th scope="col">Distance</th>
-                  <th scope="col">Time</th>
-                  <th scope="col">{sport.sport === 'RIDE' ? 'Speed' : 'Pace'}</th>
-                  <th scope="col">When</th>
-                  <th scope="col">Activity</th>
+                  <th scope="col">{t('Distance')}</th>
+                  <th scope="col">{t('Time')}</th>
+                  <th scope="col">{sport.sport === 'RIDE' ? t('Speed') : t('Pace')}</th>
+                  <th scope="col">{t('When')}</th>
+                  <th scope="col">{t('Activity')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -123,7 +127,7 @@ export function RecordsView({
                               open(record.activityId)
                             }}
                           >
-                            {record.source === 'device' ? 'recorded' : 'imported'} ·{' '}
+                            {record.source === 'device' ? t('recorded') : t('imported')} ·{' '}
                             {formatQuality(record.qualityGrade)}
                           </a>
                         ) : (
@@ -139,7 +143,9 @@ export function RecordsView({
         </section>
       ))}
       <p className="small">
-        The time of a record is the time the athlete was moving. Algorithms: {records.algorithmVersion}
+        {t('The time of a record is the time the athlete was moving. Algorithms: {version}', {
+          version: records.algorithmVersion,
+        })}
       </p>
     </>
   )

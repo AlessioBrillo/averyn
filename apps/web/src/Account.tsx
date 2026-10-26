@@ -11,7 +11,11 @@ import {
   revokeConsent,
 } from './api'
 import { signOut } from './auth'
+import { t } from './i18n'
 import { MAX_MAX_HR_BPM, MIN_MAX_HR_BPM, parseMaxHr } from './profile'
+
+/** The word the user types to confirm the deletion of the account: the same in every language, like the button. */
+const DELETE_WORD = 'delete'
 
 /** The scope the user can grant here: the one the devices ask for (ADR-0021). */
 const GRANTABLE_SCOPE = 'rr_recording'
@@ -55,7 +59,7 @@ export function Account({
       })
       .catch((e: unknown) => {
         if (e instanceof ApiError && e.status === 401) onUnauthorized()
-        else setFailed('Could not load your profile. Try again.')
+        else setFailed(t('Could not load your profile. Try again.'))
       })
   }, [onUnauthorized])
 
@@ -67,7 +71,7 @@ export function Account({
       })
       .catch((e: unknown) => {
         if (e instanceof ApiError && e.status === 401) onUnauthorized()
-        else setFailed('Could not load your consents. Try again.')
+        else setFailed(t('Could not load your consents. Try again.'))
         setConsentsLoaded(true)
       })
   }, [onUnauthorized])
@@ -80,7 +84,7 @@ export function Account({
           g.scope === scope ? { ...g, revokedAt: new Date().toISOString() } : g,
         ),
       )
-    }, 'Could not revoke that consent. Try again.')
+    }, t('Could not revoke that consent. Try again.'))
 
   const grant = (scope: string) =>
     run(async () => {
@@ -90,7 +94,7 @@ export function Account({
         const others = previous.filter((g) => g.scope !== scope)
         return [...others, { scope, grantedAt: now, revokedAt: null }]
       })
-    }, 'Could not grant that consent. Try again.')
+    }, t('Could not grant that consent. Try again.'))
 
   const parsedMaxHr = parseMaxHr(maxHr)
 
@@ -100,7 +104,7 @@ export function Account({
       const saved = await putProfile({ units, maxHrBpm: parsedMaxHr.value })
       setProfileSaved(true)
       onProfileSaved(saved)
-    }, 'Could not save your profile. Try again.')
+    }, t('Could not save your profile. Try again.'))
   }
 
   const download = () =>
@@ -111,25 +115,26 @@ export function Account({
       link.download = 'averyn-export.zip'
       link.click()
       setTimeout(() => URL.revokeObjectURL(url), 60_000) // not at once: some browsers start the save asynchronously
-    }, 'Could not download your data. Try again.')
+    }, t('Could not download your data. Try again.'))
 
   const remove = () =>
     run(async () => {
       await deleteAccount()
       await signOut()
-    }, 'Could not delete your account. Try again.')
+    }, t('Could not delete your account. Try again.'))
 
   return (
     <>
-      <h2>Your data</h2>
+      <h2>{t('Your data')}</h2>
       <section>
-        <h3>Profile</h3>
+        <h3>{t('Profile')}</h3>
         <p>
-          The unit system is used for every distance, pace and elevation. Your maximum heart rate is kept with your
-          account, deleted with it and included in your download.
+          {t(
+            'The unit system is used for every distance, pace and elevation. Your maximum heart rate is kept with your account, deleted with it and included in your download.',
+          )}
         </p>
         <label>
-          Units{' '}
+          {t('Units')}{' '}
           <select
             value={units}
             onChange={(e) => {
@@ -138,12 +143,12 @@ export function Account({
             }}
             disabled={busy || !profileLoaded}
           >
-            <option value="metric">Metric (km, m)</option>
-            <option value="imperial">Imperial (mi, ft)</option>
+            <option value="metric">{t('Metric (km, m)')}</option>
+            <option value="imperial">{t('Imperial (mi, ft)')}</option>
           </select>
         </label>{' '}
         <label>
-          Maximum heart rate (bpm){' '}
+          {t('Maximum heart rate (bpm)')}{' '}
           <input
             inputMode="numeric"
             value={maxHr}
@@ -157,57 +162,61 @@ export function Account({
           />
         </label>{' '}
         <button onClick={saveProfile} disabled={busy || !profileLoaded || !parsedMaxHr.ok}>
-          Save profile
+          {t('Save profile')}
         </button>
         {!parsedMaxHr.ok && (
           <p role="alert">
-            The maximum heart rate must be a whole number from {MIN_MAX_HR_BPM} to {MAX_MAX_HR_BPM}, or empty.
+            {t('The maximum heart rate must be a whole number from {min} to {max}, or empty.', {
+              min: MIN_MAX_HR_BPM,
+              max: MAX_MAX_HR_BPM,
+            })}
           </p>
         )}
-        {profileSaved && <p role="status">Saved.</p>}
+        {profileSaved && <p role="status">{t('Saved.')}</p>}
       </section>
       <section>
-        <h3>Download</h3>
-        <p>Every recording as it was captured, a GPX file for each, and a summary list, in one ZIP.</p>
+        <h3>{t('Download')}</h3>
+        <p>{t('Every recording as it was captured, a GPX file for each, and a summary list, in one ZIP.')}</p>
         <button onClick={download} disabled={busy}>
-          Download my data
+          {t('Download my data')}
         </button>
       </section>
       <section>
-        <h3>Delete account</h3>
+        <h3>{t('Delete account')}</h3>
         <p>
-          Removes all your activities and their recorded data from Averyn for good. Your sign-in at the identity
-          provider is not removed: close it there if you want it gone. Download your data first.
+          {t(
+            'Removes all your activities and their recorded data from Averyn for good. Your sign-in at the identity provider is not removed: close it there if you want it gone. Download your data first.',
+          )}
         </p>
         <label>
-          Type <strong>delete</strong> to confirm{' '}
+          {t('Type {word} to confirm', { word: DELETE_WORD })}{' '}
           <input value={confirmation} onChange={(e) => setConfirmation(e.target.value)} disabled={busy} />
         </label>{' '}
-        <button onClick={remove} disabled={busy || confirmation.trim().toLowerCase() !== 'delete'}>
-          Delete my account
+        <button onClick={remove} disabled={busy || confirmation.trim().toLowerCase() !== DELETE_WORD}>
+          {t('Delete my account')}
         </button>
       </section>
       <section>
-        <h3>Sensor data consent</h3>
+        <h3>{t('Sensor data consent')}</h3>
         <p>
-          Some sensors (for example a heart-rate strap) can record raw beat-to-beat intervals. That is health
-          data: Averyn only stores it while you consent, per scope, and you can withdraw that consent at any
-          time. Withdrawing stops new recordings immediately and deletes the intervals already uploaded.
+          {t(
+            'Some sensors (for example a heart-rate strap) can record raw beat-to-beat intervals. That is health data: Averyn only stores it while you consent, per scope, and you can withdraw that consent at any time. Withdrawing stops new recordings immediately and deletes the intervals already uploaded.',
+          )}
         </p>
         {consentsLoaded ? (
           <table>
             <thead>
               <tr>
-                <th>Scope</th>
-                <th>Granted</th>
-                <th>Revoked</th>
+                <th>{t('Scope')}</th>
+                <th>{t('Granted')}</th>
+                <th>{t('Revoked')}</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {consents.length === 0 && (
                 <tr>
-                  <td colSpan={4}>No consent grants yet.</td>
+                  <td colSpan={4}>{t('No consent grants yet.')}</td>
                 </tr>
               )}
               {consents.map((g) => (
@@ -218,10 +227,10 @@ export function Account({
                   <td>
                     {g.revokedAt == null ? (
                       <button onClick={() => revoke(g.scope)} disabled={busy}>
-                        Revoke
+                        {t('Revoke')}
                       </button>
                     ) : (
-                      <span role="status">Revoked</span>
+                      <span role="status">{t('Revoked')}</span>
                     )}
                   </td>
                 </tr>
@@ -233,7 +242,7 @@ export function Account({
                   <td>—</td>
                   <td>
                     <button onClick={() => grant(GRANTABLE_SCOPE)} disabled={busy}>
-                      Grant
+                      {t('Grant')}
                     </button>
                   </td>
                 </tr>
@@ -241,7 +250,7 @@ export function Account({
             </tbody>
           </table>
         ) : (
-          <p>Loading…</p>
+          <p>{t('Loading…')}</p>
         )}
       </section>
       {failed && <p role="alert">{failed}</p>}

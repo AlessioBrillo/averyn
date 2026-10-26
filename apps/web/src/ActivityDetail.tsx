@@ -3,7 +3,8 @@ import type { GeoJSONSourceSpecification, Map as MapLibreMap } from 'maplibre-gl
 import { Analysis } from './Analysis'
 import { ApiError, deleteActivity, getActivity, getAnalysis, getTrack } from './api'
 import type { ActivityAnalysis, ActivitySummary, Track } from './api'
-import { formatDistance, formatDuration, formatQuality, formatRate } from './format'
+import { formatDistance, formatDuration, formatQuality, formatRate, formatSport } from './format'
+import { t } from './i18n'
 
 type Loaded = { activity: ActivitySummary; track: Track }
 
@@ -135,7 +136,7 @@ export function ActivityDetail({
   }, [loaded, line, mapStyleUrl])
 
   function remove() {
-    if (!window.confirm('Delete this activity and its recorded data for good? This cannot be undone.')) return
+    if (!window.confirm(t('Delete this activity and its recorded data for good? This cannot be undone.'))) return
     setDeleteFailed(false)
     deleteActivity(id).then(onDeleted, (e: unknown) => {
       if (e instanceof ApiError && e.status === 401) onUnauthorized()
@@ -143,38 +144,47 @@ export function ActivityDetail({
     })
   }
 
-  if (error === 'notFound') return <p role="alert">Activity not found.</p>
-  if (error) return <p role="alert">Could not load this activity.</p>
-  if (!loaded) return <p>Loading…</p>
+  if (error === 'notFound') return <p role="alert">{t('Activity not found.')}</p>
+  if (error) return <p role="alert">{t('Could not load this activity.')}</p>
+  if (!loaded) return <p>{t('Loading…')}</p>
 
   const { activity } = loaded
   const rate = formatRate(activity.sport, activity)
   const metrics: [string, string][] = [
-    ['Distance', formatDistance(activity.distanceM)],
-    ['Moving time', formatDuration(activity.movingMs)],
-    ['Elapsed time', formatDuration(activity.elapsedMs)],
-    ['Paused', formatDuration(activity.pausedMs)],
-    ['Stationary', formatDuration(activity.stationaryMs)],
+    [t('Distance'), formatDistance(activity.distanceM)],
+    [t('Moving time'), formatDuration(activity.movingMs)],
+    [t('Elapsed time'), formatDuration(activity.elapsedMs)],
+    [t('Paused'), formatDuration(activity.pausedMs)],
+    [t('Stationary'), formatDuration(activity.stationaryMs)],
     [rate.label, rate.value],
-    ['GPS quality', formatQuality(activity.qualityGrade)],
-    ['Unreadable records', String(activity.droppedRecords)],
+    [t('GPS quality'), formatQuality(activity.qualityGrade)],
+    [t('Unreadable records'), String(activity.droppedRecords)],
     ...(activity.avgHrBpm > 0
-      ? [['Heart rate', `${activity.avgHrBpm} bpm avg · ${activity.maxHrBpm} bpm max`] as [string, string]]
-      : [] as [string, string][]),
+      ? [
+          [
+            t('Heart rate'),
+            t('{avg} bpm avg · {max} bpm max', { avg: activity.avgHrBpm, max: activity.maxHrBpm }),
+          ] as [string, string],
+        ]
+      : ([] as [string, string][])),
   ]
 
   return (
     <>
       <h2>
-        {new Date(activity.startedAt).toLocaleString()} · {activity.sport.toLowerCase()}
+        {new Date(activity.startedAt).toLocaleString()} · {formatSport(activity.sport)}
       </h2>
       {activity.source !== 'device' && (
-        <p role="status">Imported from a {activity.source.toUpperCase()} file. The file is kept as it was uploaded.</p>
+        <p role="status">
+          {t('Imported from a {kind} file. The file is kept as it was uploaded.', {
+            kind: activity.source.toUpperCase(),
+          })}
+        </p>
       )}
       {activity.finalState === 'FAILED' && (
-        <p role="status">Recording ended unexpectedly; this is what was captured before it stopped.</p>
+        <p role="status">{t('Recording ended unexpectedly; this is what was captured before it stopped.')}</p>
       )}
-      {line ? <div ref={mapElement} className="map" /> : <p>No track: fewer than two usable GPS points.</p>}
+      {line ? <div ref={mapElement} className="map" /> : <p>{t('No track: fewer than two usable GPS points.')}</p>}
       <dl className="metrics">
         {metrics.map(([label, value]) => (
           <div key={label}>
@@ -186,18 +196,20 @@ export function ActivityDetail({
       {analysis && <Analysis analysis={analysis} sport={activity.sport} />}
       {analysisError === 'busy' && (
         <p role="status">
-          The server is busy: the analysis of this activity is being prepared. Reload in a moment.
+          {t('The server is busy: the analysis of this activity is being prepared. Reload in a moment.')}
         </p>
       )}
       {analysisError === 'unavailable' && (
-        <p role="status">The analysis of this activity is not available. The numbers above are still there.</p>
+        <p role="status">{t('The analysis of this activity is not available. The numbers above are still there.')}</p>
       )}
       <p className="small">
-        Algorithms: {activity.metricsAlgorithmVersion}, {activity.qualityAlgorithmVersion}
+        {t('Algorithms: {versions}', {
+          versions: `${activity.metricsAlgorithmVersion}, ${activity.qualityAlgorithmVersion}`,
+        })}
       </p>
-      {deleteFailed && <p role="alert">Could not delete this activity. Try again.</p>}
+      {deleteFailed && <p role="alert">{t('Could not delete this activity. Try again.')}</p>}
       <p>
-        <button onClick={remove}>Delete activity</button>
+        <button onClick={remove}>{t('Delete activity')}</button>
       </p>
     </>
   )
