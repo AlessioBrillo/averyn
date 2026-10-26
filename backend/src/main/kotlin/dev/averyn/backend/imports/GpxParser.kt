@@ -9,57 +9,6 @@ import javax.xml.stream.XMLStreamException
 import javax.xml.stream.XMLStreamReader
 
 /**
- * Limits of one import (TDD-0008 §5.2). A 10-hour activity at 1 Hz is about 36 000 points; the limits leave
- * room for denser traces and stop a file that would cost the server minutes of CPU and memory.
- */
-const val MAX_IMPORT_POINTS = 200_000
-
-/** One `<trkseg>` per pause; a file with more segments than this is not a track. */
-const val MAX_IMPORT_SEGMENTS = 10_000
-
-const val MAX_IMPORT_TRACKS = 1_000
-
-/** One point of an imported track. */
-data class GpxPoint(
-    /** Wall-clock UTC epoch millis, parsed from the `<time>` element. */
-    val timeMs: Long,
-    val latitude: Double,
-    val longitude: Double,
-    /** Metres, from the optional `<ele>` element. */
-    val altitudeM: Double?,
-)
-
-/**
- * The track of an imported file: its points grouped in segments (one per `<trkseg>`), plus the extensions that
- * were found and not imported. A segment is a continuous recording interval: the boundary between two of them
- * is a pause, not a straight line through the gap.
- */
-data class GpxTrack(
-    val segments: List<List<GpxPoint>>,
-    val ignoredExtensions: Map<String, Int>,
-) {
-    val pointCount: Int = segments.sumOf { it.size }
-    val startedAtMs: Long = segments.first().first().timeMs
-    val lastTimeMs: Long = segments.last().last().timeMs
-}
-
-/** What the parser found, or why the file cannot be imported. */
-sealed interface GpxParseResult {
-    data class Parsed(
-        val track: GpxTrack,
-    ) : GpxParseResult
-
-    /**
-     * The file is not a track this importer can read. [code] is stable (the web app maps it to a message),
-     * [message] never carries a coordinate: an import error must not leak the user's track into a log.
-     */
-    data class Invalid(
-        val code: String,
-        val message: String,
-    ) : GpxParseResult
-}
-
-/**
  * Reads a GPX 1.0/1.1 file into points and segments (TDD-0008 §5.2).
  *
  * The parser is strict about the things it cannot invent: a point without a time, a coordinate out of range or
@@ -71,10 +20,10 @@ class GpxParser(
     private val maxSegments: Int = MAX_IMPORT_SEGMENTS,
     private val maxTracks: Int = MAX_IMPORT_TRACKS,
 ) {
-    fun parse(input: InputStream): GpxParseResult {
-        val segments = mutableListOf<List<GpxPoint>>()
+    fun parse(input: InputStream): ImportParseResult {
+        val segments = mutableListOf<List<ImportedPoint>>()
         val ignored = mutableMapOf<String, Int>()
-        var current: MutableList<GpxPoint>? = null
+        var current: MutableList<ImportedPoint>? = null
         var inTrack = false
         var inExtensions = false
         var trackCount = 0
@@ -91,7 +40,7 @@ class GpxParser(
             try {
                 secureReader(input)
             } catch (e: XMLStreamException) {
-                return GpxParseResult.Invalid("xml_error", "the file is not readable XML")
+                return ImportParseResult.Invalid("xml_error", "the file is not readable XML")
             }
 
         try {
@@ -104,19 +53,19 @@ class GpxParser(
                             "trk" -> {
                                 trackCount++
                                 if (trackCount > maxTracks) {
-                                    return GpxParseResult.Invalid("too_many_tracks", "the file has too many tracks")
+                                    return ImportParseResult.Invalid("too_many_tracks", "the file has too many tracks")
                                 }
                                 inTrack = true
                             }
                             "trkseg" -> {
                                 if (!inTrack) {
-                                    return GpxParseResult.Invalid(
+                                    return ImportParseResult.Invalid(
                                         "trkseg_outside_track",
                                         "a track segment is not inside a track",
                                     )
                                 }
                                 if (current != null) {
-                                    return GpxParseResult.Invalid(
+                                    return ImportParseResult.Invalid(
                                         "nested_trkseg",
                                         "a track segment is nested in another one",
                                     )
@@ -125,7 +74,7 @@ class GpxParser(
                             }
                             "trkpt" -> {
                                 if (current == null) {
-                                    return GpxParseResult.Invalid(
+                                    return ImportParseResult.Invalid(
                                         "trkpt_outside_segment",
                                         "a track point is not inside a track segment",
                                     )
@@ -133,19 +82,19 @@ class GpxParser(
                                 val latitude = reader.getAttributeValue(null, "lat")?.toDoubleOrNull()
                                 val longitude = reader.getAttributeValue(null, "lon")?.toDoubleOrNull()
                                 if (latitude == null || longitude == null) {
-                                    return GpxParseResult.Invalid(
+                                    return ImportParseResult.Invalid(
                                         "invalid_coordinate",
                                         "a track point has no usable coordinates",
                                     )
                                 }
                                 if (!latitude.isFinite() || latitude !in -90.0..90.0) {
-                                    return GpxParseResult.Invalid(
+                                    return ImportParseResult.Invalid(
                                         "invalid_coordinate",
                                         "a track point is not on the globe",
                                     )
                                 }
                                 if (!longitude.isFinite() || longitude !in -180.0..180.0) {
-                                    return GpxParseResult.Invalid(
+                                    return ImportParseResult.Invalid(
                                         "invalid_coordinate",
                                         "a track point is not on the globe",
                                     )
@@ -169,7 +118,7 @@ class GpxParser(
                             "trkpt" -> {
                                 val currentPoint =
                                     point
-                                        ?: return GpxParseResult.Invalid(
+                                        ?: return ImportParseResult.Invalid(
                                             "invalid_point",
                                             "a track point could not be read",
                                         )
@@ -178,7 +127,7 @@ class GpxParser(
                                 capture = null
                                 val timeMs =
                                     parseTime(currentPoint.timeText)
-                                        ?: return GpxParseResult.Invalid(
+                                        ?: return ImportParseResult.Invalid(
                                             "invalid_time",
                                             "a track point has no usable time (ISO-8601 with a timezone offset)",
                                         )
@@ -186,7 +135,7 @@ class GpxParser(
                                     currentPoint.elevationText?.let { text ->
                                         val value = text.toDoubleOrNull()
                                         if (value == null || !value.isFinite()) {
-                                            return GpxParseResult.Invalid(
+                                            return ImportParseResult.Invalid(
                                                 "invalid_elevation",
                                                 "a track point has an unreadable elevation",
                                             )
@@ -195,19 +144,21 @@ class GpxParser(
                                     }
                                 pointCount++
                                 if (pointCount > maxPoints) {
-                                    return GpxParseResult.Invalid(
+                                    return ImportParseResult.Invalid(
                                         "too_many_points",
                                         "the file has too many track points",
                                     )
                                 }
-                                current?.add(GpxPoint(timeMs, currentPoint.latitude, currentPoint.longitude, elevation))
+                                current?.add(
+                                    ImportedPoint(timeMs, currentPoint.latitude, currentPoint.longitude, elevation),
+                                )
                             }
                             "trkseg" -> {
                                 val segment = current
                                 current = null
                                 if (segment != null && segment.isNotEmpty()) {
                                     if (segments.size >= maxSegments) {
-                                        return GpxParseResult.Invalid(
+                                        return ImportParseResult.Invalid(
                                             "too_many_segments",
                                             "the file has too many track segments",
                                         )
@@ -215,7 +166,7 @@ class GpxParser(
                                     val previous = segments.lastOrNull()?.lastOrNull()
                                     val first = segment.first()
                                     if (previous != null && first.timeMs < previous.timeMs) {
-                                        return GpxParseResult.Invalid(
+                                        return ImportParseResult.Invalid(
                                             "non_monotonic_segments",
                                             "a track segment starts before the previous one ends",
                                         )
@@ -246,15 +197,15 @@ class GpxParser(
             }
         } catch (e: XMLStreamException) {
             // A DOCTYPE, an unparsable entity or a truncated file: never the reason, never the content.
-            return GpxParseResult.Invalid("xml_error", "the file is not readable XML")
+            return ImportParseResult.Invalid("xml_error", "the file is not readable XML")
         } finally {
             runCatching { reader.close() }
         }
 
         if (segments.isEmpty()) {
-            return GpxParseResult.Invalid("no_track", "the file has no track points")
+            return ImportParseResult.Invalid("no_track", "the file has no track points")
         }
-        return GpxParseResult.Parsed(GpxTrack(segments, ignored))
+        return ImportParseResult.Parsed(ImportedTrack(segments, ignored))
     }
 
     private enum class Capture { ELEVATION, TIME }

@@ -230,7 +230,8 @@ class UserData(
 
                     // The file the activity was imported from, byte-for-byte: what the user gave us.
                     keys.second?.let { sourceKey ->
-                        zip.putNextEntry(ZipEntry("original/$id.gpx"))
+                        // The extension is the format the user gave us: `.gpx` or `.fit` (the source of the activity).
+                        zip.putNextEntry(ZipEntry("original/$id.${summary.source}"))
                         zip.write(raw.get(sourceKey))
                         zip.closeEntry()
                     }

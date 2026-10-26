@@ -5,6 +5,7 @@ import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Reason
 import dev.averyn.domain.Sport
 import dev.averyn.domain.StateEvent
+import dev.averyn.sensors.HeartRateSample
 import dev.averyn.tracking.ActivityMetadata
 import dev.averyn.tracking.ActivityRecord
 import dev.averyn.tracking.IMPORT_FORMAT_VERSION
@@ -15,13 +16,17 @@ import dev.averyn.tracking.IMPORT_FORMAT_VERSION
  * The canonical file is the same format the recorder writes, so the same replay computes the same metrics: a
  * `<trkseg>` boundary becomes a pause, the samples carry no accuracy (a GPX track has none) and the whole
  * activity is `COMPLETED`, because an imported file is a finished recording by definition.
+ *
+ * The heart rate a file carries (a FIT file does) is written as `HR` records in time order, between the samples:
+ * the ones that fall in a pause are written in the pause, where the replay keeps them out of the metric, like
+ * the samples a strap sends while the user has paused.
  */
-object GpxCanonicalizer {
+object TrackCanonicalizer {
     /** The metadata of the imported activity: it starts at its first point and is format version 3. */
     fun metadata(
         activityId: String,
         sport: Sport,
-        track: GpxTrack,
+        track: ImportedTrack,
     ): ActivityMetadata =
         ActivityMetadata(
             activityId = activityId,
@@ -31,10 +36,26 @@ object GpxCanonicalizer {
         )
 
     /** Every record of the canonical file, in order. */
-    fun records(track: GpxTrack): List<ActivityRecord> {
+    fun records(track: ImportedTrack): List<ActivityRecord> {
         val startedAtMs = track.startedAtMs
         val records = mutableListOf<ActivityRecord>()
         var previousSegmentEndMs: Long? = null
+        var nextHeartRate = 0
+
+        /** Writes the heart-rate readings up to [untilMs], inclusive. */
+        fun writeHeartRateUntil(untilMs: Long) {
+            while (nextHeartRate < track.heartRates.size && track.heartRates[nextHeartRate].timeMs <= untilMs) {
+                val reading = track.heartRates[nextHeartRate++]
+                records +=
+                    ActivityRecord.HeartRate(
+                        HeartRateSample(
+                            timeMs = reading.timeMs,
+                            elapsedRealtimeMs = reading.timeMs - startedAtMs,
+                            bpm = reading.bpm,
+                        ),
+                    )
+            }
+        }
 
         for (segment in track.segments) {
             val first = segment.first()
@@ -46,6 +67,8 @@ object GpxCanonicalizer {
                 // The boundary between two segments is a pause: the gap is time the user was not recording, so
                 // it is not a straight line through the track and it is not distance.
                 records += event(previousSegmentEndMs - startedAtMs, previousSegmentEndMs, ActivityState.PAUSED)
+                // What the sensor read during the pause is written in the pause.
+                writeHeartRateUntil(first.timeMs - 1)
                 records += event(first.timeMs - startedAtMs, first.timeMs, ActivityState.RECORDING)
             }
             for (point in segment) {
@@ -61,11 +84,13 @@ object GpxCanonicalizer {
                             altitudeM = point.altitudeM,
                         ),
                     )
+                writeHeartRateUntil(point.timeMs)
             }
             previousSegmentEndMs = segment.last().timeMs
         }
 
         val lastTimeMs = track.lastTimeMs
+        writeHeartRateUntil(lastTimeMs)
         records += event(lastTimeMs - startedAtMs, lastTimeMs, ActivityState.STOPPING)
         records += event(lastTimeMs - startedAtMs, lastTimeMs, ActivityState.COMPLETED)
         return records
