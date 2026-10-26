@@ -55,9 +55,9 @@ The file model is the one of GPX: `ImportedTrack` (the types were renamed from `
 
 `ImportService` takes the format (`ImportFormat.GPX | FIT`): the parser, the source stored with the activity and the version of the reader (`fit-import-v1`) follow from it. Everything after the parse — the quota, the objects, the row, the replay, the analysis — is the code of GPX. The export names the original by its source (`original/<id>.fit`); it used to say `.gpx` for everything.
 
-### 5.3 The archive (second pull request)
+### 5.3 The archive
 
-An archive is a ZIP of activity files, in the shape the platforms export. The endpoint reads the entries one at a time, imports each through the same service and answers a report. The limits are the guard against a ZIP bomb: at most 100 entries and 256 MB after decompression per request; a bigger archive is imported in several requests (a background job is the upgrade if this proves too small).
+An archive is a ZIP of activity files, in the shape the platforms export. The endpoint reads the entries one at a time, imports each through the same service and answers a report. The limits are the guard against a ZIP bomb: at most 100 entries and 256 MB after decompression per request; a bigger archive is imported in several requests (a background job is the upgrade if this proves too small). The entries are sorted by name, so the same archive always gives the same report; a file inside that cannot be imported is a line of the report and does not stop the others; when the storage quota is reached the rest is reported as skipped. The report also counts the files that are not activity files (notes, photos, the `__MACOSX` folder): nothing is dropped without being counted.
 
 ## 6. Test strategy
 
@@ -89,4 +89,5 @@ No migration: `activities.source` already allows `fit` ([ADR-0022](../adr/0022-i
 
 ## 10. What is implemented
 
-- **FIT file import (F1–F8):** the reader, the heart rate in the canonical file, the route, the export naming; the web page and the archive follow.
+- **FIT file import (F1–F8):** the reader, the heart rate in the canonical file, the route, the export naming.
+- **Archive (F9):** `POST /v1/imports/archive`, the limits, the per-file report; the web page follows.

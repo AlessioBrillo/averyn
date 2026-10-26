@@ -136,3 +136,65 @@ fun semicircles(degrees: Double): Long = Math.round(degrees * 2147483648.0 / 180
 
 /** Unix epoch millis as a FIT timestamp (seconds since 1989-12-31). */
 fun fitSeconds(unixMs: Long): Long = (unixMs - 631_065_600_000L) / 1000
+
+/**
+ * A run of [seconds] seconds going north at 3 m/s from [startMs], with a pause of a minute in the middle (a stopped
+ * timer), at a steady [heartRate]. [sport] is the FIT sport of the file, or null for a file that declares none.
+ */
+fun fitRun(
+    startMs: Long,
+    seconds: Int = 30,
+    sport: Int? = 1,
+    heartRate: Int? = 150,
+): ByteArray {
+    val builder = FitBuilder()
+    val t0 = fitSeconds(startMs)
+    builder
+        .definition(0, 0, listOf(FitField(0, 1, FitRecordLayout.BASE_ENUM)))
+        .data(0, builder.u8(4))
+    builder
+        .definition(
+            1,
+            21,
+            listOf(
+                FitRecordLayout.timestamp,
+                FitField(0, 1, FitRecordLayout.BASE_ENUM),
+                FitField(1, 1, FitRecordLayout.BASE_ENUM),
+            ),
+        ).data(1, builder.u32(t0), builder.u8(0), builder.u8(0))
+    builder.definition(
+        3,
+        20,
+        listOf(
+            FitRecordLayout.timestamp,
+            FitRecordLayout.latitude,
+            FitRecordLayout.longitude,
+            FitRecordLayout.altitude,
+            FitRecordLayout.heartRate,
+        ),
+    )
+    val metersPerDegree = 111_195.08
+
+    fun record(
+        second: Int,
+        walked: Int,
+    ) = builder.data(
+        3,
+        builder.u32(t0 + second),
+        builder.u32(semicircles(45.0 + walked * 3.0 / metersPerDegree)),
+        builder.u32(semicircles(9.19)),
+        builder.u16(((120.0 + 500.0) * 5).toInt()),
+        builder.u8(heartRate ?: 0xFF),
+    )
+    val half = seconds / 2
+    for (i in 0 until half) record(i, i)
+    builder.data(1, builder.u32(t0 + half), builder.u8(0), builder.u8(4)) // timer stop
+    builder.data(1, builder.u32(t0 + half + 60), builder.u8(0), builder.u8(0)) // timer start
+    for (i in half until seconds) record(i + 60, i)
+    if (sport != null) {
+        builder
+            .definition(2, 18, listOf(FitField(5, 1, FitRecordLayout.BASE_ENUM)))
+            .data(2, builder.u8(sport))
+    }
+    return builder.build()
+}
