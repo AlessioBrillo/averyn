@@ -194,6 +194,23 @@ jobs:
           # /metrics is not proxied (it falls through to the SPA page), and the web container logs no request paths
           ! curl -fsS http://127.0.0.1:8082/metrics | grep -q '^# HELP' || exit 1
           ! $COMPOSE logs --no-color web | grep -q 'activities' || exit 1
+      # TDD-0006 Q3/Q4: a signed-in round trip through the real stack (a token from the real identity provider, the
+      # database, the object store): import a track, read it back, export, delete the account.
+      - name: Signed-in round trip against the real identity provider
+        run: |
+          token=$($COMPOSE run --rm --no-deps -v "$PWD/infrastructure/compose/e2e-token.sh:/e2e-token.sh:ro" \
+            --entrypoint /bin/sh idp-init /e2e-token.sh) || { $COMPOSE logs --no-color idp idp-init; exit 1; }
+          [ -n "$token" ] || { echo "no token"; exit 1; }
+          api=http://127.0.0.1:8080
+          call() { curl -sS -o /tmp/out -w '%{http_code}' -H "Authorization: Bearer $token" "$@"; }
+          fail() { echo "$1"; cat /tmp/out; $COMPOSE logs --no-color backend | tail -n 40; exit 1; }
+          [ "$(call -X POST -H 'Content-Type: application/gpx+xml' --data-binary @tests/gps-fixtures/straight-line-1km/track.gpx "$api/v1/imports/gpx?sport=RUN")" = 201 ] || fail "import"
+          [ "$(call "$api/v1/activities")" = 200 ] || fail "list"
+          grep -q '"RUN"' /tmp/out || fail "the imported activity is not in the list"
+          [ "$(curl -sS -o /tmp/export.zip -w '%{http_code}' -H "Authorization: Bearer $token" "$api/v1/me/export")" = 200 ] || fail "export"
+          unzip -l /tmp/export.zip | grep -q 'original/' || fail "the export has no original file"
+          [ "$(call -X DELETE "$api/v1/me")" = 204 ] || fail "delete"
+          [ "$(call "$api/v1/activities")" = 403 ] || fail "a deleted account must be refused"
       - if: always()
         run: $COMPOSE down -v
 
