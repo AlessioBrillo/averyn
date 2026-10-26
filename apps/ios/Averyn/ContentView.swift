@@ -40,16 +40,16 @@ struct ContentView: View {
             Button("Resume") { viewModel.resolveRecoveryResume() }
             Button("Finish now", role: .destructive) { viewModel.resolveRecoveryFinish() }
         } message: { metadata in
-            Text("A \(metadata.sport) activity was interrupted. Resume it or finish it now?")
+            Text(tr("A %@ activity was interrupted. Resume it or finish it now?", "\(metadata.sport)"))
         }
     }
 
     private var liveMetrics: some View {
         VStack {
-            Text("State: \(viewModel.snapshot.state)")
-            Text("Distance: \(Int(viewModel.snapshot.metrics.distanceM)) m")
-            Text("Elapsed: \(Int(viewModel.snapshot.metrics.elapsedMs / 1000)) s")
-            Text("GPS quality: \(viewModel.snapshot.quality.grade)")
+            Text(tr("State: %@", "\(viewModel.snapshot.state)"))
+            Text(tr("Distance: %@ m", "\(Int(viewModel.snapshot.metrics.distanceM))"))
+            Text(tr("Elapsed: %@ s", "\(Int(viewModel.snapshot.metrics.elapsedMs / 1000))"))
+            Text(tr("GPS quality: %@", "\(viewModel.snapshot.quality.grade)"))
         }
     }
 
@@ -126,15 +126,15 @@ struct ContentView: View {
             } else {
                 if let summary = detail.summary {
                     Text("\(format.distance(meters: summary.distanceM)) — \(formatDuration(summary.elapsedMs))")
-                    Text("Moving \(formatDuration(summary.movingMs)) · Paused \(formatDuration(summary.pausedMs))")
+                    Text(tr("Moving %@ · Paused %@", formatDuration(summary.movingMs), formatDuration(summary.pausedMs)))
                     // A nullable number crosses the Kotlin boundary as an NSNumber.
                     if let pace = summary.paceSecPerKm?.doubleValue {
-                        Text("Pace \(format.pace(secondsPerKm: pace))")
+                        Text(tr("Pace %@", format.pace(secondsPerKm: pace)))
                     }
                     if summary.avgHrBpm > 0 {
-                        Text("HR \(summary.avgHrBpm)/\(summary.maxHrBpm) bpm (\(summary.hrSource))")
+                        Text(tr("HR %@/%@ bpm (%@)", "\(summary.avgHrBpm)", "\(summary.maxHrBpm)", "\(summary.hrSource)"))
                     }
-                    Text("Quality \(summary.qualityGrade) · \(summary.metricsAlgorithmVersion)")
+                    Text(tr("Quality %@ · %@", "\(summary.qualityGrade)", "\(summary.metricsAlgorithmVersion)"))
                 }
                 // The track on a map (TDD-0012): from the copy of the server, so it is there offline too.
                 if let track = detail.track {
@@ -167,18 +167,16 @@ struct ContentView: View {
             if !analysis.splits.isEmpty {
                 Text("Splits")
                 ForEach(analysis.splits, id: \.index) { split in
-                    Text(
-                        "#\(split.index) \(format.distance(meters: split.endDistanceM - split.startDistanceM)) — "
-                            + "\(formatDuration(split.movingMs))"
-                            + (split.avgHrBpm.map { " — \($0.intValue) bpm" } ?? "")
-                            + (split.partial ? " (partial)" : "")
-                    )
+                    Text(splitLine(split))
                 }
             }
             if let elevation = analysis.elevation {
                 Text(
-                    "Elevation: \(format.elevation(meters: elevation.gainM, signed: true)) / "
-                        + "-\(format.elevation(meters: elevation.lossM, signed: false))"
+                    tr(
+                        "Elevation: %@ / -%@",
+                        format.elevation(meters: elevation.gainM, signed: true),
+                        format.elevation(meters: elevation.lossM, signed: false)
+                    )
                 )
             }
             elevationChart(analysis.series)
@@ -189,12 +187,25 @@ struct ContentView: View {
         }
     }
 
+    /// One split: its distance, its moving time, its heart rate when there is one.
+    private func splitLine(_ split: AnalysisSplit) -> String {
+        let distance = format.distance(meters: split.endDistanceM - split.startDistanceM)
+        var line = "#\(split.index) \(distance) — \(formatDuration(split.movingMs))"
+        if let bpm = split.avgHrBpm {
+            line += " — \(bpm.intValue) bpm"
+        }
+        if split.partial {
+            line += " (" + tr("partial") + ")"
+        }
+        return line
+    }
+
     /// The time in each heart-rate zone (`hr-zones-v1`, TDD-0012), or the reason there is none: the zones are cut
     /// from the maximum heart rate of the profile.
     @ViewBuilder
     private func zonesView(_ zones: HeartRateZones?) -> some View {
         if let zones {
-            Text("Time in each zone (maximum \(zones.maxHrBpm) bpm)")
+            Text(tr("Time in each zone (maximum %@ bpm)", "\(zones.maxHrBpm)"))
             // The zones are always the five of `hr-zones-v1`, in order: the position is the number of the zone.
             ForEach(Array(zones.zones.enumerated()), id: \.offset) { index, zone in
                 let range = zone.toBpm.map { "\(zone.fromBpm)–\($0.intValue)" } ?? "\(zone.fromBpm)+"
@@ -212,8 +223,11 @@ struct ContentView: View {
         let elevations = series.elevationM.compactMap { ($0 as? NSNumber)?.doubleValue }
         if elevations.count > 1 {
             Text(
-                "Elevation profile (\(format.elevation(meters: elevations.min() ?? 0, signed: false))"
-                    + "–\(format.elevation(meters: elevations.max() ?? 0, signed: false)))"
+                tr(
+                    "Elevation profile (%@–%@)",
+                    format.elevation(meters: elevations.min() ?? 0, signed: false),
+                    format.elevation(meters: elevations.max() ?? 0, signed: false)
+                )
             )
             seriesChart(elevations.map { Float($0) }, segments: series.segment.map { $0.int32Value })
         }
@@ -224,7 +238,7 @@ struct ContentView: View {
     private func heartRateChart(_ series: AnalysisSeries) -> some View {
         let bpm = series.heartRate.bpm.map { $0.intValue }
         if bpm.count > 1 {
-            Text("Heart rate (\(bpm.min() ?? 0)–\(bpm.max() ?? 0) bpm)")
+            Text(tr("Heart rate (%@–%@ bpm)", "\(bpm.min() ?? 0)", "\(bpm.max() ?? 0)"))
             seriesChart(bpm.map { Float($0) }, segments: series.heartRate.segment.map { $0.int32Value })
         }
     }
@@ -266,7 +280,7 @@ struct ContentView: View {
             if item.deletedOnServer {
                 Text("The server does not have it any more.")
             }
-            Text("\(item.localBytes / 1024) kB on this device")
+            Text(tr("%@ kB on this device", "\(item.localBytes / 1024)"))
             HStack {
                 if let files = viewModel.preparedExports[item.activityId] {
                     ShareLink(item: files.gpx) { Text("GPX") }
@@ -290,7 +304,7 @@ struct ContentView: View {
         case .idle, .failed, .completed:
             HStack {
                 ForEach([Sport.run, .ride, .walk, .hike], id: \.self) { sport in
-                    Button(sport.name) { viewModel.start(sport: sport) }
+                    Button(sportName(sport)) { viewModel.start(sport: sport) }
                 }
             }
         case .preparing:
@@ -346,7 +360,7 @@ private struct AccountSection: View {
                                 message = nil
                                 await sync.syncNow()
                             } catch {
-                                message = "Sign-in failed"
+                                message = tr("Sign-in failed")
                             }
                         }
                     }
@@ -389,19 +403,19 @@ private struct AccountSection: View {
                 Task {
                     if await viewModel.deleteAccount() {
                         cacheSize = ""
-                        message = "Your account and its data were deleted from the server. The recordings on this "
-                            + "device stay. Your sign-in at the identity provider is not removed."
+                        message = tr(
+                            "Your account and its data were deleted from the server. The recordings on this device stay. "
+                                + "Your sign-in at the identity provider is not removed."
+                        )
                     } else {
-                        message = "Could not delete your account. Try again."
+                        message = tr("Could not delete your account. Try again.")
                     }
                 }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(
-                "This removes all your activities and their recorded data from the server for good. The recordings "
-                    + "on this device stay. Your sign-in at the identity provider is not removed: close it there if "
-                    + "you want it gone. Export your data first if you want a copy."
+                "This removes all your activities and their recorded data from the server for good. The recordings on this device stay. Your sign-in at the identity provider is not removed: close it there if you want it gone. Export your data first if you want a copy."
             )
         }
         // Only while the screen is in front: nothing here is worth CPU or battery while a recording runs with the
@@ -424,11 +438,11 @@ private struct AccountSection: View {
         case .ok:
             return nil
         case .appTooOld:
-            return "This server is newer than the app: update the app to use everything it offers."
+            return tr("This server is newer than the app: update the app to use everything it offers.")
         case .appBelowMinimum:
-            return "This server needs a newer app: update the app."
+            return tr("This server needs a newer app: update the app.")
         case .serverTooOld:
-            return "This server is older than the app: some features may be missing."
+            return tr("This server is older than the app: some features may be missing.")
         default:
             return nil
         }
@@ -438,7 +452,7 @@ private struct AccountSection: View {
     private func cacheSizeText() async -> String {
         let repository = AppModel.shared.history()
         guard let stats = try? await repository.cacheStats(), stats.detailCount > 0 else { return "" }
-        return "Offline copy: \(stats.detailCount) activities, \(stats.bytes / 1024) kB"
+        return tr("Offline copy: %@ activities, %@ kB", "\(stats.detailCount)", "\(stats.bytes / 1024)")
     }
 }
 
@@ -468,8 +482,11 @@ private struct ProfileSection: View {
                     .disabled(!loaded)
                 if !input.valid {
                     Text(
-                        "A whole number from \(UserProfile.companion.MIN_MAX_HR_BPM) to "
-                            + "\(UserProfile.companion.MAX_MAX_HR_BPM), or empty."
+                        tr(
+                            "A whole number from %@ to %@, or empty.",
+                            "\(UserProfile.companion.MIN_MAX_HR_BPM)",
+                            "\(UserProfile.companion.MAX_MAX_HR_BPM)"
+                        )
                     )
                 }
                 Button("Save profile") {
@@ -501,7 +518,7 @@ private func historyNumbers(_ item: HistoryItem, _ format: UnitFormat) -> String
         parts.append(format.pace(secondsPerKm: pace))
     }
     if item.avgHrBpm > 0 {
-        parts.append("HR \(item.avgHrBpm)/\(item.maxHrBpm) bpm")
+        parts.append(tr("HR %@/%@ bpm", "\(item.avgHrBpm)", "\(item.maxHrBpm)"))
     }
     return parts.joined(separator: " · ")
 }
@@ -510,9 +527,9 @@ private func historyBadges(_ item: HistoryItem) -> String {
     var badges: [String] = []
     switch item.source {
     case .gpx:
-        badges.append("imported")
+        badges.append(tr("imported"))
     case .local:
-        badges.append("on this device")
+        badges.append(tr("on this device"))
     default:
         break
     }
@@ -520,7 +537,7 @@ private func historyBadges(_ item: HistoryItem) -> String {
         badges.append(syncLabel(syncState))
     }
     if item.localEstimate {
-        badges.append("local estimate")
+        badges.append(tr("local estimate"))
     }
     return badges.joined(separator: " · ")
 }
@@ -537,21 +554,32 @@ private func historyBadgesView(_ item: HistoryItem) -> some View {
 private func syncLabel(_ state: HistorySyncState) -> String {
     switch state {
     case .localOnly:
-        return "recording"
+        return tr("recording")
     case .queued:
-        return "waiting to upload"
+        return tr("waiting to upload")
     case .uploading:
-        return "uploading"
+        return tr("uploading")
     case .synced:
-        return "on the server"
+        return tr("on the server")
     case .failedRetryable:
-        return "upload failed, will retry"
+        return tr("upload failed, will retry")
     case .failedPermanent:
-        return "the server refused it"
+        return tr("the server refused it")
     case .deletedOnServer:
-        return "deleted on the server"
+        return tr("deleted on the server")
     default:
-        return "unknown"
+        return tr("unknown")
+    }
+}
+
+/// The name of a sport in the language of the phone.
+private func sportName(_ sport: Sport) -> String {
+    switch sport {
+    case .run: return tr("Run")
+    case .ride: return tr("Ride")
+    case .walk: return tr("Walk")
+    case .hike: return tr("Hike")
+    default: return sport.name
     }
 }
 

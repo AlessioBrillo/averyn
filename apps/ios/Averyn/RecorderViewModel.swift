@@ -62,7 +62,7 @@ final class RecorderViewModel: ObservableObject {
         pendingRecovery = recorder.currentState == .idle
             ? store.interrupted().sorted { $0.startedAtMs > $1.startedAtMs }.first
             : nil
-        notice = model.resumedAtLaunch ? "Recording resumed after an interruption" : nil
+        notice = model.resumedAtLaunch ? tr("Recording resumed after an interruption") : nil
 
         AppModel.shared.addRecorderListener { [weak self] newSnapshot in
             DispatchQueue.main.async { self?.snapshot = newSnapshot }
@@ -99,29 +99,29 @@ final class RecorderViewModel: ObservableObject {
         guard let snapshot = try? await repository.refreshProfile(accessToken: await accessToken()) else { return }
         units = snapshot.units
         profile = snapshot.profile
-        profileMessage = snapshot.profile == nil ? "Could not load your profile." : nil
+        profileMessage = snapshot.profile == nil ? tr("Could not load your profile.") : nil
     }
 
     /// Saves the profile. The server checks it again: a profile it refuses changes nothing.
     func saveProfile(units chosen: UnitSystem, maxHr: MaxHrInput) async {
         guard maxHr.valid, let token = await accessToken() else {
-            profileMessage = "Sign in again to save your profile."
+            profileMessage = tr("Sign in again to save your profile.")
             return
         }
         let repository = AppModel.shared.history()
         let wanted = UserProfile(units: chosen, maxHrBpm: maxHr.value)
         guard let saved = try? await repository.saveProfile(accessToken: token, profile: wanted) else {
-            profileMessage = "Could not save your profile."
+            profileMessage = tr("Could not save your profile.")
             return
         }
         if let stored = saved.profile {
             units = saved.units
             profile = stored
-            profileMessage = "Saved"
+            profileMessage = tr("Saved")
         } else {
             profileMessage = saved.failure?.status?.intValue == 422
-                ? "That is not a valid profile."
-                : "Could not save your profile."
+                ? tr("That is not a valid profile.")
+                : tr("Could not save your profile.")
         }
     }
 
@@ -149,17 +149,17 @@ final class RecorderViewModel: ObservableObject {
         healthMessage = nil
         do {
             switch try await HealthKitExporter().save(store: store, activityId: item.activityId) {
-            case .saved: healthMessage = "Saved to Health"
-            case .alreadySaved: healthMessage = "This activity is already in Health."
+            case .saved: healthMessage = tr("Saved to Health")
+            case .alreadySaved: healthMessage = tr("This activity is already in Health.")
             }
         } catch HealthKitExporter.Failure.unavailable {
-            healthMessage = "Health is not available on this device."
+            healthMessage = tr("Health is not available on this device.")
         } catch HealthKitExporter.Failure.denied {
-            healthMessage = "Averyn was not allowed to write to Health. You can allow it in the Health settings."
+            healthMessage = tr("Averyn was not allowed to write to Health. You can allow it in the Health settings.")
         } catch HealthKitExporter.Failure.nothingToSave {
-            healthMessage = "This activity cannot be saved to Health: it is not finished or has no route."
+            healthMessage = tr("This activity cannot be saved to Health: it is not finished or has no route.")
         } catch {
-            healthMessage = "Could not save to Health."
+            healthMessage = tr("Could not save to Health.")
         }
     }
 
@@ -366,5 +366,5 @@ private func hardwareIdentifier() -> String {
 }
 
 private func droppedRecordWarning(_ droppedRecordCount: Int32) -> String? {
-    droppedRecordCount > 0 ? "Recovery lost \(droppedRecordCount) corrupted record(s) from the interrupted activity" : nil
+    droppedRecordCount > 0 ? tr("Recovery lost %@ corrupted record(s) from the interrupted activity", "\(droppedRecordCount)") : nil
 }
