@@ -66,4 +66,69 @@ class ClientConfigTest {
             // A configuration mistake must not take the server down: the minimum is simply not there.
             assertNull(config.minClientVersion)
         }
+
+    @Test
+    fun theLinksToTheDocumentsOfTheOperatorAreCarried() =
+        testApplication {
+            application {
+                content()
+                clientConfig(
+                    oidc,
+                    "https://style.example/style.json",
+                    null,
+                    "https://example.org/privacy",
+                    " http://example.org/terms ",
+                )
+            }
+
+            val config = json.decodeFromString(ClientConfig.serializer(), client.get("/v1/client-config").bodyAsText())
+            assertEquals("https://example.org/privacy", config.privacyPolicyUrl)
+            // Surrounding spaces of a value in an environment file are not part of the link.
+            assertEquals("http://example.org/terms", config.termsUrl)
+        }
+
+    @Test
+    fun withoutLinksThereAreNone() =
+        testApplication {
+            application {
+                content()
+                clientConfig(oidc, "https://style.example/style.json")
+            }
+
+            val config = json.decodeFromString(ClientConfig.serializer(), client.get("/v1/client-config").bodyAsText())
+            assertNull(config.privacyPolicyUrl)
+            assertNull(config.termsUrl)
+        }
+
+    @Test
+    fun aLinkThatIsNotAnHttpUrlIsIgnoredBecauseTheWebAndTheAppsOpenIt() =
+        testApplication {
+            application {
+                content()
+                clientConfig(oidc, "https://style.example/style.json", null, "javascript:alert(1)", "/terms")
+            }
+
+            val config = json.decodeFromString(ClientConfig.serializer(), client.get("/v1/client-config").bodyAsText())
+            assertNull(config.privacyPolicyUrl)
+            assertNull(config.termsUrl)
+        }
+
+    @Test
+    fun aLinkWithoutAHostOrWithAnotherSchemeIsIgnored() =
+        testApplication {
+            application {
+                content()
+                clientConfig(
+                    oidc,
+                    "https://style.example/style.json",
+                    null,
+                    "https:///privacy",
+                    "ftp://example.org/terms",
+                )
+            }
+
+            val config = json.decodeFromString(ClientConfig.serializer(), client.get("/v1/client-config").bodyAsText())
+            assertNull(config.privacyPolicyUrl)
+            assertNull(config.termsUrl)
+        }
 }

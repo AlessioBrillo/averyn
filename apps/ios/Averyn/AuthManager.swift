@@ -21,6 +21,8 @@ final class AuthManager: ObservableObject {
     private static let apiVersionKey = "serverApiVersion"
     private static let minClientVersionKey = "serverMinClientVersion"
     private static let mapStyleUrlKey = "serverMapStyleUrl"
+    private static let privacyUrlKey = "serverPrivacyPolicyUrl"
+    private static let termsUrlKey = "serverTermsUrl"
 
     @Published var serverURL: String {
         didSet { UserDefaults.standard.set(serverURL, forKey: Self.serverKey) }
@@ -72,7 +74,20 @@ final class AuthManager: ObservableObject {
         UserDefaults.standard.string(forKey: Self.mapStyleUrlKey).flatMap(URL.init(string:))
     }
 
+    /// The operator's privacy notice and terms, as of the last configuration; nil when it has none. Only http(s)
+    /// links are ever kept: the app opens them.
+    var privacyPolicyURL: URL? { storedLink(Self.privacyUrlKey) }
+    var termsURL: URL? { storedLink(Self.termsUrlKey) }
+
+    private func storedLink(_ key: String) -> URL? {
+        guard let text = UserDefaults.standard.string(forKey: key), let url = URL(string: text),
+              url.scheme == "https" || url.scheme == "http", url.host != nil else { return nil }
+        return url
+    }
+
     private func rememberServerConfig(_ config: ClientConfig) {
+        UserDefaults.standard.set(config.privacyPolicyUrl, forKey: Self.privacyUrlKey)
+        UserDefaults.standard.set(config.termsUrl, forKey: Self.termsUrlKey)
         UserDefaults.standard.set(config.apiVersion ?? Api.shared.API_VERSION, forKey: Self.apiVersionKey)
         UserDefaults.standard.set(config.minClientVersion, forKey: Self.minClientVersionKey)
         let style = config.mapStyleUrl?.trimmingCharacters(in: .whitespaces)
@@ -159,6 +174,8 @@ final class AuthManager: ObservableObject {
         let apiVersion: Int?
         let minClientVersion: String?
         let mapStyleUrl: String?
+        let privacyPolicyUrl: String?
+        let termsUrl: String?
     }
 
     /// `GET /v1/client-config` (public): the issuer and the public client id apps sign in with.

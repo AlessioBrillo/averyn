@@ -196,8 +196,17 @@ class AuthManager(
     val mapStyleUrl: String?
         get() = prefs.getString(KEY_MAP_STYLE_URL, null)
 
+    /** The operator's privacy notice and terms (http or https), as of the last configuration; null when it has none. */
+    val privacyPolicyUrl: String?
+        get() = prefs.getString(KEY_PRIVACY_URL, null)
+
+    val termsUrl: String?
+        get() = prefs.getString(KEY_TERMS_URL, null)
+
     private fun rememberServerConfig(config: ServerConfig) {
         prefs.edit {
+            putString(KEY_PRIVACY_URL, config.privacyPolicyUrl)
+            putString(KEY_TERMS_URL, config.termsUrl)
             putInt(KEY_API_VERSION, config.apiVersion)
             putString(KEY_MIN_CLIENT_VERSION, config.minClientVersion)
             putString(KEY_MAP_STYLE_URL, config.mapStyleUrl)
@@ -223,6 +232,8 @@ class AuthManager(
                 apiVersion = json.optInt("apiVersion", Api.API_VERSION),
                 minClientVersion = if (json.isNull("minClientVersion")) null else json.optString("minClientVersion"),
                 mapStyleUrl = if (json.isNull("mapStyleUrl")) null else json.optString("mapStyleUrl").ifBlank { null },
+                privacyPolicyUrl = optionalUrl(json, "privacyPolicyUrl"),
+                termsUrl = optionalUrl(json, "termsUrl"),
             )
         } finally {
             connection.disconnect()
@@ -236,12 +247,27 @@ class AuthManager(
         val apiVersion: Int,
         val minClientVersion: String?,
         val mapStyleUrl: String?,
+        val privacyPolicyUrl: String?,
+        val termsUrl: String?,
     )
+
+    /** A link the server advertises, kept only if it is an http(s) URL: the app opens it. */
+    private fun optionalUrl(
+        json: JSONObject,
+        name: String,
+    ): String? {
+        if (json.isNull(name)) return null
+        val value = json.optString(name).trim()
+        val scheme = runCatching { URL(value).protocol }.getOrNull()
+        return if (scheme == "https" || scheme == "http") value else null
+    }
 
     private companion object {
         const val KEY_SERVER_URL = "server_url"
         const val KEY_API_VERSION = "api_version"
         const val KEY_MIN_CLIENT_VERSION = "min_client_version"
         const val KEY_MAP_STYLE_URL = "map_style_url"
+        const val KEY_PRIVACY_URL = "privacy_policy_url"
+        const val KEY_TERMS_URL = "terms_url"
     }
 }

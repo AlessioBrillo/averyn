@@ -48,7 +48,9 @@ fun Application.module() {
     auth(oidc)
     // The oldest app version this instance still supports (TDD-0011): optional, an unset value means no minimum.
     val minClientVersion = cfg.propertyOrNull("averyn.client.minClientVersion")?.getString()?.ifBlank { null }
-    clientConfig(oidc, mapStyleUrl, minClientVersion)
+    val privacyPolicyUrl = cfg.propertyOrNull("averyn.legal.privacyPolicyUrl")?.getString()
+    val termsUrl = cfg.propertyOrNull("averyn.legal.termsUrl")?.getString()
+    clientConfig(oidc, mapStyleUrl, minClientVersion, privacyPolicyUrl, termsUrl)
     val quotaBytes =
         cfg.propertyOrNull("averyn.limits.quotaBytes")?.getString()?.toLong() ?: DEFAULT_USER_QUOTA_BYTES
     // One analysis service for the whole process: it holds the slots that limit how many activities are

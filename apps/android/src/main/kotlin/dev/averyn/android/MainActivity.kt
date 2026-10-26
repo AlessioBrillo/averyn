@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import dev.averyn.api.ClientCompatibility
@@ -423,6 +424,15 @@ private fun AccountSection(app: AverynApplication) {
         if (signedIn) {
             Button(onClick = { confirmDelete = true }) { Text("Delete my account") }
         }
+        // The operator's own documents (the controller of the data of this instance), when it published them.
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            app.auth.privacyPolicyUrl?.let { url ->
+                TextButton(onClick = { openLink(context, url) }) { Text("Privacy policy") }
+            }
+            app.auth.termsUrl?.let { url ->
+                TextButton(onClick = { openLink(context, url) }) { Text("Terms of service") }
+            }
+        }
         message?.let { Text(it) }
         Text(syncText)
         ProfileSection(app, signedIn)
@@ -453,6 +463,14 @@ private fun AccountSection(app: AverynApplication) {
             },
         )
     }
+}
+
+/** Opens a link of the operator in the browser; a phone without one just does nothing. */
+private fun openLink(
+    context: android.content.Context,
+    url: String,
+) {
+    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri())) }
 }
 
 /**

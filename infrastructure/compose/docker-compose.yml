@@ -157,6 +157,9 @@ services:
       AVERYN_S3_SECRET_KEY: ${S3_SECRET_KEY:-averyn-dev-secret-change-me}
       # Web basemap (MapLibre style URL). Empty = a demo style; the tile host sees the areas users view.
       AVERYN_MAP_STYLE_URL: ${AVERYN_MAP_STYLE_URL:-}
+      # The operator's own documents, linked from the web and the apps (empty = no link).
+      AVERYN_PRIVACY_POLICY_URL: ${AVERYN_PRIVACY_POLICY_URL:-}
+      AVERYN_TERMS_URL: ${AVERYN_TERMS_URL:-}
       # Per-user limits (TDD-0005): authenticated requests a minute, and bytes of stored files (the raw
       # activity, the file it was imported from, the heart-rate sidecar).
       AVERYN_RATE_LIMIT_PER_MINUTE: ${AVERYN_RATE_LIMIT_PER_MINUTE:-120}
