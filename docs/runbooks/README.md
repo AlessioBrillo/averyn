@@ -25,6 +25,7 @@ How to confirm it worked.
 - [backup-database](backup-database.md): back up a self-hosted instance
 - [restore-database](restore-database.md): restore one from a backup
 - [upgrade-self-hosted](upgrade-self-hosted.md): move to a newer version
+- [incident](incident.md): respond to an outage, a data exposure, a leaked secret or a compromised host
 
 ## Planned (tracked as issues)
 

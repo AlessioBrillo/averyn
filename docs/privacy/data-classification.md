@@ -25,4 +25,4 @@ Sports data reveals home, workplace, routines, schedule, physical condition and 
 
 ## To be written
 
-DPIA/GDPR notes before any public hosted service — the DPIA is a hard release gate specifically for Health-class data ([ADR-0013](../adr/0013-health-data-special-category.md)), not only a note.
+The DPIA is a hard release gate specifically for Health-class data ([ADR-0013](../adr/0013-health-data-special-category.md)), not only a note. Its technical part is written ([dpia.md](dpia.md)); the decisions and reviews that only the controller and counsel can make are marked in it and keep it open.
