@@ -18,7 +18,7 @@ The launch target is a public managed service ([roadmap](../product/roadmap.md#m
 
 - **Option 1 for hosting.** One virtual machine in an EU region running the existing Compose stack with the TLS overlay. A second region holds only the encrypted off-site backups. The provider is chosen by the owner against: EU legal entity and data location, a data processing agreement, snapshots, and price; it is recorded here when chosen.
 - **Backups.** The runbooks ([backup](../runbooks/backup-database.md), [restore](../runbooks/restore-database.md)) run on a schedule; a restore drill into a clean host is a launch criterion, and its log is kept.
-- **Operations.** An external uptime check and alert on the health endpoints, a status page, and an incident runbook (`docs/runbooks/incident.md`).
+- **Operations.** An external uptime check and alert on the health endpoints, a status page, and an incident runbook ([incident.md](../runbooks/incident.md)).
 - **Sign-up.** Open registration in the identity provider with email verification through an SMTP provider chosen by the owner; the per-user limits and storage quota ([TDD-0005](../design/TDD-0005-self-host-hardening.md)) are on.
 - **Map tiles.** A static vector basemap in the PMTiles format, served from the object store, rendered by MapLibre on web and phones through `ClientConfig.mapStyleUrl`. No third-party tile requests, so no quota and no location leak. Offline packs are MVP-3.
 - **Scale-out is not decided here.** A single host carries the launch; the first measured bottleneck decides the next step (documented as a `ponytail:` limit where it is already known).
