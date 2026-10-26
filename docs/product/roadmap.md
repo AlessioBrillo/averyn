@@ -61,7 +61,7 @@ Optional third-party sensor integration. The rules are [ADR-0010](../adr/0010-ec
 | Level | What | Averyn code | When |
 |---|---|---|---|
 | L0 | The band as a standard HR strap (`0x180D`/`0x2A37` with RR, Battery, Device Information) | none | When the prototype arrives: matrix row S15 with the band next to the reference strap |
-| L1 | Feature frame v1 from the consumer service (SQI, motion artifact, stress class; RMSSD/SDNN once real) | pure parser in `shared/sensors`, native adapters, a consent-gated sidecar | MVP-L, beta, first on the cut line |
+| L1 | Feature frame v1 from the consumer service (SQI, motion artifact, stress class; RMSSD/SDNN once real) | pure parser in `shared/sensors` (**done**, with golden vectors), native adapters and a consent-gated sidecar (wait for a prototype and for ADR-0026) | MVP-L, beta, first on the cut line |
 | L2 | `synapse_*` FIT developer fields read by the FIT import as imported data | field mapping in the FIT decoder | With the FIT import if time allows, otherwise after launch |
 | L3 | Job/result plumbing to a stateless worker (HRV trends, daily stress) | queue and per-job credentials | After launch, after the DPIA covers it |
 | — | The research raw-stream service (ECG 500 Hz) | never | Averyn does not subscribe to it |

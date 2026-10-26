@@ -1,0 +1,164 @@
+{
+  "contract": "gatt_v1",
+  "source": "SYNAPSE-24 contracts/gatt_v1.json (struct synapse_feature_stream_t, firmware/esp32_band/ble/ble_gatt_server.h)",
+  "layout": "<BHHHBBBBBBBBHhHH",
+  "bytes": 23,
+  "vectors": [
+    {
+      "name": "every field present",
+      "hex": "01010248003e03cc33fe0166570101aa00420e2a003700",
+      "result": "frame",
+      "expected": {
+        "sequence": 513,
+        "heartRateBpm": 72,
+        "rrIntervalMs": 830,
+        "ppgQuality": 0.8,
+        "motionArtifactProbability": 0.2,
+        "ecgQuality": 0.996078431372549,
+        "stress": "STRESS",
+        "motionLevel": 0.4,
+        "batteryPercent": 87,
+        "charging": true,
+        "sport": 1,
+        "cadenceRpm": 170,
+        "temperatureCelsius": 36.5,
+        "rmssdMs": 42,
+        "sdnnMs": 55
+      }
+    },
+    {
+      "name": "what the current firmware sends: only the heart rate, the PPG quality and the stress class are real",
+      "hex": "0107004000ffffc80cff00ff570000ffffff7fffffffff",
+      "result": "frame",
+      "expected": {
+        "sequence": 7,
+        "heartRateBpm": 64,
+        "rrIntervalMs": null,
+        "ppgQuality": 0.7843137254901961,
+        "motionArtifactProbability": 0.047058823529411764,
+        "ecgQuality": null,
+        "stress": "BASELINE",
+        "motionLevel": null,
+        "batteryPercent": 87,
+        "charging": false,
+        "sport": 0,
+        "cadenceRpm": null,
+        "temperatureCelsius": null,
+        "rmssdMs": null,
+        "sdnnMs": null
+      }
+    },
+    {
+      "name": "everything marked not available",
+      "hex": "010000ffffffffffffff03ff640000ffffff7fffffffff",
+      "result": "frame",
+      "expected": {
+        "sequence": 0,
+        "heartRateBpm": null,
+        "rrIntervalMs": null,
+        "ppgQuality": null,
+        "motionArtifactProbability": null,
+        "ecgQuality": null,
+        "stress": null,
+        "motionLevel": null,
+        "batteryPercent": 100,
+        "charging": false,
+        "sport": 0,
+        "cadenceRpm": null,
+        "temperatureCelsius": null,
+        "rmssdMs": null,
+        "sdnnMs": null
+      }
+    },
+    {
+      "name": "the counter wraps and a negative temperature is read as signed",
+      "hex": "01ffff9600ffffffffff02ff030004fffff3fdffffffff",
+      "result": "frame",
+      "expected": {
+        "sequence": 65535,
+        "heartRateBpm": 150,
+        "rrIntervalMs": null,
+        "ppgQuality": null,
+        "motionArtifactProbability": null,
+        "ecgQuality": null,
+        "stress": "ARTIFACT",
+        "motionLevel": null,
+        "batteryPercent": 3,
+        "charging": false,
+        "sport": 4,
+        "cadenceRpm": null,
+        "temperatureCelsius": -5.25,
+        "rmssdMs": null,
+        "sdnnMs": null
+      }
+    },
+    {
+      "name": "a value out of range is not a measurement",
+      "hex": "01000000000000ffffff07ff650209ffffff7fffffffff",
+      "result": "frame",
+      "expected": {
+        "sequence": 0,
+        "heartRateBpm": null,
+        "rrIntervalMs": null,
+        "ppgQuality": null,
+        "motionArtifactProbability": null,
+        "ecgQuality": null,
+        "stress": null,
+        "motionLevel": null,
+        "batteryPercent": null,
+        "charging": null,
+        "sport": null,
+        "cadenceRpm": null,
+        "temperatureCelsius": null,
+        "rmssdMs": null,
+        "sdnnMs": null
+      }
+    },
+    {
+      "name": "a longer frame of the same version is read for the fields it knows",
+      "hex": "0109005000ffffffffff03ff640000ffffff7fffffffff010203",
+      "result": "frame",
+      "expected": {
+        "sequence": 9,
+        "heartRateBpm": 80,
+        "rrIntervalMs": null,
+        "ppgQuality": null,
+        "motionArtifactProbability": null,
+        "ecgQuality": null,
+        "stress": null,
+        "motionLevel": null,
+        "batteryPercent": 100,
+        "charging": false,
+        "sport": 0,
+        "cadenceRpm": null,
+        "temperatureCelsius": null,
+        "rmssdMs": null,
+        "sdnnMs": null
+      }
+    },
+    {
+      "name": "a version this parser does not know",
+      "hex": "0201005000ffffffffff03ff640000ffffff7fffffffff",
+      "result": "unknownVersion",
+      "expected": {
+        "version": 2
+      }
+    },
+    {
+      "name": "a frame cut short by the link",
+      "hex": "0101005000ffffffffff03ff640000ffffff7fffffff",
+      "result": "truncated",
+      "expected": {
+        "size": 22
+      }
+    },
+    {
+      "name": "nothing",
+      "hex": "",
+      "result": "truncated",
+      "expected": {
+        "size": 0
+      }
+    }
+  ]
+}
