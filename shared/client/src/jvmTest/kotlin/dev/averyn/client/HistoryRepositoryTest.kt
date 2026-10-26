@@ -6,6 +6,7 @@ import dev.averyn.api.ActivitySummary
 import dev.averyn.api.ClientConfig
 import dev.averyn.api.ConsentGrant
 import dev.averyn.api.Track
+import dev.averyn.api.TrackGeometry
 import dev.averyn.api.UnitSystem
 import dev.averyn.api.UserProfile
 import dev.averyn.domain.LocationSample
@@ -301,6 +302,31 @@ class HistoryRepositoryTest {
             assertEquals(422, refused.failure?.status)
             assertEquals(UnitSystem.IMPERIAL, refused.units)
             assertEquals(UnitSystem.IMPERIAL, repository.cachedUnits())
+        }
+
+    @Test
+    fun `an opened activity carries the map of its track, also from the copy`() =
+        runBlocking {
+            reader.activity = summary("s1")
+            reader.track =
+                Track(geometry = TrackGeometry(coordinates = listOf(listOf(listOf(9.1, 45.4), listOf(9.2, 45.5)))))
+
+            val online = repository.refreshDetail("s1", "token")
+            val onlineMap = assertNotNull(online.track)
+            assertEquals(45.5, onlineMap.maxLatitude)
+
+            // Without a connection the copy still draws it.
+            val offline = assertNotNull(repository.cachedDetail("s1"))
+            assertEquals(45.4, assertNotNull(offline.track).minLatitude)
+        }
+
+    @Test
+    fun `an activity without a track has no map`() =
+        runBlocking {
+            reader.activity = summary("s1")
+            reader.track = null
+
+            assertNull(repository.refreshDetail("s1", "token").track)
         }
 
     private class FakeReader : ActivityReader {

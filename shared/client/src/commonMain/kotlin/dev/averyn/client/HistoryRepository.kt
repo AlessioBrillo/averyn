@@ -408,6 +408,7 @@ private fun CachedActivityDetail.toDetailSnapshot(
         startedAtMs = isoInstantToEpochMillis(summary.startedAt) ?: 0L,
         summary = summary,
         analysis = analysis,
+        track = trackMapOf(track),
         analysisState = analysisState ?: if (analysis != null) AnalysisState.READY else AnalysisState.NOT_CACHED,
         fromCache = fromCache,
         cachedAtMs = savedAtMs,
