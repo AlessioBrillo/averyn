@@ -7,7 +7,7 @@ import UIKit
 /// A plain background: what the line is drawn on when the style of the server cannot be loaded (offline). The
 /// base map needs the network (offline tiles are MVP-3, TDD-0012); the track does not, it comes from the copy.
 private let offlineStyle =
-    #"{"version":8,"sources":{},"layers":[{"id":"background","type":"background","paint":{"background-color":"#eceff1"}}]}"#
+    ##"{"version":8,"sources":{},"layers":[{"id":"background","type":"background","paint":{"background-color":"#eceff1"}}]}"##
 
 /// The track of an activity on a map (TDD-0012): one line per recording interval, so a pause is a break, with the
 /// camera fitted to it. The map is a picture, not a tool: its gestures are off, so that it does not trap the
