@@ -20,6 +20,7 @@ final class AuthManager: ObservableObject {
     private static let serverKey = "serverURL"
     private static let apiVersionKey = "serverApiVersion"
     private static let minClientVersionKey = "serverMinClientVersion"
+    private static let mapStyleUrlKey = "serverMapStyleUrl"
 
     @Published var serverURL: String {
         didSet { UserDefaults.standard.set(serverURL, forKey: Self.serverKey) }
@@ -65,9 +66,17 @@ final class AuthManager: ObservableObject {
         )
     }
 
+    /// The style of the map the server advertises (`mapStyleUrl`), as of the last configuration that was read; nil
+    /// before the app ever reached the server. Whoever serves the style sees the area the user looks at.
+    var mapStyleURL: URL? {
+        UserDefaults.standard.string(forKey: Self.mapStyleUrlKey).flatMap(URL.init(string:))
+    }
+
     private func rememberServerConfig(_ config: ClientConfig) {
         UserDefaults.standard.set(config.apiVersion ?? Api.shared.API_VERSION, forKey: Self.apiVersionKey)
         UserDefaults.standard.set(config.minClientVersion, forKey: Self.minClientVersionKey)
+        let style = config.mapStyleUrl?.trimmingCharacters(in: .whitespaces)
+        UserDefaults.standard.set(style?.isEmpty == false ? style : nil, forKey: Self.mapStyleUrlKey)
     }
 
     /// Opens the system browser at the IdP's login page and stores the session. Throws if the server cannot be
@@ -149,6 +158,7 @@ final class AuthManager: ObservableObject {
         /// Absent on an older server: the app then assumes the version it knows.
         let apiVersion: Int?
         let minClientVersion: String?
+        let mapStyleUrl: String?
     }
 
     /// `GET /v1/client-config` (public): the issuer and the public client id apps sign in with.

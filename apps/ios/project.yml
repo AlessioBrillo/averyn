@@ -16,6 +16,10 @@ packages:
   AppAuth:
     url: https://github.com/openid/AppAuth-iOS
     from: 2.0.0
+  # The map of the track (TDD-0012). The stable tags of this repository; the head is a pre-release build.
+  MapLibre:
+    url: https://github.com/maplibre/maplibre-gl-native-distribution
+    from: 6.31.0
 targets:
   Averyn:
     type: application
@@ -23,6 +27,8 @@ targets:
     sources: [Averyn]
     dependencies:
       - package: AppAuth
+      - package: MapLibre
+        product: MapLibre
     info:
       path: Averyn/Info.plist
       properties:
