@@ -17,7 +17,7 @@ Legend: ✅ in place · 🟡 partly · ⬜ not started · 🔒 needs something o
 | Sensors | 🟡 standard HR on both platforms | adapter unit tests; Synapse feature frame (beta); `rr-quality-v1` is after launch | 1.5 weeks | Rows S15, S16, S29–S31 |
 | Managed cloud | 🟡 Compose stack with TLS, runbooks | EU VM, off-site backup and a restore drill, uptime checks and alerts, SMTP, open sign-up in the IdP, map tiles | 1.5 weeks | Restore drill log; alert fired in a test |
 | Maps | 🟡 MapLibre on the web | tile source for the cloud | in [ADR-0027](../adr/0027-managed-cloud-baseline.md) | Tiles load on the cloud instance |
-| Legal | 🟡 [ADR-0013](../adr/0013-health-data-special-category.md), data classification, threat model, [DPIA draft](../privacy/dpia.md) (technical part) | company 🔒, the controller's decisions in the DPIA, privacy policy, terms, hosting DPA, store labels, trademark check on the name 🔒 | outside the code: 4–6 calendar weeks | Signed documents, store forms accepted |
+| Legal | 🟡 [ADR-0013](../adr/0013-health-data-special-category.md), data classification, threat model, [DPIA draft](../privacy/dpia.md) (technical part) | company 🔒, the controller's decisions in the DPIA, the texts of the privacy notice and the terms (the links to them are configurable and shown on the web and in both apps), hosting DPA, store labels, trademark check on the name 🔒 | outside the code: 4–6 calendar weeks | Signed documents, store forms accepted |
 | Support and ops | 🟡 [incident runbook](../runbooks/incident.md) | support mailbox, status page | 2 days | Runbook in `docs/runbooks/` |
 
 ## Increments

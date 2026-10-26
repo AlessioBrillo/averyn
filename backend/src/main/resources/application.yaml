@@ -27,6 +27,11 @@ averyn:
   # it sees a warning, never a refusal.
   client:
     minClientVersion: "$?AVERYN_MIN_CLIENT_VERSION"
+  # The documents of the operator of this instance (the controller of its data): optional http(s) links to its privacy
+  # notice and its terms. Averyn does not write them; it links to them from the web and the apps.
+  legal:
+    privacyPolicyUrl: "$?AVERYN_PRIVACY_POLICY_URL"
+    termsUrl: "$?AVERYN_TERMS_URL"
   # Per-user limits (TDD-0005): authenticated requests per minute (default 120) and raw bytes stored (default 1 GiB).
   limits:
     requestsPerMinute: "$?AVERYN_RATE_LIMIT_PER_MINUTE"

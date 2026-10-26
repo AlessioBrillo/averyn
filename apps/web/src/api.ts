@@ -9,6 +9,9 @@ export interface ClientConfig {
   apiVersion?: number
   /** The oldest app version the instance supports; null when there is no minimum. */
   minClientVersion?: string | null
+  /** Where the operator publishes its privacy notice and its terms (http or https), when it does. */
+  privacyPolicyUrl?: string | null
+  termsUrl?: string | null
 }
 
 export interface ActivitySummary {

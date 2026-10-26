@@ -3,6 +3,7 @@ import { Account } from './Account'
 import { ActivityDetail } from './ActivityDetail'
 import { ActivityList } from './ActivityList'
 import { ImportFile } from './ImportFile'
+import { LegalLinks } from './LegalLinks'
 import { Records } from './Records'
 import { getProfile } from './api'
 import type { UserProfile } from './api'
@@ -138,6 +139,7 @@ export function App() {
           )}
         </Fragment>
       )}
+      {state.status === 'ready' && <LegalLinks config={state.session.config} />}
     </main>
   )
 }

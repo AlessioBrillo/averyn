@@ -24,4 +24,11 @@ data class ClientConfig(
      * impose a minimum. It is a policy of the operator of the instance, not something the server can infer.
      */
     val minClientVersion: String? = null,
+    /**
+     * Where the operator of the instance publishes its privacy notice, or null when it does not. The text is the
+     * operator's (the controller of the data of that instance): Averyn only links to it, from the web and the apps.
+     */
+    val privacyPolicyUrl: String? = null,
+    /** Where the operator publishes the terms of the service, or null. */
+    val termsUrl: String? = null,
 )

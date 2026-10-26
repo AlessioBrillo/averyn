@@ -487,6 +487,8 @@ components:
           type: integer
           description: "The version of the API contract this server speaks (TDD-0011). A client that does not understand it is warned, never refused: the read path is additive."
           example: 1
+        privacyPolicyUrl: { type: [string, "null"], description: "Where the operator publishes its privacy notice (http or https), or null" }
+        termsUrl: { type: [string, "null"], description: "Where the operator publishes its terms of service (http or https), or null" }
         minClientVersion:
           type: [string, "null"]
           description: The oldest app version this instance supports (semantic version), null when there is no minimum. A client below it is warned.

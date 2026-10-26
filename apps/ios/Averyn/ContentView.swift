@@ -372,6 +372,11 @@ private struct AccountSection: View {
                     confirmingDelete = true
                 }
             }
+            // The operator's own documents (the controller of the data of this instance), when it published them.
+            HStack {
+                if let url = auth.privacyPolicyURL { Link("Privacy policy", destination: url) }
+                if let url = auth.termsURL { Link("Terms of service", destination: url) }
+            }
             if let message { Text(message) }
             Text(sync.statusText)
             ProfileSection(viewModel: viewModel, isSignedIn: auth.isSignedIn)

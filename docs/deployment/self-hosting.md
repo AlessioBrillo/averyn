@@ -41,6 +41,7 @@ The `web` service serves the web app at `http://localhost:8082` (`WEB_PORT`) and
 
 The apps read `GET /v1/client-config` (public, no token) before signing in: it says which identity provider to use and which versions are in play ([TDD-0011](../design/TDD-0011-mobile-read-path.md)).
 
+- **`AVERYN_PRIVACY_POLICY_URL`** and **`AVERYN_TERMS_URL`** are optional: where you publish your privacy notice and your terms of service, as `http` or `https` URLs. The web app and the apps show a link to each, in the footer and in the account section. Averyn does not provide the texts: whoever runs an instance is the controller of its users' data and writes them (a managed service needs them before launch, see the [DPIA](../privacy/dpia.md)). A value that is not an `http(s)` URL is ignored and logged.
 - **`AVERYN_MIN_CLIENT_VERSION`** is optional: the oldest app version this instance supports (for example `0.2.0`). An app below it still works — it shows a warning that says the app should be updated — because the contract of `/v1` is additive inside a version. Unset, there is no minimum.
 - The server also publishes `apiVersion`, the version of the contract it speaks. An app that does not understand it warns too, in the other direction.
 - The copy of the server that the apps keep on the device (the activities that were opened) is bounded, is not part of the backup of the phone and disappears when the session ends ([ADR-0025](../adr/0025-device-side-cache-of-server-activities.md)).
