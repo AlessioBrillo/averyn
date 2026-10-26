@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import dev.averyn.android.R
 
 /**
  * What Health Connect shows when the user asks why Averyn wants its permissions (a requirement of the platform:
@@ -20,16 +22,8 @@ class HealthRationaleActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Column(modifier = Modifier.padding(24.dp)) {
-                    Text("Why Averyn asks for these permissions", style = MaterialTheme.typography.titleLarge)
-                    Text(
-                        "\nAveryn saves a finished activity to Health Connect only when you ask it to, from the " +
-                            "list of activities on this phone: the workout, its route, the heart rate that was " +
-                            "recorded and the distance.\n\n" +
-                            "It only writes. It never reads anything from Health Connect, and it asks for no " +
-                            "permission to read.\n\n" +
-                            "Saving the same activity again does not make a copy. You can remove what Averyn wrote " +
-                            "at any time in Health Connect, and take the permissions back in its settings.",
-                    )
+                    Text(stringResource(R.string.health_rationale_title), style = MaterialTheme.typography.titleLarge)
+                    Text(stringResource(R.string.health_rationale_text), modifier = Modifier.padding(top = 16.dp))
                 }
             }
         }

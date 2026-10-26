@@ -25,6 +25,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
@@ -65,6 +67,7 @@ internal fun HistorySection(
     refreshKey: Any?,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var snapshot by remember { mutableStateOf<HistorySnapshot?>(null) }
     var detail by remember { mutableStateOf<DetailSnapshot?>(null) }
@@ -118,13 +121,13 @@ internal fun HistorySection(
                         result.fold(
                             onSuccess = { exported ->
                                 when {
-                                    !exported.written -> "Export failed"
+                                    !exported.written -> resources.getString(R.string.export_failed)
                                     exported.skippedRecords > 0 ->
-                                        "Exported; ${exported.skippedRecords} damaged record(s) were left out"
-                                    else -> "Exported"
+                                        resources.getString(R.string.exported_skipped, exported.skippedRecords)
+                                    else -> resources.getString(R.string.exported)
                                 }
                             },
-                            onFailure = { "Export failed" },
+                            onFailure = { resources.getString(R.string.export_failed) },
                         )
                 }
             }
@@ -152,11 +155,11 @@ internal fun HistorySection(
             val workout = runCatching { app.store.workoutExport(activityId) }.getOrNull()
             message =
                 if (workout == null) {
-                    "This activity cannot be saved to Health Connect: it is not finished or has no route."
+                    resources.getString(R.string.health_cannot_save)
                 } else {
                     runCatching { HealthConnectExporter.write(context, workout) }.fold(
-                        onSuccess = { "Saved to Health Connect" },
-                        onFailure = { "Could not save to Health Connect" },
+                        onSuccess = { resources.getString(R.string.health_saved) },
+                        onFailure = { resources.getString(R.string.health_save_failed) },
                     )
                 }
         }
@@ -170,7 +173,7 @@ internal fun HistorySection(
                 if (granted.containsAll(HealthConnectExporter.PERMISSIONS)) {
                     saveToHealth(id)
                 } else {
-                    message = "Health Connect was not given the permissions it needs."
+                    message = resources.getString(R.string.health_no_permissions)
                 }
             }
         }
@@ -178,8 +181,10 @@ internal fun HistorySection(
     fun startHealth(activityId: String) {
         scope.launch {
             when (HealthConnectExporter.availability(context)) {
-                HealthConnectAvailability.UNAVAILABLE -> message = "Health Connect is not available on this phone."
-                HealthConnectAvailability.UPDATE_NEEDED -> message = "Update Health Connect to save workouts to it."
+                HealthConnectAvailability.UNAVAILABLE ->
+                    message = resources.getString(R.string.health_not_available)
+                HealthConnectAvailability.UPDATE_NEEDED ->
+                    message = resources.getString(R.string.health_update_needed)
                 HealthConnectAvailability.AVAILABLE -> {
                     val granted = HealthConnectClient.getOrCreate(context).permissionController.getGrantedPermissions()
                     if (granted.containsAll(HealthConnectExporter.PERMISSIONS)) {
@@ -218,24 +223,23 @@ internal fun HistorySection(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("History")
+        Text(stringResource(R.string.history))
         snapshot?.let { current ->
             if (current.fromCache) {
                 Text(
-                    "Offline copy" +
-                        (current.cachedAtMs?.let { " of ${formatDate(it)}" } ?: "") +
-                        " — the server could not be reached.",
+                    current.cachedAtMs?.let { stringResource(R.string.offline_copy_of_unreachable, formatDate(it)) }
+                        ?: stringResource(R.string.offline_copy_unreachable),
                 )
             }
-            if (current.needsLogin) Text("Sign in to read the activities of the account.")
+            if (current.needsLogin) Text(stringResource(R.string.sign_in_to_read))
             current.failure?.let { failure ->
                 if (failure.kind == ApiFailureKind.UNAUTHORIZED) {
-                    Text("The session expired: sign in again.")
+                    Text(stringResource(R.string.session_expired))
                 }
             }
         }
         val rows = snapshot?.items.orEmpty()
-        if (rows.isEmpty() && !busy) Text("No activities yet")
+        if (rows.isEmpty() && !busy) Text(stringResource(R.string.no_activities))
         rows.forEach { item ->
             HistoryRowView(
                 item = item,
@@ -251,11 +255,11 @@ internal fun HistorySection(
                     snapshot = app.history().loadMore(token(), cursor)
                     busy = false
                 }
-            }) { Text("Load more") }
+            }) { Text(stringResource(R.string.load_more)) }
         }
         detail?.let { ActivityDetailView(it, format, app.auth.mapStyleUrl) }
         if (deviceData.isNotEmpty()) {
-            Text("On this device")
+            Text(stringResource(R.string.on_this_device))
             deviceData.forEach { item ->
                 DeviceRowView(
                     item = item,
@@ -279,24 +283,19 @@ internal fun HistorySection(
     toDelete?.let { item ->
         AlertDialog(
             onDismissRequest = { toDelete = null },
-            title = { Text("Delete from this device?") },
-            text = {
-                Text(
-                    "The files of this activity are removed from this device. " +
-                        "What the server has is not touched.",
-                )
-            },
+            title = { Text(stringResource(R.string.delete_device_title)) },
+            text = { Text(stringResource(R.string.delete_device_text)) },
             confirmButton = {
                 TextButton(onClick = {
                     toDelete = null
                     scope.launch {
                         app.history().deleteLocal(item.activityId)
                         deviceData = app.history().deviceData()
-                        message = "Deleted from this device"
+                        message = resources.getString(R.string.deleted_from_device)
                     }
-                }) { Text("Delete") }
+                }) { Text(stringResource(R.string.delete)) }
             },
-            dismissButton = { TextButton(onClick = { toDelete = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { toDelete = null }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 }
@@ -318,20 +317,20 @@ private fun HistoryRowView(
     ) {
         Text(
             "${item.sport} ${formatDate(item.startedAtMs)}" +
-                if (selected) " (open)" else "",
+                if (selected) " (${stringResource(R.string.row_open)})" else "",
         )
         Text("${format.distance(item.distanceM)} — ${formatDuration(item.elapsedMs)}")
         val pace = item.paceSecPerKm?.let { format.pace(it) }
-        val hr = if (item.avgHrBpm > 0) "HR ${item.avgHrBpm}/${item.maxHrBpm} bpm" else null
+        val hr = if (item.avgHrBpm > 0) stringResource(R.string.hr_range, item.avgHrBpm, item.maxHrBpm) else null
         val badges =
             listOfNotNull(
                 when (item.source) {
                     HistorySource.DEVICE -> null
-                    HistorySource.GPX -> "imported"
-                    HistorySource.LOCAL -> "on this device"
+                    HistorySource.GPX -> stringResource(R.string.badge_imported)
+                    HistorySource.LOCAL -> stringResource(R.string.badge_on_device)
                 },
                 item.syncState?.let { syncLabel(it) },
-                if (item.localEstimate) "local estimate" else null,
+                if (item.localEstimate) stringResource(R.string.badge_local_estimate) else null,
             )
         Text(listOfNotNull(pace, hr).joinToString(" · "))
         if (badges.isNotEmpty()) Text(badges.joinToString(" · "))
@@ -347,35 +346,38 @@ private fun ActivityDetailView(
 ) {
     val summary = detail.summary
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text("Activity")
+        Text(stringResource(R.string.activity))
         if (detail.deletedOnServer) {
-            Text("The server does not have this activity any more. The file on this device is untouched.")
+            Text(stringResource(R.string.deleted_on_server_detail))
             return@Column
         }
         summary?.let {
             Text("${format.distance(it.distanceM)} — ${formatDuration(it.elapsedMs)}")
-            Text("Moving ${formatDuration(it.movingMs)} · Paused ${formatDuration(it.pausedMs)}")
-            it.paceSecPerKm?.let { pace -> Text("Pace ${format.pace(pace)}") }
-            if (it.avgHrBpm > 0) Text("HR ${it.avgHrBpm}/${it.maxHrBpm} bpm (${it.hrSource})")
-            Text("Quality ${it.qualityGrade} · ${it.metricsAlgorithmVersion}")
+            Text(stringResource(R.string.moving_paused, formatDuration(it.movingMs), formatDuration(it.pausedMs)))
+            it.paceSecPerKm?.let { pace -> Text(stringResource(R.string.pace_value, format.pace(pace))) }
+            if (it.avgHrBpm > 0) Text(stringResource(R.string.hr_range_source, it.avgHrBpm, it.maxHrBpm, it.hrSource))
+            Text(stringResource(R.string.quality_value, it.qualityGrade, it.metricsAlgorithmVersion))
         }
         // The track on a map (TDD-0012): from the copy of the server, so it is there offline too.
         detail.track?.let { track ->
             if (mapStyleUrl != null) {
                 TrackMapView(track, mapStyleUrl)
             } else {
-                Text("The map needs the map style of the server: it is read when the app reaches the server.")
+                Text(stringResource(R.string.map_needs_style))
             }
         }
         when (detail.analysisState) {
             AnalysisState.READY -> detail.analysis?.let { AnalysisView(it, format) }
-            AnalysisState.COMPUTING -> Text("The analysis is being computed…")
-            AnalysisState.NOT_CACHED -> Text("The analysis is not on this device.")
-            AnalysisState.NOT_SYNCED -> Text("The analysis comes with the upload of the activity.")
-            AnalysisState.UNAVAILABLE -> Text("There is no analysis for this activity.")
+            AnalysisState.COMPUTING -> Text(stringResource(R.string.analysis_computing))
+            AnalysisState.NOT_CACHED -> Text(stringResource(R.string.analysis_not_cached))
+            AnalysisState.NOT_SYNCED -> Text(stringResource(R.string.analysis_not_synced))
+            AnalysisState.UNAVAILABLE -> Text(stringResource(R.string.analysis_unavailable))
         }
         if (detail.fromCache) {
-            Text("Offline copy" + (detail.cachedAtMs?.let { " of ${formatDate(it)}" } ?: ""))
+            Text(
+                detail.cachedAtMs?.let { stringResource(R.string.offline_copy_of, formatDate(it)) }
+                    ?: stringResource(R.string.offline_copy),
+            )
         }
     }
 }
@@ -388,36 +390,40 @@ private fun AnalysisView(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         if (analysis.splits.isNotEmpty()) {
-            Text("Splits")
+            Text(stringResource(R.string.splits))
             analysis.splits.forEach { split ->
                 Text(
                     "#${split.index} ${format.distance(split.endDistanceM - split.startDistanceM)} — " +
                         "${formatDuration(split.movingMs)}" +
                         (split.avgHrBpm?.let { " — $it bpm" } ?: "") +
-                        if (split.partial) " (partial)" else "",
+                        if (split.partial) " (${stringResource(R.string.partial)})" else "",
                 )
             }
         }
         analysis.elevation?.let { elevation ->
             Text(
-                "Elevation: ${format.elevation(
-                    elevation.gainM,
-                    signed = true,
-                )} / -${format.elevation(elevation.lossM)}",
+                stringResource(
+                    R.string.elevation_gain_loss,
+                    format.elevation(elevation.gainM, signed = true),
+                    format.elevation(elevation.lossM),
+                ),
             )
         }
         val series = analysis.series
         val elevationPoints = series.elevationM.filterNotNull()
         if (elevationPoints.size > 1) {
             Text(
-                "Elevation profile (${format.elevation(elevationPoints.min())}" +
-                    "–${format.elevation(elevationPoints.max())})",
+                stringResource(
+                    R.string.elevation_profile,
+                    format.elevation(elevationPoints.min()),
+                    format.elevation(elevationPoints.max()),
+                ),
             )
             SeriesChart(elevationPoints.map { it.toFloat() }, series.segment)
         }
         val heartRate = series.heartRate
         if (heartRate.bpm.size > 1) {
-            Text("Heart rate (${heartRate.bpm.min()}–${heartRate.bpm.max()} bpm)")
+            Text(stringResource(R.string.heart_rate_range, heartRate.bpm.min(), heartRate.bpm.max()))
             SeriesChart(heartRate.bpm.map { it.toFloat() }, heartRate.segment)
             ZonesView(analysis.heartRateZones)
         }
@@ -431,10 +437,10 @@ private fun AnalysisView(
 @Composable
 private fun ZonesView(zones: HeartRateZones?) {
     if (zones == null) {
-        Text("Set your maximum heart rate in the account to see the time in each zone.")
+        Text(stringResource(R.string.zones_need_max_hr))
         return
     }
-    Text("Time in each zone (maximum ${zones.maxHrBpm} bpm)")
+    Text(stringResource(R.string.zones_title, zones.maxHrBpm))
     zones.zones.forEach { zone ->
         val range = zone.toBpm?.let { "${zone.fromBpm}–$it" } ?: "${zone.fromBpm}+"
         Text("Z${zone.zone} $range bpm — ${formatDuration(zone.timeMs)}")
@@ -505,31 +511,34 @@ private fun DeviceRowView(
         item.summary?.let {
             Text("${format.distance(it.distanceM)} — ${formatDuration(it.elapsedMs)}")
         }
-        if (item.deletedOnServer) Text("The server does not have it any more.")
-        Text("${item.localBytes / 1024} kB on this device")
+        if (item.deletedOnServer) Text(stringResource(R.string.server_lacks_it))
+        Text(stringResource(R.string.kb_on_device, item.localBytes / 1024))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { onExport(ExportKind.GPX) }) { Text("GPX") }
-            Button(onClick = { onExport(ExportKind.DIAGNOSTICS) }) { Text("Diagnostics") }
-            Button(onClick = { onExport(ExportKind.RAW) }) { Text("Raw file") }
-            Button(onClick = onDelete) { Text("Delete") }
+            Button(onClick = { onExport(ExportKind.DIAGNOSTICS) }) { Text(stringResource(R.string.export_diagnostics)) }
+            Button(onClick = { onExport(ExportKind.RAW) }) { Text(stringResource(R.string.export_raw)) }
+            Button(onClick = onDelete) { Text(stringResource(R.string.delete)) }
         }
         // A finished activity can be saved to the health platform of the phone, at the user's request.
         if (item.summary != null) {
-            Button(onClick = onHealth) { Text("Save to Health Connect") }
+            Button(onClick = onHealth) { Text(stringResource(R.string.save_to_health)) }
         }
     }
 }
 
+@Composable
 private fun syncLabel(state: HistorySyncState): String =
-    when (state) {
-        HistorySyncState.LOCAL_ONLY -> "recording"
-        HistorySyncState.QUEUED -> "waiting to upload"
-        HistorySyncState.UPLOADING -> "uploading"
-        HistorySyncState.SYNCED -> "on the server"
-        HistorySyncState.FAILED_RETRYABLE -> "upload failed, will retry"
-        HistorySyncState.FAILED_PERMANENT -> "the server refused it"
-        HistorySyncState.DELETED_ON_SERVER -> "deleted on the server"
-    }
+    stringResource(
+        when (state) {
+            HistorySyncState.LOCAL_ONLY -> R.string.sync_local_only
+            HistorySyncState.QUEUED -> R.string.sync_queued
+            HistorySyncState.UPLOADING -> R.string.sync_uploading
+            HistorySyncState.SYNCED -> R.string.sync_synced
+            HistorySyncState.FAILED_RETRYABLE -> R.string.sync_failed_retryable
+            HistorySyncState.FAILED_PERMANENT -> R.string.sync_failed_permanent
+            HistorySyncState.DELETED_ON_SERVER -> R.string.sync_deleted_on_server
+        },
+    )
 
 private fun formatDate(epochMs: Long): String =
     DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(epochMs))
