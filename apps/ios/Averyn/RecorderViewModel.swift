@@ -1,5 +1,5 @@
 import Foundation
-import Shared
+@preconcurrency import Shared
 import UIKit
 
 /// One row of the history list (TDD-0006 R8): an activity stored on this device.
@@ -139,6 +139,28 @@ final class RecorderViewModel: ObservableObject {
         profile = nil
         units = .metric
         return true
+    }
+
+    /// What the last "save to Health" said, for the screen.
+    @Published var healthMessage: String?
+
+    /// Saves an activity recorded on this phone to Health (TDD-0014), at the user's request.
+    func saveToHealth(_ item: DeviceActivityItem) async {
+        healthMessage = nil
+        do {
+            switch try await HealthKitExporter().save(store: store, activityId: item.activityId) {
+            case .saved: healthMessage = "Saved to Health"
+            case .alreadySaved: healthMessage = "This activity is already in Health."
+            }
+        } catch HealthKitExporter.Failure.unavailable {
+            healthMessage = "Health is not available on this device."
+        } catch HealthKitExporter.Failure.denied {
+            healthMessage = "Averyn was not allowed to write to Health. You can allow it in the Health settings."
+        } catch HealthKitExporter.Failure.nothingToSave {
+            healthMessage = "This activity cannot be saved to Health: it is not finished or has no route."
+        } catch {
+            healthMessage = "Could not save to Health."
+        }
     }
 
     /// Reads the next page of the list.

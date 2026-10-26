@@ -103,6 +103,7 @@ struct ContentView: View {
             if let detail = viewModel.activityDetail {
                 detailView(detail)
             }
+            if let message = viewModel.healthMessage { Text(message) }
             if viewModel.historySnapshot?.nextCursor != nil {
                 Button("Load more") { Task { await viewModel.loadMoreHistory() } }
             }
@@ -275,6 +276,10 @@ struct ContentView: View {
                     Button("Export") { viewModel.prepareExport(activityId: item.activityId) }
                 }
                 Button("Delete") { Task { await viewModel.deleteLocal(item) } }
+            }
+            // A finished activity can be saved to Health, at the user's request.
+            if item.summary != nil && HealthKitExporter.isAvailable {
+                Button("Save to Health") { Task { await viewModel.saveToHealth(item) } }
             }
         }
     }

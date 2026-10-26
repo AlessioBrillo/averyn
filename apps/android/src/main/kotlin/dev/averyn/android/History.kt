@@ -26,8 +26,12 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.PermissionController
 import dev.averyn.analysis.ActivityAnalysis
 import dev.averyn.analysis.HeartRateZones
+import dev.averyn.android.health.HealthConnectAvailability
+import dev.averyn.android.health.HealthConnectExporter
 import dev.averyn.client.AnalysisState
 import dev.averyn.client.ApiFailureKind
 import dev.averyn.client.DetailSnapshot
@@ -37,6 +41,7 @@ import dev.averyn.client.HistorySnapshot
 import dev.averyn.client.HistorySource
 import dev.averyn.client.HistorySyncState
 import dev.averyn.client.UnitFormat
+import dev.averyn.tracking.workoutExport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -70,6 +75,7 @@ internal fun HistorySection(
     var pending by remember { mutableStateOf<String?>(null) }
     var toDelete by remember { mutableStateOf<DeviceActivityItem?>(null) }
     val format = remember(app.units) { UnitFormat(app.units) }
+    var healthPending by remember { mutableStateOf<String?>(null) }
 
     /** The token of the session, or null when there is none (the list then shows the cache). */
     suspend fun token(): String? = runCatching { app.auth.freshAccessToken() }.getOrNull()
@@ -139,6 +145,53 @@ internal fun HistorySection(
             ActivityResultContracts.CreateDocument("application/x-ndjson"),
             launcherResult(ExportKind.RAW),
         )
+
+    /** Writes the workout of an activity recorded on this phone to Health Connect (TDD-0014). */
+    fun saveToHealth(activityId: String) {
+        scope.launch(Dispatchers.IO) {
+            val workout = runCatching { app.store.workoutExport(activityId) }.getOrNull()
+            message =
+                if (workout == null) {
+                    "This activity cannot be saved to Health Connect: it is not finished or has no route."
+                } else {
+                    runCatching { HealthConnectExporter.write(context, workout) }.fold(
+                        onSuccess = { "Saved to Health Connect" },
+                        onFailure = { "Could not save to Health Connect" },
+                    )
+                }
+        }
+    }
+
+    val healthPermissions =
+        rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) { granted ->
+            val id = healthPending
+            healthPending = null
+            if (id != null) {
+                if (granted.containsAll(HealthConnectExporter.PERMISSIONS)) {
+                    saveToHealth(id)
+                } else {
+                    message = "Health Connect was not given the permissions it needs."
+                }
+            }
+        }
+
+    fun startHealth(activityId: String) {
+        scope.launch {
+            when (HealthConnectExporter.availability(context)) {
+                HealthConnectAvailability.UNAVAILABLE -> message = "Health Connect is not available on this phone."
+                HealthConnectAvailability.UPDATE_NEEDED -> message = "Update Health Connect to save workouts to it."
+                HealthConnectAvailability.AVAILABLE -> {
+                    val granted = HealthConnectClient.getOrCreate(context).permissionController.getGrantedPermissions()
+                    if (granted.containsAll(HealthConnectExporter.PERMISSIONS)) {
+                        saveToHealth(activityId)
+                    } else {
+                        healthPending = activityId
+                        healthPermissions.launch(HealthConnectExporter.PERMISSIONS)
+                    }
+                }
+            }
+        }
+    }
 
     /** Opens an activity: its numbers first, its analysis right after. */
     fun openDetail(item: HistoryItem) {
@@ -216,6 +269,7 @@ internal fun HistorySection(
                         }
                     },
                     onDelete = { toDelete = item },
+                    onHealth = { startHealth(item.activityId) },
                 )
             }
         }
@@ -439,6 +493,7 @@ private fun DeviceRowView(
     format: UnitFormat,
     onExport: (ExportKind) -> Unit,
     onDelete: () -> Unit,
+    onHealth: () -> Unit,
 ) {
     Column(
         modifier =
@@ -457,6 +512,10 @@ private fun DeviceRowView(
             Button(onClick = { onExport(ExportKind.DIAGNOSTICS) }) { Text("Diagnostics") }
             Button(onClick = { onExport(ExportKind.RAW) }) { Text("Raw file") }
             Button(onClick = onDelete) { Text("Delete") }
+        }
+        // A finished activity can be saved to the health platform of the phone, at the user's request.
+        if (item.summary != null) {
+            Button(onClick = onHealth) { Text("Save to Health Connect") }
         }
     }
 }

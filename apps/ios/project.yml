@@ -29,6 +29,12 @@ targets:
       - package: AppAuth
       - package: MapLibre
         product: MapLibre
+    # Saving a finished activity to Health at the user's request (TDD-0014): write-only, nothing is read.
+    entitlements:
+      path: Averyn/Averyn.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []
     info:
       path: Averyn/Info.plist
       properties:
@@ -46,6 +52,7 @@ targets:
           - CFBundleURLSchemes: [dev.averyn.app]
         NSLocationWhenInUseUsageDescription: "Averyn uses your location to record your activity's route, distance and pace."
         NSLocationAlwaysAndWhenInUseUsageDescription: "Averyn uses your location to keep recording your activity while your phone is locked or the app is in the background."
+        NSHealthUpdateUsageDescription: "Averyn saves a finished activity (the workout, its route, the heart rate and the distance) to Health when you ask it to. It never reads from Health."
         NSBluetoothAlwaysUsageDescription: "Averyn uses Bluetooth to connect to a heart-rate strap while recording an activity, also with the screen locked."
     settings:
       base:

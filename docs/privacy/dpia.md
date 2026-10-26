@@ -18,6 +18,7 @@
 | Derived data | splits, elevation, series, best efforts, records, zones | the analysis | Restricted | PostgreSQL | the user |
 | Consent records | which scope, granted when, revoked when | to prove and honour consent | Internal | the `consents` table | the user, the operator |
 | Operational data | request counts, error codes, health checks | to run the service | Internal | logs and metrics: ids and counts only, never coordinates, tokens or content | the operator |
+| Health-platform copy | the workout, route, heart rate and distance of an activity, written to Health (iOS) or Health Connect (Android) **only when the user taps save**, write-only | to keep the user's workouts in the platform they chose | Restricted | the platform's own store on the phone, under the user's control there ([TDD-0014](../design/TDD-0014-health-platforms.md)) | the user, and whatever apps the user lets read it in the platform |
 | Diagnostics | the report a user exports from the app for a bug or a test run | support | Restricted | the user's device, shared by the user on purpose | whoever the user sends it to |
 
 Not processed: advertising identifiers, contacts, photos, the content of other apps, any third-party analytics SDK (telemetry is off by default and carries no location, [ADR-0009](../adr/0009-observability-baseline.md)). The phone's copy of the server is bounded, excluded from the backup and ends with the session ([ADR-0025](../adr/0025-device-side-cache-of-server-activities.md)); the maximum heart rate never reaches it.
