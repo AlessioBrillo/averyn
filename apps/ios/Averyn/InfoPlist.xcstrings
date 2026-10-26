@@ -1,0 +1,56 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "CFBundleDisplayName": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Averyn Beta"
+          }
+        }
+      }
+    },
+    "NSLocationWhenInUseUsageDescription": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Averyn usa la tua posizione per registrare il percorso, la distanza e il passo della tua attività."
+          }
+        }
+      }
+    },
+    "NSLocationAlwaysAndWhenInUseUsageDescription": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Averyn usa la tua posizione per continuare a registrare l'attività mentre il telefono è bloccato o l'app è in background."
+          }
+        }
+      }
+    },
+    "NSHealthUpdateUsageDescription": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Averyn salva un'attività conclusa (l'allenamento, il percorso, la frequenza cardiaca e la distanza) in Salute quando glielo chiedi. Non legge mai da Salute."
+          }
+        }
+      }
+    },
+    "NSBluetoothAlwaysUsageDescription": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Averyn usa il Bluetooth per collegarsi a una fascia cardio durante la registrazione di un'attività, anche con lo schermo bloccato."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

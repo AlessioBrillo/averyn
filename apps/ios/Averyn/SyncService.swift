@@ -67,11 +67,11 @@ final class SyncService: ObservableObject {
 
     func refreshStatus() {
         guard let latest = store.list().max(by: { $0.startedAtMs < $1.startedAtMs }) else {
-            statusText = "Sync: no activities yet"
+            statusText = tr("Sync: no activities yet")
             return
         }
         let status = SyncStatusStore(store: store).statusOf(activityId: latest.activityId)
-        statusText = "Sync: \(status.state)" + (status.lastError.map { " (\($0))" } ?? "")
+        statusText = tr("Sync: %@", "\(status.state)") + (status.lastError.map { " (\($0))" } ?? "")
     }
 
     /// Must run before the app finishes launching: call from `AverynApp.init`.

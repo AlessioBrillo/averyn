@@ -39,6 +39,8 @@ targets:
       path: Averyn/Info.plist
       properties:
         CFBundleDisplayName: Averyn Beta
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations: [en, it]
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         AverynCommit: $(AVERYN_COMMIT)

@@ -1,0 +1,1066 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "Share GPX": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Condividi GPX"
+          }
+        }
+      }
+    },
+    "Share diagnostics": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Condividi la diagnostica"
+          }
+        }
+      }
+    },
+    "Interrupted activity found": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trovata un'attività interrotta"
+          }
+        }
+      }
+    },
+    "Resume": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riprendi"
+          }
+        }
+      }
+    },
+    "Finish now": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Concludi ora"
+          }
+        }
+      }
+    },
+    "History": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cronologia"
+          }
+        }
+      }
+    },
+    "Offline copy — the server could not be reached.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copia offline — il server non è raggiungibile."
+          }
+        }
+      }
+    },
+    "Sign in to read the activities of the account.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accedi per leggere le attività dell'account."
+          }
+        }
+      }
+    },
+    "Load more": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carica altre"
+          }
+        }
+      }
+    },
+    "On this device": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Su questo dispositivo"
+          }
+        }
+      }
+    },
+    "Activity": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attività"
+          }
+        }
+      }
+    },
+    "The server does not have this activity any more. The file on this device is untouched.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il server non ha più questa attività. Il file su questo dispositivo è intatto."
+          }
+        }
+      }
+    },
+    "The analysis is being computed…": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'analisi è in calcolo…"
+          }
+        }
+      }
+    },
+    "The analysis is not on this device.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'analisi non è su questo dispositivo."
+          }
+        }
+      }
+    },
+    "The analysis comes with the upload of the activity.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'analisi arriva con il caricamento dell'attività."
+          }
+        }
+      }
+    },
+    "There is no analysis for this activity.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non c'è un'analisi per questa attività."
+          }
+        }
+      }
+    },
+    "Offline copy": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copia offline"
+          }
+        }
+      }
+    },
+    "Splits": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parziali"
+          }
+        }
+      }
+    },
+    "Set your maximum heart rate in the account to see the time in each zone.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imposta la frequenza cardiaca massima nell'account per vedere il tempo in ogni zona."
+          }
+        }
+      }
+    },
+    "The server does not have it any more.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il server non ce l'ha più."
+          }
+        }
+      }
+    },
+    "GPX": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GPX"
+          }
+        }
+      }
+    },
+    "Diagnostics": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diagnostica"
+          }
+        }
+      }
+    },
+    "Raw file": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "File grezzo"
+          }
+        }
+      }
+    },
+    "Export": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esporta"
+          }
+        }
+      }
+    },
+    "Delete": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elimina"
+          }
+        }
+      }
+    },
+    "Save to Health": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salva in Salute"
+          }
+        }
+      }
+    },
+    "Waiting for GPS…": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In attesa del GPS…"
+          }
+        }
+      }
+    },
+    "Cancel": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annulla"
+          }
+        }
+      }
+    },
+    "Pause": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pausa"
+          }
+        }
+      }
+    },
+    "Stop": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop"
+          }
+        }
+      }
+    },
+    "Finishing…": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conclusione…"
+          }
+        }
+      }
+    },
+    "Server URL": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "URL del server"
+          }
+        }
+      }
+    },
+    "Sign out": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esci"
+          }
+        }
+      }
+    },
+    "Sign in": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accedi"
+          }
+        }
+      }
+    },
+    "Sync now": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sincronizza ora"
+          }
+        }
+      }
+    },
+    "Delete the offline copy": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elimina la copia offline"
+          }
+        }
+      }
+    },
+    "Delete my account": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elimina il mio account"
+          }
+        }
+      }
+    },
+    "Privacy policy": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Informativa sulla privacy"
+          }
+        }
+      }
+    },
+    "Terms of service": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Termini di servizio"
+          }
+        }
+      }
+    },
+    "Delete your account?": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminare il tuo account?"
+          }
+        }
+      }
+    },
+    "Type delete to confirm": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrivi delete per confermare"
+          }
+        }
+      }
+    },
+    "This removes all your activities and their recorded data from the server for good. The recordings on this device stay. Your sign-in at the identity provider is not removed: close it there if you want it gone. Export your data first if you want a copy.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questo rimuove per sempre dal server tutte le tue attività e i dati registrati. Le registrazioni su questo dispositivo restano. L'accesso presso il provider di identità non viene rimosso: chiudilo lì se vuoi eliminarlo. Esporta prima i tuoi dati se vuoi una copia."
+          }
+        }
+      }
+    },
+    "Profile": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profilo"
+          }
+        }
+      }
+    },
+    "Units": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unità"
+          }
+        }
+      }
+    },
+    "Metric (km, m)": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metrico (km, m)"
+          }
+        }
+      }
+    },
+    "Imperial (mi, ft)": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imperiale (mi, ft)"
+          }
+        }
+      }
+    },
+    "Maximum heart rate (bpm)": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Frequenza cardiaca massima (bpm)"
+          }
+        }
+      }
+    },
+    "Save profile": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salva il profilo"
+          }
+        }
+      }
+    },
+    "The base map is not available offline; the track is.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La mappa di base non è disponibile offline; il percorso sì."
+          }
+        }
+      }
+    },
+    "The map needs the map style of the server: it is read when the app reaches the server.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La mappa ha bisogno dello stile mappa del server: viene letto quando l'app raggiunge il server."
+          }
+        }
+      }
+    },
+    "A %@ activity was interrupted. Resume it or finish it now?": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un'attività (%@) è stata interrotta. Riprenderla o concluderla ora?"
+          }
+        }
+      }
+    },
+    "State: %@": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stato: %@"
+          }
+        }
+      }
+    },
+    "Distance: %@ m": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Distanza: %@ m"
+          }
+        }
+      }
+    },
+    "Elapsed: %@ s": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trascorso: %@ s"
+          }
+        }
+      }
+    },
+    "GPS quality: %@": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qualità GPS: %@"
+          }
+        }
+      }
+    },
+    "Moving %@ · Paused %@": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In movimento %@ · In pausa %@"
+          }
+        }
+      }
+    },
+    "Pace %@": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passo %@"
+          }
+        }
+      }
+    },
+    "HR %@/%@ bpm (%@)": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FC %@/%@ bpm (%@)"
+          }
+        }
+      }
+    },
+    "Quality %@ · %@": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qualità %@ · %@"
+          }
+        }
+      }
+    },
+    "partial": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "parziale"
+          }
+        }
+      }
+    },
+    "Elevation: %@ / -%@": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dislivello: %@ / -%@"
+          }
+        }
+      }
+    },
+    "Time in each zone (maximum %@ bpm)": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tempo in ogni zona (massimo %@ bpm)"
+          }
+        }
+      }
+    },
+    "Elevation profile (%@–%@)": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profilo altimetrico (%@–%@)"
+          }
+        }
+      }
+    },
+    "Heart rate (%@–%@ bpm)": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Frequenza cardiaca (%@–%@ bpm)"
+          }
+        }
+      }
+    },
+    "%@ kB on this device": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ kB su questo dispositivo"
+          }
+        }
+      }
+    },
+    "Sign-in failed": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accesso non riuscito"
+          }
+        }
+      }
+    },
+    "Your account and its data were deleted from the server. The recordings on this device stay. Your sign-in at the identity provider is not removed.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il tuo account e i suoi dati sono stati eliminati dal server. Le registrazioni su questo dispositivo restano. L'accesso presso il provider di identità non viene rimosso."
+          }
+        }
+      }
+    },
+    "Could not delete your account. Try again.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile eliminare l'account. Riprova."
+          }
+        }
+      }
+    },
+    "This server is newer than the app: update the app to use everything it offers.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questo server è più recente dell'app: aggiorna l'app per usare tutto."
+          }
+        }
+      }
+    },
+    "This server needs a newer app: update the app.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questo server richiede un'app più recente: aggiorna l'app."
+          }
+        }
+      }
+    },
+    "This server is older than the app: some features may be missing.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questo server è più vecchio dell'app: alcune funzioni potrebbero mancare."
+          }
+        }
+      }
+    },
+    "Offline copy: %@ activities, %@ kB": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copia offline: %@ attività, %@ kB"
+          }
+        }
+      }
+    },
+    "A whole number from %@ to %@, or empty.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un numero intero da %@ a %@, oppure vuoto."
+          }
+        }
+      }
+    },
+    "HR %@/%@ bpm": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FC %@/%@ bpm"
+          }
+        }
+      }
+    },
+    "imported": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "importata"
+          }
+        }
+      }
+    },
+    "on this device": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "su questo dispositivo"
+          }
+        }
+      }
+    },
+    "local estimate": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "stima locale"
+          }
+        }
+      }
+    },
+    "recording": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in registrazione"
+          }
+        }
+      }
+    },
+    "waiting to upload": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in attesa di caricamento"
+          }
+        }
+      }
+    },
+    "uploading": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in caricamento"
+          }
+        }
+      }
+    },
+    "on the server": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sul server"
+          }
+        }
+      }
+    },
+    "upload failed, will retry": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "caricamento non riuscito, riproverà"
+          }
+        }
+      }
+    },
+    "the server refused it": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "il server l'ha rifiutata"
+          }
+        }
+      }
+    },
+    "deleted on the server": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "eliminata sul server"
+          }
+        }
+      }
+    },
+    "unknown": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sconosciuto"
+          }
+        }
+      }
+    },
+    "Run": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Corsa"
+          }
+        }
+      }
+    },
+    "Ride": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bici"
+          }
+        }
+      }
+    },
+    "Walk": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camminata"
+          }
+        }
+      }
+    },
+    "Hike": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escursione"
+          }
+        }
+      }
+    },
+    "Recording resumed after an interruption": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registrazione ripresa dopo un'interruzione"
+          }
+        }
+      }
+    },
+    "Could not load your profile.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile caricare il profilo."
+          }
+        }
+      }
+    },
+    "Sign in again to save your profile.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accedi di nuovo per salvare il profilo."
+          }
+        }
+      }
+    },
+    "Could not save your profile.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile salvare il profilo."
+          }
+        }
+      }
+    },
+    "Saved": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salvato"
+          }
+        }
+      }
+    },
+    "That is not a valid profile.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questo profilo non è valido."
+          }
+        }
+      }
+    },
+    "Saved to Health": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salvato in Salute"
+          }
+        }
+      }
+    },
+    "This activity is already in Health.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questa attività è già in Salute."
+          }
+        }
+      }
+    },
+    "Health is not available on this device.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salute non è disponibile su questo dispositivo."
+          }
+        }
+      }
+    },
+    "Averyn was not allowed to write to Health. You can allow it in the Health settings.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Averyn non ha ricevuto il permesso di scrivere in Salute. Puoi consentirlo nelle impostazioni di Salute."
+          }
+        }
+      }
+    },
+    "This activity cannot be saved to Health: it is not finished or has no route.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questa attività non può essere salvata in Salute: non è conclusa o non ha un percorso."
+          }
+        }
+      }
+    },
+    "Could not save to Health.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile salvare in Salute."
+          }
+        }
+      }
+    },
+    "Recovery lost %@ corrupted record(s) from the interrupted activity": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il recupero ha perso %@ record danneggiati dell'attività interrotta"
+          }
+        }
+      }
+    },
+    "Sync: no activities yet": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sincronizzazione: nessuna attività finora"
+          }
+        }
+      }
+    },
+    "Sync: %@": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sincronizzazione: %@"
+          }
+        }
+      }
+    },
+    "Location permission was removed: the activity is paused.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il permesso di posizione è stato rimosso: l'attività è in pausa."
+          }
+        }
+      }
+    },
+    "Precise location was turned off: the activity is paused. Turn Precise Location on to continue.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La posizione precisa è stata disattivata: l'attività è in pausa. Attiva la posizione precisa per continuare."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}
