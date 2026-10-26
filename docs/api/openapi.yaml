@@ -267,6 +267,52 @@ paths:
         "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
         "503": { description: Too many imports in progress, retry after the Retry-After seconds }
         "507": { description: "Storing this file would exceed the caller's storage quota; nothing was stored" }
+  /v1/imports/fit:
+    post:
+      summary: Import a FIT activity file as an activity (TDD-0013)
+      description: >
+        The body is the file itself, not a form. A FIT file declares its sport, so `sport` is optional here and wins
+        when given; a file that declares none the importer knows is `422 sport_unknown`. The file is checked (its
+        CRC, its structure, that it is an activity), its records become the track (a stopped timer is a pause) and
+        its heart rate is imported; the fields the importer does not read (cadence, power, developer data) are
+        counted in `ignoredExtensions`. The same file is imported once per owner. The uploaded file is kept
+        byte-for-byte next to the canonical activity file.
+      security: [{ oidc: [] }]
+      parameters:
+        - name: sport
+          in: query
+          required: false
+          schema: { type: string, enum: [RUN, RIDE, WALK, HIKE] }
+      requestBody:
+        required: true
+        description: The FIT file, max 32 MB.
+        content:
+          application/vnd.ant.fit:
+            schema: { type: string, format: binary }
+          application/fit:
+            schema: { type: string, format: binary }
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        "200":
+          description: This exact file was already imported; the activity that exists is returned
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportResponse" }
+        "201":
+          description: Stored and summarised
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportResponse" }
+        "400": { description: Unknown sport }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted (ADR-0017) }
+        "413": { description: Body over the size limit }
+        "415": { description: The body type is not one a FIT file is sent with }
+        "422": { description: "The file is not an activity this importer can read; the code says why (not_fit, fit_crc, fit_truncated, fit_structure, fit_not_activity, no_track, invalid_time, invalid_coordinate, too_many_points, sport_unknown)" }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+        "503": { description: Too many imports in progress, retry after the Retry-After seconds }
+        "507": { description: "Storing this file would exceed the caller's storage quota; nothing was stored" }
   /v1/consents:
     get:
       summary: The caller's consent grants, granted and revoked (ADR-0021)
@@ -347,7 +393,7 @@ paths:
     get:
       summary: Download all of the caller's data as a ZIP (TDD-0004)
       description: >
-        Entries: raw/{clientActivityId}.jsonl (byte-for-byte), original/{clientActivityId}.gpx (the file an
+        Entries: raw/{clientActivityId}.jsonl (byte-for-byte), original/{clientActivityId}.gpx or .fit (the file an
         imported activity was imported from), rr/{clientActivityId}.rr.jsonl (the heart-rate sidecar),
         gpx/{clientActivityId}.gpx, analysis/{clientActivityId}.json (the splits, the elevation, the series
         and the best efforts of the activity, TDD-0009 and TDD-0010), profile.json, consents.json, records.json (the personal
@@ -645,7 +691,8 @@ components:
         segments: { type: [integer, "null"], description: "The number of track segments; null when the file was not parsed (a duplicate)" }
         points: { type: [integer, "null"], description: "The number of track points; null when the file was not parsed (a duplicate)" }
         ignoredExtensions: { type: object, additionalProperties: { type: integer }, description: "The extensions found in the file and not imported, by name" }
-        parserVersion: { type: string }
+        parserVersion: { type: string, description: "e.g. gpx-import-v1, fit-import-v1" }
+        heartRateReadings: { type: [integer, "null"], description: "The number of heart-rate readings imported; null when the file was not parsed (a duplicate)" }
     UserProfile:
       type: object
       properties:

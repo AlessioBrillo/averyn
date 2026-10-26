@@ -36,7 +36,17 @@ import javax.sql.DataSource
 const val MAX_CONCURRENT_IMPORTS = 2
 
 private val GPX_XML = ContentType("application", "gpx+xml")
-private val ACCEPTED_TYPES = listOf(GPX_XML, ContentType.Application.Xml, ContentType.Text.Xml)
+private val GPX_TYPES = listOf(GPX_XML, ContentType.Application.Xml, ContentType.Text.Xml)
+
+/** A FIT file has no registered type; the ones clients use are accepted, and the parser checks the content. */
+private val FIT_TYPES =
+    listOf(
+        ContentType("application", "vnd.ant.fit"),
+        ContentType("application", "fit"),
+        ContentType.Application.OctetStream,
+    )
+
+private fun ImportFormat.acceptedTypes() = if (this == ImportFormat.GPX) GPX_TYPES else FIT_TYPES
 
 /** The answer of an import: the activity that was created (or found) and what the importer read. */
 @Serializable
@@ -46,11 +56,12 @@ data class ImportResponse(
 )
 
 /**
- * `POST /v1/imports/gpx` (TDD-0008): imports a GPX file as an activity, owner-only.
+ * `POST /v1/imports/gpx` (TDD-0008) and `POST /v1/imports/fit` (TDD-0013): import a file as an activity, owner-only.
  *
  * The body is the file itself, not a form: the browser streams it and the server writes it to disk while
- * hashing it. The sport is explicit (`?sport=RUN`): a GPX file's `<type>` is free text and guessing it would
- * label the activity with the wrong sport.
+ * hashing it. The sport is explicit for a GPX file (`?sport=RUN`): its `<type>` is free text and guessing it would
+ * label the activity with the wrong sport. A FIT file declares its sport as an enum, so there `?sport=` is optional
+ * and wins when given.
  *
  * The same file is imported once per owner: the second import answers `200` with the activity that exists.
  * A file that is not a track answers `422` with a stable code and a message that never carries a coordinate.
@@ -62,78 +73,89 @@ fun Application.imports(
     importSlots: Semaphore = Semaphore(MAX_CONCURRENT_IMPORTS),
     quotaBytes: Long = DEFAULT_USER_QUOTA_BYTES,
 ) {
-    val service = ImportService(ActivityIngest(db, raw, quotaBytes), GpxParser(), quotaBytes)
+    val service = ImportService(ActivityIngest(db, raw, quotaBytes), quotaBytes = quotaBytes)
 
     routing {
         authenticate(OIDC_AUTH) {
             rateLimit(PER_USER) {
-                post("/v1/imports/gpx") {
-                    val sportName = call.request.queryParameters["sport"]
-                    val sport = Sport.entries.firstOrNull { it.name == sportName }
-                    if (sport == null) {
-                        return@post call.respond(
-                            HttpStatusCode.BadRequest,
-                            mapOf(
-                                "error" to "invalid_sport",
-                                "message" to "the sport must be one of ${Sport.entries.joinToString(",")}",
-                            ),
-                        )
-                    }
-                    val contentType = call.request.contentType()
-                    if (ACCEPTED_TYPES.none { it.match(contentType) }) {
-                        return@post call.respond(
-                            HttpStatusCode.UnsupportedMediaType,
-                            mapOf("error" to "unsupported_media_type", "message" to "the file must be a GPX file"),
-                        )
-                    }
-                    val owner = call.owner(db) ?: return@post
-                    if (!importSlots.tryAcquire()) {
-                        call.response.header(HttpHeaders.RetryAfter, "5")
-                        return@post call.respond(
-                            HttpStatusCode.ServiceUnavailable,
-                            errorBody("too many imports, retry later"),
-                        )
-                    }
-                    try {
-                        withContext(Dispatchers.IO) {
-                            val dir = Files.createTempDirectory("averyn-import-")
-                            try {
-                                val file = dir.resolve("upload.gpx")
-                                val sha256 = call.receiveToFile(file, maxBytes)
-                                if (sha256 == null) {
-                                    call.respond(
-                                        HttpStatusCode.PayloadTooLarge,
-                                        errorBody("the file is too large"),
-                                    )
-                                    return@withContext
-                                }
-                                when (val result = service.import(owner, file, sha256, sport)) {
-                                    is ImportResult.Created ->
-                                        call.respond(
-                                            HttpStatusCode.Created,
-                                            ImportResponse(result.summary, result.report),
-                                        )
-                                    is ImportResult.Existing ->
-                                        call.respond(HttpStatusCode.OK, ImportResponse(result.summary, result.report))
-                                    is ImportResult.Invalid ->
-                                        call.respond(
-                                            HttpStatusCode.UnprocessableEntity,
-                                            mapOf("error" to result.code, "message" to result.message),
-                                        )
-                                    ImportResult.QuotaExceeded ->
-                                        call.respond(
-                                            HttpStatusCode.InsufficientStorage,
-                                            errorBody("storage quota exceeded"),
-                                        )
-                                    ImportResult.AccountDeleted ->
-                                        call.respond(HttpStatusCode.Forbidden, errorBody("account was deleted"))
-                                }
-                            } finally {
-                                dir.toFile().deleteRecursively()
-                            }
+                for (format in ImportFormat.entries) {
+                    post("/v1/imports/${format.source}") {
+                        val sportName = call.request.queryParameters["sport"]
+                        val sport = Sport.entries.firstOrNull { it.name == sportName }
+                        // GPX needs the sport from the user; a FIT file brings its own, so the parameter is optional
+                        // there, but a value that is not a sport is still refused.
+                        val sportRequired = format == ImportFormat.GPX
+                        if (sport == null && (sportRequired || sportName != null)) {
+                            return@post call.respond(
+                                HttpStatusCode.BadRequest,
+                                mapOf(
+                                    "error" to "invalid_sport",
+                                    "message" to "the sport must be one of ${Sport.entries.joinToString(",")}",
+                                ),
+                            )
                         }
-                    } finally {
-                        importSlots.release()
+                        val contentType = call.request.contentType()
+                        if (format.acceptedTypes().none { it.match(contentType) }) {
+                            return@post call.respond(
+                                HttpStatusCode.UnsupportedMediaType,
+                                mapOf(
+                                    "error" to "unsupported_media_type",
+                                    "message" to "the file must be a ${format.name} file",
+                                ),
+                            )
+                        }
+                        val owner = call.owner(db) ?: return@post
+                        if (!importSlots.tryAcquire()) {
+                            call.response.header(HttpHeaders.RetryAfter, "5")
+                            return@post call.respond(
+                                HttpStatusCode.ServiceUnavailable,
+                                errorBody("too many imports, retry later"),
+                            )
+                        }
+                        try {
+                            withContext(Dispatchers.IO) {
+                                val dir = Files.createTempDirectory("averyn-import-")
+                                try {
+                                    val file = dir.resolve("upload.${format.source}")
+                                    val sha256 = call.receiveToFile(file, maxBytes)
+                                    if (sha256 == null) {
+                                        call.respond(
+                                            HttpStatusCode.PayloadTooLarge,
+                                            errorBody("the file is too large"),
+                                        )
+                                        return@withContext
+                                    }
+                                    when (val result = service.import(owner, file, sha256, format, sport)) {
+                                        is ImportResult.Created ->
+                                            call.respond(
+                                                HttpStatusCode.Created,
+                                                ImportResponse(result.summary, result.report),
+                                            )
+                                        is ImportResult.Existing ->
+                                            call.respond(
+                                                HttpStatusCode.OK,
+                                                ImportResponse(result.summary, result.report),
+                                            )
+                                        is ImportResult.Invalid ->
+                                            call.respond(
+                                                HttpStatusCode.UnprocessableEntity,
+                                                mapOf("error" to result.code, "message" to result.message),
+                                            )
+                                        ImportResult.QuotaExceeded ->
+                                            call.respond(
+                                                HttpStatusCode.InsufficientStorage,
+                                                errorBody("storage quota exceeded"),
+                                            )
+                                        ImportResult.AccountDeleted ->
+                                            call.respond(HttpStatusCode.Forbidden, errorBody("account was deleted"))
+                                    }
+                                } finally {
+                                    dir.toFile().deleteRecursively()
+                                }
+                            }
+                        } finally {
+                            importSlots.release()
+                        }
                     }
                 }
             }
