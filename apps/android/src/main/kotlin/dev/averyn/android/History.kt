@@ -200,7 +200,7 @@ internal fun HistorySection(
                 }
             }) { Text("Load more") }
         }
-        detail?.let { ActivityDetailView(it, format) }
+        detail?.let { ActivityDetailView(it, format, app.auth.mapStyleUrl) }
         if (deviceData.isNotEmpty()) {
             Text("On this device")
             deviceData.forEach { item ->
@@ -289,6 +289,7 @@ private fun HistoryRowView(
 private fun ActivityDetailView(
     detail: DetailSnapshot,
     format: UnitFormat,
+    mapStyleUrl: String?,
 ) {
     val summary = detail.summary
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -303,6 +304,14 @@ private fun ActivityDetailView(
             it.paceSecPerKm?.let { pace -> Text("Pace ${format.pace(pace)}") }
             if (it.avgHrBpm > 0) Text("HR ${it.avgHrBpm}/${it.maxHrBpm} bpm (${it.hrSource})")
             Text("Quality ${it.qualityGrade} · ${it.metricsAlgorithmVersion}")
+        }
+        // The track on a map (TDD-0012): from the copy of the server, so it is there offline too.
+        detail.track?.let { track ->
+            if (mapStyleUrl != null) {
+                TrackMapView(track, mapStyleUrl)
+            } else {
+                Text("The map needs the map style of the server: it is read when the app reaches the server.")
+            }
         }
         when (detail.analysisState) {
             AnalysisState.READY -> detail.analysis?.let { AnalysisView(it, format) }

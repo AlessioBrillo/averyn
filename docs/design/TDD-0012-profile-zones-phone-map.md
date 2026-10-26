@@ -111,3 +111,4 @@ V12 adds a table; nothing existing changes. The analysis schema bump (5.2) makes
 - **Android:** `UnitFormat` in every screen of the history, a Profile section in the account (units, maximum heart rate, the same rule as the web) and the zones under the heart-rate curve; matrix rows S32 and S33. iOS follows.
 - **iOS:** the same as Android in SwiftUI (units in every screen of the history, a Profile section in the account, the zones under the heart-rate curve); the same matrix rows S32 and S33. The map on the phone follows.
 - **Map, shared part:** `trackMapOf` and the track in the detail snapshot (this is what both phones will draw).
+- **Map on Android:** `TrackMapView` (MapLibre Native 13.7.1) in the detail, the `mapStyleUrl` remembered with the other values of the server configuration, gestures off so the map does not trap the scrolling, a plain-background fallback when the style cannot be loaded; matrix row S34. iOS follows.

@@ -189,10 +189,18 @@ class AuthManager(
             clientVersion = BuildConfig.VERSION_NAME,
         )
 
+    /**
+     * The style of the map the server advertises (`mapStyleUrl`), as of the last configuration that was read; null
+     * before the app ever reached the server. Whoever serves the style sees the area the user looks at.
+     */
+    val mapStyleUrl: String?
+        get() = prefs.getString(KEY_MAP_STYLE_URL, null)
+
     private fun rememberServerConfig(config: ServerConfig) {
         prefs.edit {
             putInt(KEY_API_VERSION, config.apiVersion)
             putString(KEY_MIN_CLIENT_VERSION, config.minClientVersion)
+            putString(KEY_MAP_STYLE_URL, config.mapStyleUrl)
         }
     }
 
@@ -214,6 +222,7 @@ class AuthManager(
                 clientId = json.getString("clientId"),
                 apiVersion = json.optInt("apiVersion", Api.API_VERSION),
                 minClientVersion = if (json.isNull("minClientVersion")) null else json.optString("minClientVersion"),
+                mapStyleUrl = if (json.isNull("mapStyleUrl")) null else json.optString("mapStyleUrl").ifBlank { null },
             )
         } finally {
             connection.disconnect()
@@ -226,11 +235,13 @@ class AuthManager(
         val clientId: String,
         val apiVersion: Int,
         val minClientVersion: String?,
+        val mapStyleUrl: String?,
     )
 
     private companion object {
         const val KEY_SERVER_URL = "server_url"
         const val KEY_API_VERSION = "api_version"
         const val KEY_MIN_CLIENT_VERSION = "min_client_version"
+        const val KEY_MAP_STYLE_URL = "map_style_url"
     }
 }
