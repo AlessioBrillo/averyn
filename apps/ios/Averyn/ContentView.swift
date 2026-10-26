@@ -167,12 +167,7 @@ struct ContentView: View {
             if !analysis.splits.isEmpty {
                 Text("Splits")
                 ForEach(analysis.splits, id: \.index) { split in
-                    Text(
-                        "#\(split.index) \(format.distance(meters: split.endDistanceM - split.startDistanceM)) — "
-                            + "\(formatDuration(split.movingMs))"
-                            + (split.avgHrBpm.map { " — \($0.intValue) bpm" } ?? "")
-                            + (split.partial ? " (" + tr("partial") + ")" : "")
-                    )
+                    Text(splitLine(split))
                 }
             }
             if let elevation = analysis.elevation {
@@ -190,6 +185,19 @@ struct ContentView: View {
                 zonesView(analysis.heartRateZones)
             }
         }
+    }
+
+    /// One split: its distance, its moving time, its heart rate when there is one.
+    private func splitLine(_ split: AnalysisSplit) -> String {
+        let distance = format.distance(meters: split.endDistanceM - split.startDistanceM)
+        var line = "#\(split.index) \(distance) — \(formatDuration(split.movingMs))"
+        if let bpm = split.avgHrBpm {
+            line += " — \(bpm.intValue) bpm"
+        }
+        if split.partial {
+            line += " (" + tr("partial") + ")"
+        }
+        return line
     }
 
     /// The time in each heart-rate zone (`hr-zones-v1`, TDD-0012), or the reason there is none: the zones are cut
