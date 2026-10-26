@@ -11,8 +11,8 @@ Legend: ✅ in place · 🟡 partly · ⬜ not started · 🔒 needs something o
 | Device validation | 🟡 protocol ready, matrix empty | tester builds; 4 devices × S1–S28; the fixes the campaign finds; `distance-v2` from the data | 3 weeks, in parallel | Filled rows in the [device matrix](../testing/device-matrix.md) |
 | Distribution | 🟡 Android signing wired, never run; iOS manual | secrets 🔒, Play internal, TestFlight, signing team in `project.yml` | 2–3 days + store waits | A tester build installed from each store |
 | CI | 🟡 GitHub green except iOS; Woodpecker did not run on PRs | iOS build fixed, all shared modules tested on iOS, end-to-end job with the real IdP | 2 days | A green PR check, iOS job included |
-| Mobile | 🟡 sign-in, sync, history, detail, HR | map, profile and zones, in-app account deletion, onboarding, IT/EN, HealthKit / Health Connect write, accessibility basics | 4 weeks | Matrix rows for each; store review passed |
-| Web | 🟡 list, detail, map, analysis, records, GPX import, account | FIT and archive import, profile, legal pages, IT/EN, sign-up page | 1.5 weeks | Page checks + web tests |
+| Mobile | 🟡 sign-in, sync, history, detail, HR, profile and units, zones, map (rows S32–S34 open) | in-app account deletion, onboarding, IT/EN, HealthKit / Health Connect write, accessibility basics | 4 weeks | Matrix rows for each; store review passed |
+| Web | 🟡 list, detail, map, analysis, zones, records, GPX import, account, profile | FIT and archive import, legal pages, IT/EN, sign-up page | 1.5 weeks | Page checks + web tests |
 | Backend | 🟡 ingest, analysis, records, consents, quotas, export, deletion | FIT decoder and archive import, user profile, `devices` table, Synapse sidecar | 2.5 weeks | Backend tests (Testcontainers) |
 | Sensors | 🟡 standard HR on both platforms | adapter unit tests; Synapse feature frame (beta); `rr-quality-v1` is after launch | 1.5 weeks | Rows S15, S16, S29–S31 |
 | Managed cloud | 🟡 Compose stack with TLS, runbooks | EU VM, off-site backup and a restore drill, uptime checks and alerts, SMTP, open sign-up in the IdP, map tiles | 1.5 weeks | Restore drill log; alert fired in a test |
@@ -28,7 +28,7 @@ Each increment lists its files and the matrix rows it needs. The schedule is in 
 |---|---|---|---|
 | 0 | Realignment | `apps/ios/Averyn/AuthManager.swift`, `AppModel.swift`, `.github/workflows/ci.yml`, `.woodpecker/ci.yml`, these docs | S16 on iOS |
 | 1 | Tester builds | `apps/ios/project.yml`, `.github/workflows/release.yml`, `docs/deployment/tester-builds.md` | S1–S16 |
-| 2 | Profile and phone map | `backend/.../V12__user_profile.sql`, `shared/api`, `shared/metrics` (`hr-zones-v1`), `apps/android`, `apps/ios` | new rows |
+| 2 ✅ | Profile and phone map (done in code) | `backend/.../V12__user_profile.sql`, `shared/api`, `shared/metrics` (`hr-zones-v1`), `apps/android`, `apps/ios` | new rows |
 | 3 | FIT and archive import | `backend/.../imports/`, `tests/gps-fixtures/fit/`, `apps/web` import page | new rows |
 | 4 | Account, onboarding, i18n, legal pages | app string resources, `apps/web` | new rows |
 | 5 | HealthKit / Health Connect (write) | `HealthKitExporter.swift`, `HealthConnectExporter.kt` | new rows |
