@@ -5,6 +5,7 @@ import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Reason
 import dev.averyn.domain.Sport
 import dev.averyn.domain.StateEvent
+import dev.averyn.sensors.HeartRateSample
 import kotlinx.io.files.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
@@ -78,6 +79,65 @@ class RecoveryDeterminismTest {
         assertEquals(400.0, completed.metrics.distanceM, 2.0)
         assertEquals(1, completed.diagnostics.recoveries)
         assertLiveEqualsReplay(completed, "a1")
+    }
+
+    /** A heart-rate reading at [elapsedMs] on the same clock as [fix]. */
+    private fun hr(
+        elapsedMs: Long,
+        bpm: Int,
+    ) = HeartRateSample(wallBase + elapsedMs, elapsedMs, bpm)
+
+    @Test
+    fun theHeartRateSurvivesARecoveryAndTheNumbersEqualReplay() {
+        val original = ActivityRecorder(store)
+        original.start("h1", Sport.RUN, 0, wallBase)
+        original.gpsReady(0, wallBase)
+        original.onSample(fix(0, 0))
+        original.onHeartRate(hr(1_000, 140))
+        original.onHeartRate(hr(2_000, 150))
+        original.onSample(fix(10_000, 1))
+
+        val fresh = ActivityRecorder(store)
+        fresh.recover("h1", 20_000, wallBase + 20_000)
+        fresh.onHeartRate(hr(21_000, 160))
+        fresh.onSample(fix(21_000, 2))
+        val completed = fresh.stop(30_000, wallBase + 30_000)
+
+        // The numbers the phone wrote at the end (live) are those of a replay of the stored file: the readings
+        // before the kill were read back from the file, not lost with the process.
+        val live = checkNotNull(store.readLocalSummary("h1"))
+        assertEquals(150, live.avgHrBpm) // (140 + 150 + 160) / 3
+        assertEquals(160, live.maxHrBpm)
+        val replayed = replay(store, "h1")
+        val recordingMs = completed.metrics.elapsedMs - completed.metrics.pausedMs
+        assertEquals(live.avgHrBpm, replayed.heartRate.snapshot(recordingMs).avgHrBpm)
+        assertEquals(live.maxHrBpm, replayed.heartRate.snapshot(recordingMs).maxHrBpm)
+        assertTrue(replayed.hasHeartRate)
+    }
+
+    @Test
+    fun aReadingInAPauseIsStoredButStaysOutOfTheMetricLiveAndInReplay() {
+        val recorder = ActivityRecorder(store)
+        recorder.start("h2", Sport.RUN, 0, wallBase)
+        recorder.gpsReady(0, wallBase)
+        recorder.onSample(fix(0, 0))
+        recorder.onHeartRate(hr(1_000, 140))
+        recorder.pause(5_000, wallBase + 5_000)
+        recorder.onHeartRate(hr(6_000, 90)) // the strap keeps reading while the user is stopped
+        recorder.resume(10_000, wallBase + 10_000)
+        recorder.onSample(fix(11_000, 1))
+        recorder.onHeartRate(hr(12_000, 160))
+        val completed = recorder.stop(15_000, wallBase + 15_000)
+
+        val live = checkNotNull(store.readLocalSummary("h2"))
+        assertEquals(150, live.avgHrBpm) // (140 + 160) / 2: the 90 of the pause is not in it
+        assertEquals(160, live.maxHrBpm)
+        val recordingMs = completed.metrics.elapsedMs - completed.metrics.pausedMs
+        assertEquals(150, replay(store, "h2").heartRate.snapshot(recordingMs).avgHrBpm)
+        // ...but it is in the file: nothing is silently dropped.
+        var stored = 0
+        store.forEachRecord("h2") { if (it is ActivityRecord.HeartRate) stored++ }
+        assertEquals(3, stored)
     }
 
     @Test
