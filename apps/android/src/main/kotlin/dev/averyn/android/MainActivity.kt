@@ -38,6 +38,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.net.toUri
@@ -79,6 +81,7 @@ private fun now() = SystemClock.elapsedRealtime() to System.currentTimeMillis()
 @Composable
 private fun RecordScreen(app: AverynApplication) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val recorder = app.recorder
     var snapshot by remember { mutableStateOf(recorder.snapshot()) }
     var pendingRecovery by remember { mutableStateOf<ActivityMetadata?>(null) }
@@ -124,7 +127,7 @@ private fun RecordScreen(app: AverynApplication) {
                     result.droppedRecordCount
                 }
             }
-        recoveryWarning = droppedRecordWarning(dropped)
+        recoveryWarning = droppedRecordWarning(resources, dropped)
         historyVersion++
         // The "tap to resume" notification is no longer needed once the activity has been recovered.
         // InterruptedNotification.NOTIFICATION_ID == 2 (same module, same channel).
@@ -162,7 +165,7 @@ private fun RecordScreen(app: AverynApplication) {
             if (result is RecoveryResult.Resumed) {
                 context.startForegroundService(Intent(context, TrackingService::class.java))
             }
-            notice = "Recording resumed after an interruption"
+            notice = resources.getString(R.string.resumed_notice)
         } else {
             pendingRecovery = decision.metadata
         }
@@ -177,7 +180,7 @@ private fun RecordScreen(app: AverynApplication) {
             permissionMessage = null
             if (!hasPrecise) {
                 permissionMessage =
-                    "Precise location is needed to record. Choose “Precise” when asked, or allow it in the app settings."
+                    resources.getString(R.string.precise_location_needed)
                 return@rememberLauncherForActivityResult
             }
             when (recorder.currentState) {
@@ -322,10 +325,10 @@ private fun BatteryGuidance() {
     OnResume { exempt = isIgnoringBatteryOptimizations(context) }
     if (exempt) return
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("Battery optimisation can stop a long recording. Set Averyn to unrestricted / not optimised.")
+        Text(stringResource(R.string.battery_guidance))
         Button(onClick = {
             context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-        }) { Text("Battery settings") }
+        }) { Text(stringResource(R.string.battery_settings)) }
     }
 }
 
@@ -333,6 +336,7 @@ private fun BatteryGuidance() {
 @Composable
 private fun AccountSection(app: AverynApplication) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val activity = LocalActivity.current as ComponentActivity
     val scope = rememberCoroutineScope()
     var serverUrl by remember { mutableStateOf(app.auth.serverUrl.orEmpty()) }
@@ -349,7 +353,7 @@ private fun AccountSection(app: AverynApplication) {
     LaunchedEffect(Unit) {
         runCatching { app.auth.refreshServerConfig() }
         compatibility = app.auth.compatibility()
-        cacheSize = cacheSizeText(app)
+        cacheSize = cacheSizeText(resources, app)
     }
 
     val signInLauncher =
@@ -363,7 +367,7 @@ private fun AccountSection(app: AverynApplication) {
                     compatibility = app.auth.compatibility()
                     enqueueSync(context)
                 } catch (e: Exception) {
-                    message = "Sign-in failed"
+                    message = resources.getString(R.string.sign_in_failed)
                 }
             }
         }
@@ -372,7 +376,7 @@ private fun AccountSection(app: AverynApplication) {
     LaunchedEffect(Unit) {
         while (true) {
             if (activity.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
-                syncText = withContext(Dispatchers.IO) { latestSyncText(app) }
+                syncText = withContext(Dispatchers.IO) { latestSyncText(resources, app) }
             }
             delay(3_000)
         }
@@ -382,7 +386,7 @@ private fun AccountSection(app: AverynApplication) {
         OutlinedTextField(
             value = serverUrl,
             onValueChange = { serverUrl = it },
-            label = { Text("Server URL") },
+            label = { Text(stringResource(R.string.server_url)) },
             singleLine = true,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -390,8 +394,8 @@ private fun AccountSection(app: AverynApplication) {
                 Button(onClick = {
                     app.auth.signOut()
                     signedIn = false
-                    scope.launch { cacheSize = cacheSizeText(app) }
-                }) { Text("Sign out") }
+                    scope.launch { cacheSize = cacheSizeText(resources, app) }
+                }) { Text(stringResource(R.string.sign_out)) }
             } else {
                 Button(onClick = {
                     app.auth.serverUrl = serverUrl
@@ -400,37 +404,37 @@ private fun AccountSection(app: AverynApplication) {
                             signInLauncher.launch(app.auth.signInIntent())
                             message = null
                         } catch (e: Exception) {
-                            message = "Could not reach the server"
+                            message = resources.getString(R.string.server_unreachable)
                         }
                     }
-                }) { Text("Sign in") }
+                }) { Text(stringResource(R.string.sign_in)) }
             }
             Button(onClick = {
                 app.auth.serverUrl = serverUrl
                 enqueueSync(context)
-            }) { Text("Sync now") }
+            }) { Text(stringResource(R.string.sync_now)) }
         }
-        compatibilityText(compatibility)?.let { Text(it) }
+        compatibilityText(resources, compatibility)?.let { Text(it) }
         if (cacheSize.isNotEmpty()) {
             Text(cacheSize)
             Button(onClick = {
                 scope.launch {
                     app.history().clearCache()
-                    cacheSize = cacheSizeText(app)
-                    message = "The offline copy was deleted"
+                    cacheSize = cacheSizeText(resources, app)
+                    message = resources.getString(R.string.offline_copy_deleted)
                 }
-            }) { Text("Delete the offline copy") }
+            }) { Text(stringResource(R.string.delete_offline_copy)) }
         }
         if (signedIn) {
-            Button(onClick = { confirmDelete = true }) { Text("Delete my account") }
+            Button(onClick = { confirmDelete = true }) { Text(stringResource(R.string.delete_my_account)) }
         }
         // The operator's own documents (the controller of the data of this instance), when it published them.
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             app.auth.privacyPolicyUrl?.let { url ->
-                TextButton(onClick = { openLink(context, url) }) { Text("Privacy policy") }
+                TextButton(onClick = { openLink(context, url) }) { Text(stringResource(R.string.privacy_policy)) }
             }
             app.auth.termsUrl?.let { url ->
-                TextButton(onClick = { openLink(context, url) }) { Text("Terms of service") }
+                TextButton(onClick = { openLink(context, url) }) { Text(stringResource(R.string.terms_of_service)) }
             }
         }
         message?.let { Text(it) }
@@ -446,18 +450,16 @@ private fun AccountSection(app: AverynApplication) {
                 scope.launch {
                     val token = runCatching { app.auth.freshAccessToken() }.getOrNull()
                     if (token == null) {
-                        message = "Sign in again to delete your account."
+                        message = resources.getString(R.string.sign_in_again_delete)
                         return@launch
                     }
                     if (app.history().deleteAccount(token).failure == null) {
                         app.auth.signOut()
                         signedIn = false
                         cacheSize = ""
-                        message =
-                            "Your account and its data were deleted from the server. The recordings on this " +
-                            "device stay. Your sign-in at the identity provider is not removed."
+                        message = resources.getString(R.string.account_deleted)
                     } else {
-                        message = "Could not delete your account. Try again."
+                        message = resources.getString(R.string.account_delete_failed)
                     }
                 }
             },
@@ -485,28 +487,24 @@ private fun DeleteAccountDialog(
     var typed by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Delete your account?") },
+        title = { Text(stringResource(R.string.delete_account_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "This removes all your activities and their recorded data from the server for good. " +
-                        "The recordings on this device stay. Your sign-in at the identity provider is not " +
-                        "removed: close it there if you want it gone. Export your data first if you want a copy.",
-                )
+                Text(stringResource(R.string.delete_account_text))
                 OutlinedTextField(
                     value = typed,
                     onValueChange = { typed = it },
-                    label = { Text("Type delete to confirm") },
+                    label = { Text(stringResource(R.string.type_delete)) },
                     singleLine = true,
                 )
             }
         },
         confirmButton = {
             TextButton(onClick = onConfirm, enabled = typed.trim().equals("delete", ignoreCase = true)) {
-                Text("Delete my account")
+                Text(stringResource(R.string.delete_my_account))
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
@@ -519,6 +517,7 @@ private fun ProfileSection(
     app: AverynApplication,
     signedIn: Boolean,
 ) {
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var units by remember { mutableStateOf(app.units) }
     var maxHr by remember { mutableStateOf("") }
@@ -538,38 +537,38 @@ private fun ProfileSection(
             maxHr = profile.maxHrBpm?.toString().orEmpty()
             loaded = true
         } else {
-            message = "Could not load your profile."
+            message = resources.getString(R.string.profile_load_failed)
         }
     }
 
     if (!signedIn) return
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("Profile")
+        Text(stringResource(R.string.profile))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
                 selected = units == UnitSystem.METRIC,
                 onClick = { units = UnitSystem.METRIC },
                 enabled = loaded,
-                label = { Text("Metric (km, m)") },
+                label = { Text(stringResource(R.string.units_metric)) },
             )
             FilterChip(
                 selected = units == UnitSystem.IMPERIAL,
                 onClick = { units = UnitSystem.IMPERIAL },
                 enabled = loaded,
-                label = { Text("Imperial (mi, ft)") },
+                label = { Text(stringResource(R.string.units_imperial)) },
             )
         }
         OutlinedTextField(
             value = maxHr,
             onValueChange = { maxHr = it },
-            label = { Text("Maximum heart rate (bpm)") },
+            label = { Text(stringResource(R.string.max_hr)) },
             singleLine = true,
             enabled = loaded,
             isError = !input.valid,
             supportingText = {
                 if (!input.valid) {
                     Text(
-                        "A whole number from ${UserProfile.MIN_MAX_HR_BPM} to ${UserProfile.MAX_MAX_HR_BPM}, or empty.",
+                        stringResource(R.string.max_hr_invalid, UserProfile.MIN_MAX_HR_BPM, UserProfile.MAX_MAX_HR_BPM),
                     )
                 }
             },
@@ -580,49 +579,59 @@ private fun ProfileSection(
                 scope.launch {
                     val token = runCatching { app.auth.freshAccessToken() }.getOrNull()
                     if (token == null) {
-                        message = "Sign in again to save your profile."
+                        message = resources.getString(R.string.sign_in_again_profile)
                         return@launch
                     }
                     val saved = app.history().saveProfile(token, UserProfile(units, input.value))
                     if (saved.profile != null) {
                         app.units = saved.units
-                        message = "Saved"
+                        message = resources.getString(R.string.saved)
                     } else {
                         message =
                             if (saved.failure?.status ==
                                 422
                             ) {
-                                "That is not a valid profile."
+                                resources.getString(R.string.profile_invalid)
                             } else {
-                                "Could not save your profile."
+                                resources.getString(R.string.profile_save_failed)
                             }
                     }
                 }
             },
-        ) { Text("Save profile") }
+        ) { Text(stringResource(R.string.save_profile)) }
         message?.let { Text(it) }
     }
 }
 
 /** The warning of a version that does not fit (TDD-0011): it never stops the app from working. */
-private fun compatibilityText(compatibility: ClientCompatibility): String? =
+private fun compatibilityText(
+    resources: android.content.res.Resources,
+    compatibility: ClientCompatibility,
+): String? =
     when (compatibility) {
         ClientCompatibility.OK -> null
-        ClientCompatibility.APP_TOO_OLD -> "This server is newer than the app: update the app to use everything."
-        ClientCompatibility.APP_BELOW_MINIMUM -> "This server needs a newer app: update the app."
-        ClientCompatibility.SERVER_TOO_OLD -> "This server is older than the app: some features may be missing."
+        ClientCompatibility.APP_TOO_OLD -> resources.getString(R.string.compat_app_too_old)
+        ClientCompatibility.APP_BELOW_MINIMUM -> resources.getString(R.string.compat_below_minimum)
+        ClientCompatibility.SERVER_TOO_OLD -> resources.getString(R.string.compat_server_too_old)
         ClientCompatibility.UNKNOWN -> null
     }
 
 /** What the copy of the server occupies on this device. */
-private suspend fun cacheSizeText(app: AverynApplication): String {
+private suspend fun cacheSizeText(
+    resources: android.content.res.Resources,
+    app: AverynApplication,
+): String {
     val stats = app.history().cacheStats()
     if (stats.detailCount == 0) return ""
-    return "Offline copy: ${stats.detailCount} activities, ${stats.bytes / 1024} kB"
+    return resources.getString(R.string.cache_size, stats.detailCount, stats.bytes / 1024)
 }
 
-private fun latestSyncText(app: AverynApplication): String {
-    val latest = app.store.list().maxByOrNull { it.startedAtMs } ?: return "Sync: no activities yet"
+private fun latestSyncText(
+    resources: android.content.res.Resources,
+    app: AverynApplication,
+): String {
+    val latest =
+        app.store.list().maxByOrNull { it.startedAtMs } ?: return resources.getString(R.string.sync_no_activities)
     // If the latest activity is being recorded right now, report from the live recorder instead of
     // re-parsing the whole store file on every 3 s poll (TDD-0006 §4: no per-second work proportional
     // to activity length).
@@ -635,19 +644,19 @@ private fun latestSyncText(app: AverynApplication): String {
                 ActivityState.PREPARING -> "PREPARING"
                 else -> recorder.currentState.toString()
             }
-        return "Sync: $state (recording)"
+        return resources.getString(R.string.sync_recording, state)
     }
     val status = SyncStatusStore(app.store).statusOf(latest.activityId)
-    return "Sync: ${status.state}" + (status.lastError?.let { " ($it)" } ?: "")
+    return resources.getString(R.string.sync_state, status.state) + (status.lastError?.let { " ($it)" } ?: "")
 }
 
 @Composable
 private fun LiveMetrics(snapshot: LiveSnapshot) {
-    Text("State: ${snapshot.state}")
-    Text("Distance: %.0f m".format(snapshot.metrics.distanceM))
-    Text("Elapsed: %.0f s".format(snapshot.metrics.elapsedMs / 1000.0))
-    Text("Pace: ${snapshot.metrics.paceSecPerKm?.let { "%.0f s/km".format(it) } ?: "—"}")
-    Text("GPS quality: ${snapshot.quality.grade}")
+    Text(stringResource(R.string.live_state, snapshot.state))
+    Text(stringResource(R.string.live_distance, snapshot.metrics.distanceM))
+    Text(stringResource(R.string.live_elapsed, snapshot.metrics.elapsedMs / 1000.0))
+    Text(stringResource(R.string.live_pace, snapshot.metrics.paceSecPerKm?.let { "%.0f s/km".format(it) } ?: "—"))
+    Text(stringResource(R.string.live_quality, snapshot.quality.grade))
 }
 
 @Composable
@@ -662,26 +671,37 @@ private fun Controls(
     when (snapshot.state) {
         ActivityState.IDLE, ActivityState.FAILED, ActivityState.COMPLETED ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Sport.entries.forEach { sport -> Button(onClick = { onStart(sport) }) { Text(sport.name) } }
+                Sport.entries.forEach { sport -> Button(onClick = { onStart(sport) }) { Text(sportName(sport)) } }
             }
         ActivityState.PREPARING ->
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Waiting for GPS…")
-                Button(onClick = onCancel) { Text("Cancel") }
+                Text(stringResource(R.string.waiting_for_gps))
+                Button(onClick = onCancel) { Text(stringResource(R.string.cancel)) }
             }
         ActivityState.RECORDING ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onPause) { Text("Pause") }
-                Button(onClick = onStop) { Text("Stop") }
+                Button(onClick = onPause) { Text(stringResource(R.string.pause)) }
+                Button(onClick = onStop) { Text(stringResource(R.string.stop)) }
             }
         ActivityState.PAUSED ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onResume) { Text("Resume") }
-                Button(onClick = onStop) { Text("Stop") }
+                Button(onClick = onResume) { Text(stringResource(R.string.resume)) }
+                Button(onClick = onStop) { Text(stringResource(R.string.stop)) }
             }
-        ActivityState.STOPPING -> Text("Finishing…")
+        ActivityState.STOPPING -> Text(stringResource(R.string.finishing))
     }
 }
+
+@Composable
+private fun sportName(sport: Sport): String =
+    stringResource(
+        when (sport) {
+            Sport.RUN -> R.string.sport_run
+            Sport.RIDE -> R.string.sport_ride
+            Sport.WALK -> R.string.sport_walk
+            Sport.HIKE -> R.string.sport_hike
+        },
+    )
 
 /** TDD-0001 F8: the aggregate report, for filing a docs/testing/device-matrix.md row after a test run. */
 @Composable
@@ -710,16 +730,19 @@ private fun RecoveryDialog(
 ) {
     AlertDialog(
         onDismissRequest = {},
-        title = { Text("Interrupted activity found") },
-        text = { Text("A ${metadata.sport} activity was interrupted. Resume it or finish it now?") },
-        confirmButton = { TextButton(onClick = onResume) { Text("Resume") } },
-        dismissButton = { TextButton(onClick = onFinish) { Text("Finish now") } },
+        title = { Text(stringResource(R.string.recovery_title)) },
+        text = { Text(stringResource(R.string.recovery_text, metadata.sport)) },
+        confirmButton = { TextButton(onClick = onResume) { Text(stringResource(R.string.resume)) } },
+        dismissButton = { TextButton(onClick = onFinish) { Text(stringResource(R.string.finish_now)) } },
     )
 }
 
-private fun droppedRecordWarning(droppedRecordCount: Int): String? =
+private fun droppedRecordWarning(
+    resources: android.content.res.Resources,
+    droppedRecordCount: Int,
+): String? =
     if (droppedRecordCount > 0) {
-        "Recovery lost $droppedRecordCount corrupted record(s) from the interrupted activity"
+        resources.getString(R.string.recovery_lost, droppedRecordCount)
     } else {
         null
     }

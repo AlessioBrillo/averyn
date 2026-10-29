@@ -8,6 +8,8 @@ What a backup contains: both databases (Averyn and the identity provider, with t
 
 ## Steps
 
+The script `infrastructure/compose/backup.sh [directory]` runs all of the steps below (run it from `infrastructure/compose`; `COMPOSE` and `ENV_FILE` name your Compose command and env file). Set `BACKUP_UPLOAD_CMD` to a command that sends `$B` off site, for example `restic backup "$B"` or `rclone copy "$B" remote:averyn-backups/$(basename "$B")`: encrypt there, the backup holds secrets and the data of every user. CI runs it in a restore drill on every change.
+
 1. Pick a directory outside the repository, readable only by you:
 
    ```sh

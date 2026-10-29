@@ -1,4 +1,5 @@
 import type { ClientConfig } from './api'
+import { t } from './i18n'
 import { safeLink } from './safeLink'
 
 /**
@@ -14,13 +15,13 @@ export function LegalLinks({ config }: { config: ClientConfig }) {
       <p className="small">
         {privacy && (
           <a href={privacy} rel="noopener noreferrer" target="_blank">
-            Privacy policy
+            {t('Privacy policy')}
           </a>
         )}
         {privacy && terms && ' · '}
         {terms && (
           <a href={terms} rel="noopener noreferrer" target="_blank">
-            Terms of service
+            {t('Terms of service')}
           </a>
         )}
       </p>

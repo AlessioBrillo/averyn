@@ -10,6 +10,8 @@ import type { UserProfile } from './api'
 import { signIn, signOut, start } from './auth'
 import type { Session } from './auth'
 import { setUnits } from './format'
+import { LANGUAGES, getLang, setLang, t } from './i18n'
+import type { Lang } from './i18n'
 import type { Units } from './format'
 
 type State = { status: 'loading' } | { status: 'error' } | { status: 'ready'; session: Session }
@@ -19,6 +21,12 @@ export function App() {
   const [path, setPath] = useState(() => (typeof window === 'undefined' ? '/' : window.location.pathname))
   // The unit system of the user (TDD-0012): the content is remounted when it changes, so every formatter reads it.
   const [units, setUnitsState] = useState<Units>('metric')
+  // The language of the page (issue #69): changing it remounts the content, like a change of units.
+  const [lang, setLangState] = useState<Lang>(getLang())
+  function changeLanguage(next: Lang) {
+    setLang(next)
+    setLangState(next)
+  }
   const signedIn = state.status === 'ready' && state.session.signedIn
 
   useEffect(() => {
@@ -79,7 +87,7 @@ export function App() {
                 navigate('/import')
               }}
             >
-              Import
+              {t('Import')}
             </a>{' '}
             <a
               href="/records"
@@ -88,7 +96,7 @@ export function App() {
                 navigate('/records')
               }}
             >
-              Records
+              {t('Records')}
             </a>{' '}
             <a
               href="/account"
@@ -97,19 +105,29 @@ export function App() {
                 navigate('/account')
               }}
             >
-              Account
+              {t('Account')}
             </a>{' '}
-            <button onClick={() => void signOut()}>Sign out</button>
+            <button onClick={() => void signOut()}>{t('Sign out')}</button>
           </nav>
         )}
+        <label className="small">
+          <span className="visually-hidden">{t('Language')}</span>
+          <select value={lang} onChange={(e) => changeLanguage(e.target.value as Lang)}>
+            {LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+        </label>
       </header>
-      {state.status === 'loading' && <p>Loading…</p>}
-      {state.status === 'error' && <p role="alert">Could not reach the server or the identity provider.</p>}
+      {state.status === 'loading' && <p>{t('Loading…')}</p>}
+      {state.status === 'error' && <p role="alert">{t('Could not reach the server or the identity provider.')}</p>}
       {state.status === 'ready' && (
-        <Fragment key={units}>
+        <Fragment key={`${units}-${lang}`}>
           {!state.session.signedIn ? (
             <p>
-              <button onClick={() => void signIn()}>Sign in</button>
+              <button onClick={() => void signIn()}>{t('Sign in')}</button>
             </p>
           ) : path === '/account' ? (
             <Account onUnauthorized={expired} onProfileSaved={applyProfile} />

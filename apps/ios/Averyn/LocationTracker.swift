@@ -83,8 +83,8 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
             return
         }
         onIssue?(denied
-            ? "Location permission was removed: the activity is paused."
-            : "Precise location was turned off: the activity is paused. Turn Precise Location on to continue.")
+            ? tr("Location permission was removed: the activity is paused.")
+            : tr("Precise location was turned off: the activity is paused. Turn Precise Location on to continue."))
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {

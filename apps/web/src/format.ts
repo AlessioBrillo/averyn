@@ -1,5 +1,7 @@
 // Display only: every metric is computed by the backend (TDD-0003 W2), these just turn numbers into text.
 
+import { t } from './i18n'
+
 export type Units = 'metric' | 'imperial'
 
 const METERS_PER_MILE = 1609.344
@@ -57,8 +59,8 @@ export function formatRate(
   rate: { averageSpeedMps: number; paceSecPerKm: number | null },
 ): { label: string; value: string } {
   return sport === 'RIDE'
-    ? { label: 'Average speed', value: formatSpeed(rate.averageSpeedMps) }
-    : { label: 'Average pace', value: formatPace(rate.paceSecPerKm) }
+    ? { label: t('Average speed'), value: formatSpeed(rate.averageSpeedMps) }
+    : { label: t('Average pace'), value: formatPace(rate.paceSecPerKm) }
 }
 
 /**
@@ -66,7 +68,34 @@ export function formatRate(
  * (an imported file carries none), and the app says so instead of showing a bare word (TDD-0008).
  */
 export function formatQuality(grade: string): string {
-  return grade === 'UNKNOWN' ? 'unknown (accuracy not measured)' : grade.toLowerCase()
+  switch (grade) {
+    case 'GOOD':
+      return t('good')
+    case 'FAIR':
+      return t('fair')
+    case 'POOR':
+      return t('poor')
+    case 'UNKNOWN':
+      return t('unknown (accuracy not measured)')
+    default:
+      return grade.toLowerCase()
+  }
+}
+
+/** A sport as it is shown: the name of the sport in the language of the page. */
+export function formatSport(sport: string): string {
+  switch (sport) {
+    case 'RUN':
+      return t('run')
+    case 'RIDE':
+      return t('ride')
+    case 'WALK':
+      return t('walk')
+    case 'HIKE':
+      return t('hike')
+    default:
+      return sport.toLowerCase()
+  }
 }
 
 /** An altitude, in metres or feet. */

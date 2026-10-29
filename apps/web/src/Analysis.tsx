@@ -15,6 +15,7 @@ import {
   formatSpeed,
   formatTargetDistance,
 } from './format'
+import { t } from './i18n'
 import 'uplot/dist/uPlot.min.css'
 
 /**
@@ -23,19 +24,21 @@ import 'uplot/dist/uPlot.min.css'
  */
 export function HeartRateZonesTable({ zones }: { zones: HeartRateZones | null }) {
   if (zones === null) {
-    return <p className="small">Set your maximum heart rate in your account to see the time in each zone.</p>
+    return <p className="small">{t('Set your maximum heart rate in your account to see the time in each zone.')}</p>
   }
   const total = zones.zones.reduce((sum, z) => sum + z.timeMs, 0)
   return (
     <div className="table-scroll">
       <table>
-        <caption>{`Time in each zone, for a maximum heart rate of ${formatHeartRate(zones.maxHrBpm)}`}</caption>
+        <caption>
+          {t('Time in each zone, for a maximum heart rate of {max}', { max: formatHeartRate(zones.maxHrBpm) })}
+        </caption>
         <thead>
           <tr>
-            <th scope="col">Zone</th>
-            <th scope="col">Heart rate</th>
-            <th scope="col">Time</th>
-            <th scope="col">Share</th>
+            <th scope="col">{t('Zone')}</th>
+            <th scope="col">{t('Heart rate')}</th>
+            <th scope="col">{t('Time')}</th>
+            <th scope="col">{t('Share')}</th>
           </tr>
         </thead>
         <tbody>
@@ -47,7 +50,7 @@ export function HeartRateZonesTable({ zones }: { zones: HeartRateZones | null })
                 <td>{z.toBpm === null ? `${z.fromBpm}+ bpm` : `${z.fromBpm}–${z.toBpm} bpm`}</td>
                 <td>{formatDuration(z.timeMs)}</td>
                 <td>
-                  <meter min={0} max={100} value={share} aria-label={`Zone ${z.zone}`} /> {formatCoverage(share)}
+                  <meter min={0} max={100} value={share} aria-label={t('Zone {n}', { n: z.zone })} /> {formatCoverage(share)}
                 </td>
               </tr>
             )
@@ -192,34 +195,41 @@ export function Analysis({
 
   const metrics: [string, string][] = []
   if (elevation) {
-    metrics.push(['Elevation gain', formatElevationDelta(elevation.gainM)])
-    metrics.push(['Elevation loss', formatElevationDelta(-elevation.lossM)])
-    metrics.push(['Altitude min / max', `${formatElevation(elevation.minM)} / ${formatElevation(elevation.maxM)}`])
+    metrics.push([t('Elevation gain'), formatElevationDelta(elevation.gainM)])
+    metrics.push([t('Elevation loss'), formatElevationDelta(-elevation.lossM)])
+    metrics.push([t('Altitude min / max'), `${formatElevation(elevation.minM)} / ${formatElevation(elevation.maxM)}`])
     if (elevation.coveragePercent < 100) {
-      metrics.push(['Altitude measured', formatCoverage(elevation.coveragePercent)])
+      metrics.push([t('Altitude measured'), formatCoverage(elevation.coveragePercent)])
     }
   }
   if (heart) {
     metrics.push([
-      'Heart rate',
-      `${formatHeartRate(heart.avgBpm)} avg · ${formatHeartRate(heart.maxBpm)} max`,
+      t('Heart rate'),
+      t('{avg} avg · {max} max', { avg: formatHeartRate(heart.avgBpm), max: formatHeartRate(heart.maxBpm) }),
     ])
-    metrics.push(['Heart rate coverage', formatCoverage(heart.coveragePercent)])
+    metrics.push([t('Heart rate coverage'), formatCoverage(heart.coveragePercent)])
   }
 
   // The charts are a picture; the numbers they draw are also a sentence, for the screen readers.
   const elevationLabel = elevation
-    ? `Elevation profile: from ${formatElevation(elevation.minM)} to ${formatElevation(elevation.maxM)} over ` +
-      `${formatDistance(analysis.totals.distanceM)}, ${formatElevationDelta(elevation.gainM)} of climb.`
-    : 'Elevation profile.'
+    ? t('Elevation profile: from {min} to {max} over {distance}, {climb} of climb.', {
+        min: formatElevation(elevation.minM),
+        max: formatElevation(elevation.maxM),
+        distance: formatDistance(analysis.totals.distanceM),
+        climb: formatElevationDelta(elevation.gainM),
+      })
+    : t('Elevation profile.')
   const heartLabel = heart
-    ? `Heart rate: ${formatHeartRate(heart.avgBpm)} on average, ${formatHeartRate(heart.maxBpm)} at most, ` +
-      `measured ${formatCoverage(heart.coveragePercent)} of the recording time.`
-    : 'Heart rate over the time.'
+    ? t('Heart rate: {avg} on average, {max} at most, measured {coverage} of the recording time.', {
+        avg: formatHeartRate(heart.avgBpm),
+        max: formatHeartRate(heart.maxBpm),
+        coverage: formatCoverage(heart.coveragePercent),
+      })
+    : t('Heart rate over the time.')
 
   return (
     <section aria-labelledby="analysis-heading" className="analysis">
-      <h3 id="analysis-heading">Analysis</h3>
+      <h3 id="analysis-heading">{t('Analysis')}</h3>
       {metrics.length > 0 && (
         <dl className="metrics">
           {metrics.map(([label, value]) => (
@@ -232,34 +242,32 @@ export function Analysis({
       )}
       {hasElevation && (
         <>
-          <h4>Elevation</h4>
+          <h4>{t('Elevation')}</h4>
           <Chart prepare={elevationPrepare} label={elevationLabel} />
-          <p className="small">Estimated from the altitude the samples carry, not from a digital elevation model.</p>
+          <p className="small">{t('Estimated from the altitude the samples carry, not from a digital elevation model.')}</p>
         </>
       )}
       {hasHeartRate && (
         <>
-          <h4>Heart rate</h4>
+          <h4>{t('Heart rate')}</h4>
           <Chart prepare={heartRatePrepare} label={heartLabel} />
           <HeartRateZonesTable zones={analysis.heartRateZones ?? null} />
         </>
       )}
       {analysis.splits.length > 0 && (
         <>
-          <h4>
-            Splits (every {formatDistance(analysis.splitLengthM)})
-          </h4>
+          <h4>{t('Splits (every {distance})', { distance: formatDistance(analysis.splitLengthM) })}</h4>
           <div className="table-scroll">
             <table>
-              <caption className="visually-hidden">The automatic splits of the activity</caption>
+              <caption className="visually-hidden">{t('The automatic splits of the activity')}</caption>
               <thead>
                 <tr>
                   <th scope="col">#</th>
-                  <th scope="col">Distance</th>
-                  <th scope="col">Time</th>
-                  <th scope="col">{sport === 'RIDE' ? 'Speed' : 'Pace'}</th>
-                  <th scope="col">Elevation</th>
-                  <th scope="col">Heart rate</th>
+                  <th scope="col">{t('Distance')}</th>
+                  <th scope="col">{t('Time')}</th>
+                  <th scope="col">{sport === 'RIDE' ? t('Speed') : t('Pace')}</th>
+                  <th scope="col">{t('Elevation')}</th>
+                  <th scope="col">{t('Heart rate')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -268,7 +276,7 @@ export function Analysis({
                     <th scope="row">{split.index}</th>
                     <td>
                       {formatDistance(split.endDistanceM - split.startDistanceM)}
-                      {split.partial ? ' (partial)' : ''}
+                      {split.partial ? ` (${t('partial')})` : ''}
                     </td>
                     <td>{formatDuration(split.movingMs)}</td>
                     <td>{splitRate(sport, split)}</td>
@@ -283,21 +291,21 @@ export function Analysis({
               </tbody>
             </table>
           </div>
-          <p className="small">The time of a split is the time the user was moving.</p>
+          <p className="small">{t('The time of a split is the time the user was moving.')}</p>
         </>
       )}
       {analysis.bestEfforts.length > 0 && (
         <>
-          <h4>Best efforts</h4>
+          <h4>{t('Best efforts')}</h4>
           <div className="table-scroll">
             <table>
-              <caption className="visually-hidden">The fastest windows of the activity</caption>
+              <caption className="visually-hidden">{t('The fastest windows of the activity')}</caption>
               <thead>
                 <tr>
-                  <th scope="col">Distance</th>
-                  <th scope="col">Time</th>
-                  <th scope="col">{sport === 'RIDE' ? 'Speed' : 'Pace'}</th>
-                  <th scope="col">From</th>
+                  <th scope="col">{t('Distance')}</th>
+                  <th scope="col">{t('Time')}</th>
+                  <th scope="col">{sport === 'RIDE' ? t('Speed') : t('Pace')}</th>
+                  <th scope="col">{t('From')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -319,14 +327,20 @@ export function Analysis({
             </table>
           </div>
           <p className="small">
-            The fastest window of the activity for that distance. The time is the time the athlete was moving.
+            {t('The fastest window of the activity for that distance. The time is the time the athlete was moving.')}
           </p>
         </>
       )}
       <p className="small">
-        Algorithms: {analysis.algorithmVersions.splits}, {analysis.algorithmVersions.elevation},{' '}
-        {analysis.algorithmVersions.series}, {analysis.algorithmVersions.heartRate},{' '}
-        {analysis.algorithmVersions.bestEfforts}
+        {t('Algorithms: {versions}', {
+          versions: [
+            analysis.algorithmVersions.splits,
+            analysis.algorithmVersions.elevation,
+            analysis.algorithmVersions.series,
+            analysis.algorithmVersions.heartRate,
+            analysis.algorithmVersions.bestEfforts,
+          ].join(', '),
+        })}
       </p>
     </section>
   )
