@@ -53,6 +53,19 @@ class SynapseSequenceTrackerTest {
     }
 
     @Test
+    fun aRestartOfTheCounterIsNotAHugeGapNorAStuckCounter() {
+        val tracker = SynapseSequenceTracker()
+        tracker.onFrame(5000)
+
+        assertEquals(0, tracker.onFrame(0)) // the band rebooted
+        assertEquals(0, tracker.onFrame(1)) // the new run is followed, not rejected until it passes 5000
+        assertEquals(1, tracker.onFrame(3))
+        assertEquals(1, tracker.restarts)
+        assertEquals(0, tracker.outOfOrderFrames)
+        assertEquals(1, tracker.lostFrames)
+    }
+
+    @Test
     fun theFirstFrameHasNothingBeforeIt() {
         val tracker = SynapseSequenceTracker()
 

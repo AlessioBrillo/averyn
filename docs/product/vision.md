@@ -1,15 +1,17 @@
 # Vision
 
-Averyn (codename) is an open-source, self-hostable sports platform for iOS, Android and Web with a feature set comparable to established sports-tracking platforms, without a paywall on core features. It is not a UI clone: it is a modular system whose users can run the managed service or keep their own data on their own infrastructure.
+Averyn (codename) is an open-source, self-hostable sports platform for iOS, Android and Web that people actually enjoy using: free, private by default, and good to look at, without a paywall on core features. It is not a UI clone: it is a modular system whose users can run the managed service or keep their own data on their own infrastructure.
 
 ## Priorities (in order)
 
-1. Extremely reliable GPS and tracking
-2. Broad feature parity with established sports-tracking platforms
-3. Advanced sports analysis
-4. Offline maps and navigation
-5. Social and community
-6. Smartwatch and sensor support
+1. Extremely reliable GPS and tracking, proved on real devices
+2. A great experience in three moments: while recording, the summary right after, the history and progress
+3. Privacy that the user can see: no account needed to record, private zones, one-tap export and deletion
+4. Everything free, with a managed cloud that costs the user nothing
+5. Sensors that just work: any standard heart-rate strap, and the Synapse band as a companion
+6. Advanced analysis, then offline maps and navigation, then social and community
+
+Broad feature parity with established platforms is no longer a goal in itself: a feature is added when it serves one of the three moments or the privacy promise ([ADR-0028](../adr/0028-consumer-launch-target.md)).
 
 ## Principles
 

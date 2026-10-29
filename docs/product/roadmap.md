@@ -7,52 +7,54 @@ Rule: **vertical slices, GPS validated on real devices first.** The biggest risk
 | **MVP-0** Tracking PoC | Prove native tracking is reliable | Record ≥ 3 h outdoor activities on ≥ 2 real Android and ≥ 2 real iOS devices with screen locked; force-kill and reboot recovery loses ≤ 1 sample interval; GPX export validates; diagnostics report shows quality; results logged in the device matrix |
 | **MVP-1** Core | Account, sync, backend, web detail page | Activity recorded offline syncs idempotently and is visible on the web with map + basic metrics; self-host via Compose works from a clean machine |
 | **MVP-2** Analysis & interop | Import/export and analysis | GPX/FIT/TCX import with duplicate detection; charts, elevation, laps, PRs; BLE HR; HealthKit / Health Connect; versioned metrics |
-| **MVP-L** Launch | A public managed-cloud launch, built from the slices of MVP-0 to MVP-2 | See [below](#mvp-l-launch) and the live checklist in [mvp-launch.md](mvp-launch.md) |
+| **MVP-L** Launch | A free, privacy-first public release built around three moments, proved on real devices ([ADR-0028](../adr/0028-consumer-launch-target.md)) | See [below](#mvp-l-launch) and the live checklist in [mvp-launch.md](mvp-launch.md) |
 | **MVP-3** Maps & navigation | Route editor, offline maps | Pilot-region routing, offline track following, deviation alerts |
-| **MVP-4** Social & segments | Community | Profiles, follow, feed, privacy zones, segments, leaderboards, moderation |
+| **MVP-4** Social & segments | Community | Profiles, follow, feed, segments, leaderboards, moderation (privacy zones moved to MVP-L) |
 
 Later (Phase 6): standalone smartwatch, training load / fitness-fatigue, challenges, events, public API and plugins, club features, automated cloud deployment.
 
 ## MVP-L: launch
 
-MVP-L replaces "finish MVP-2 whole" as the target. It takes the slices of MVP-0 to MVP-2 that a public managed-cloud launch needs, and nothing else. Target: ~13 weeks from 2026-10-26, one developer, with an explicit cut line. The company that runs the managed service (the GDPR controller) is an SRL; the public name is still open ([ADR-0008](../adr/0008-project-codename.md)) and is a gate of the store listing.
+MVP-L is the first public release: **a free, privacy-first app that is good to use**, built from the slices of MVP-0 to MVP-2 plus what the three moments need ([ADR-0028](../adr/0028-consumer-launch-target.md), which replaced the earlier "managed-cloud, 13 weeks, company" framing). There is **no fixed date**; the order of work and the cut line are the control. One developer. The apps go to the stores under the owner's own name; the public name is the owner's decision before the listing ([ADR-0008](../adr/0008-project-codename.md)).
 
 Exit criteria (each one is verifiable; the checklist with owners and issues is [mvp-launch.md](mvp-launch.md)):
 
-1. **Reliability.** The device matrix S1–S28 is green on ≥ 2 Android and ≥ 2 iOS devices, with a reference HR strap. No feature is "done" before its row is green.
-2. **Core loop.** Record offline → sync → phone and web show list, detail, **map**, analysis and records; a minimal profile (units, maximum heart rate, zones).
-3. **Data in and out.** GPX and FIT import (single files and an exported archive), full export (done), write-only HealthKit / Health Connect.
-4. **Sensors.** Standard BLE HR on both platforms (a Synapse band works as a plain strap); the Synapse feature frame in **beta**, opt-in and consent-gated.
-5. **Managed cloud.** Open sign-up with email verification, an EU instance, off-site backups proven by a restore, monitoring and alerting, quotas.
-6. **Legal.** The company exists, a DPIA is written (RR intervals are already health data), privacy policy, terms of service, Apple privacy label, Play data safety, in-app account deletion.
-7. **Quality.** The gate is green on the final tree, the iOS job included, plus an end-to-end job against the real identity provider.
+1. **Reliability.** The device matrix is green on ≥ 2 Android and ≥ 2 iOS devices with a reference HR strap: S1–S28, and the row of every launch feature (S32–S41, S42–S48). No feature is `verified` before its row is green.
+2. **The three moments.** Recording (readable, voice cues), the summary right after (with a share card), history and progress (weeks, months, records, calendar). A design system is applied to them on both phones, approved by the owner on mockups first.
+3. **Privacy you can see.** Recording and viewing work with no account; private zones hide the start and the end in every view and in the card; export and deletion are in the app.
+4. **Data in and out.** GPX and FIT import (single files and an exported archive), full export, write-only HealthKit / Health Connect.
+5. **Sensors.** Standard BLE HR on both platforms (a Synapse band works as a plain strap, level L0). The Synapse feature frame stays a beta that starts when the prototype exists.
+6. **Managed cloud.** Open sign-up with email verification, an EU instance, off-site backups proven by a restore, monitoring and alerting, per-account quota.
+7. **Legal and stores.** Privacy policy and terms, Apple privacy label, Play data safety, in-app account deletion, store accounts (personal), the closed test that a new personal Play account requires.
+8. **Quality.** The checks of the [CI gate](../../CLAUDE.md) are green on the final tree, the iOS job and the signed-in round trip included.
 
-Out of MVP-L: TCX, reading from HealthKit / Health Connect, the Synapse inference worker, laps, offline maps and navigation (MVP-3), social (MVP-4).
+Out of MVP-L: TCX, reading from HealthKit / Health Connect, the Synapse inference worker, laps, offline maps and navigation (MVP-3), social and segments (MVP-4).
 
-**Cut line**, in this order, if the schedule slips: Synapse feature frame → HealthKit / Health Connect → archive import (single FIT stays) → heart-rate zones. **Never cut:** the device campaign, the DPIA and legal work, in-app account deletion, backup and restore, a green gate.
+**Cut line**, in this order, if the effort slips: Synapse L1 → voice cues → archive import (single FIT stays) → heart-rate zones. **Never cut:** the device campaign, the three moments, privacy zones, in-app account deletion, backup and restore, the legal texts.
 
 ### What is done
 
+Everything below is **code in place, not verified on a device**: the device matrix has no filled row, so none of it is "done".
+
 - **MVP-1 code:** sync, identity, web list and detail ([TDD-0002](../design/TDD-0002-activity-sync.md), [TDD-0003](../design/TDD-0003-web-activity-view.md)), data deletion and export ([TDD-0004](../design/TDD-0004-data-deletion-and-export.md)), self-host hardening ([TDD-0005](../design/TDD-0005-self-host-hardening.md)), field readiness ([TDD-0006](../design/TDD-0006-field-readiness.md)).
-- **Launch increments:** Inc 0, the realignment (#79); Inc 2, the profile (units, maximum heart rate), the heart-rate zones and the track on the map of the phone, on the web, Android and iOS ([TDD-0012](../design/TDD-0012-profile-zones-phone-map.md)); Inc 3, the import of FIT files and of ZIP archives ([TDD-0013](../design/TDD-0013-fit-import.md)); Inc 5, saving an activity to HealthKit and Health Connect ([TDD-0014](../design/TDD-0014-health-platforms.md)).
-- **MVP-2 slices:** heart-rate channel with consent-gated RR ([TDD-0007](../design/TDD-0007-sensor-channels.md), Android and iOS adapters), GPX import ([TDD-0008](../design/TDD-0008-gpx-import.md)), analysis ([TDD-0009](../design/TDD-0009-activity-analysis.md)), personal records ([TDD-0010](../design/TDD-0010-best-efforts.md)), the read path on the phone ([TDD-0011](../design/TDD-0011-mobile-read-path.md)).
-- **Not verified on a device:** all of it. The [device matrix](../testing/device-matrix.md) is empty, so every item above is "code in place", not "done".
+- **MVP-2 slices:** heart-rate channel with consent-gated RR ([TDD-0007](../design/TDD-0007-sensor-channels.md)), GPX import ([TDD-0008](../design/TDD-0008-gpx-import.md)), analysis ([TDD-0009](../design/TDD-0009-activity-analysis.md)), personal records ([TDD-0010](../design/TDD-0010-best-efforts.md)), the read path on the phone ([TDD-0011](../design/TDD-0011-mobile-read-path.md)).
+- **Launch slices already built:** the profile, heart-rate zones and phone map ([TDD-0012](../design/TDD-0012-profile-zones-phone-map.md)); FIT and archive import ([TDD-0013](../design/TDD-0013-fit-import.md)); HealthKit and Health Connect write ([TDD-0014](../design/TDD-0014-health-platforms.md)); account deletion on the phones; IT/EN; legal links; backup and restore with a drill in CI; a DPIA draft and an incident runbook; the Synapse frame parser and the pinned contract.
 
 ### Work order
 
-| Inc | Weeks | What |
+| Inc | What | Notes |
 |---|---|---|
-| 0 | 1 | Realignment: green iOS build, consent refresh on iOS, CI coverage, docs, ADR-0026 and ADR-0027 |
-| 1 | 1–2 | Tester builds (TestFlight, Play internal) and the start of the campaign |
-| 2 | 2–4 | Profile (units, max HR, zones) and the map on the phone — **done in code**, rows S32–S34 open |
-| 3 | 4–6 | FIT import and archive import — **done in code**, rows S35 and S36 open |
-| 4 | 6–8 | In-app account deletion, onboarding, IT/EN, legal pages on the web |
-| 5 | 7–9 | HealthKit / Health Connect (write only) — **done in code**, rows S38 and S39 open |
-| 6 | 9–10 | Synapse feature frame, beta (first to cut) |
-| 7 | 8–11 | Managed cloud and a closed beta of 10–20 testers |
-| 8 | 10–13 | DPIA, privacy policy, terms, store listings, submission, launch |
-
-The campaign (Inc 1 onwards) runs in parallel with all of them.
+| 1 | Campaign and builds: tester builds by hand (APK; iOS from the Mac), S1–S28, the fixes | Starts now, runs in parallel with everything; a red row in the tracking stops new features |
+| 2 | Design system and mockups for the three moments, onboarding and settings | The owner approves before any screen is built; design doc `TDD-0015` |
+| 3 | Experience on Android | Navigation (Record / Activities / Progress / Settings), theme tokens, the server address under "Advanced" |
+| 4 | Experience on iOS, with a test target | Same structure |
+| 5 | Progress: weekly and monthly totals, calendar | Computed in the shared client from the history, no new endpoint |
+| 6 | Privacy zones | Display-only cut, raw samples untouched; own design doc |
+| 7 | Share card | Made on the phone, shared by the user's tap |
+| 8 | Voice cues | Per-kilometre events from the tracking engine; text-to-speech on both phones |
+| 9 | Onboarding and accessibility | Permission explanations, pairing of a strap or band, large text, screen readers |
+| 10 | Cloud, legal texts, store listings | Provider, SMTP, open sign-up; closed test on Play; the name |
+| 11 | Synapse L1 beta | When the prototype arrives |
 
 ## Synapse track
 
@@ -61,7 +63,7 @@ Optional third-party sensor integration. The rules are [ADR-0010](../adr/0010-ec
 | Level | What | Averyn code | When |
 |---|---|---|---|
 | L0 | The band as a standard HR strap (`0x180D`/`0x2A37` with RR, Battery, Device Information) | none | When the prototype arrives: matrix row S15 with the band next to the reference strap |
-| L1 | Feature frame v1 from the consumer service (SQI, motion artifact, stress class; RMSSD/SDNN once real) | pure parser in `shared/sensors` (**done**, with golden vectors), native adapters and a consent-gated sidecar (wait for a prototype and for ADR-0026) | MVP-L, beta, first on the cut line |
+| L1 | Feature frame v1 from the consumer service (SQI, motion artifact, stress class; RMSSD/SDNN once real) | pure parser in `shared/sensors` (**done**, with vectors generated from the packed struct), native adapters and a consent-gated sidecar (wait for a prototype and for the handoff in the Synapse repository) | MVP-L, beta, first on the cut line |
 | L2 | `synapse_*` FIT developer fields read by the FIT import as imported data | field mapping in the FIT decoder | With the FIT import if time allows, otherwise after launch |
 | L3 | Job/result plumbing to a stateless worker (HRV trends, daily stress) | queue and per-job credentials | After launch, after the DPIA covers it |
 | — | The research raw-stream service (ECG 500 Hz) | never | Averyn does not subscribe to it |
