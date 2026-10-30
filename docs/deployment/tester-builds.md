@@ -36,6 +36,33 @@ Built on a Mac, then uploaded to TestFlight (App Store Connect):
 
 A CI job for this is deliberately not written yet: it cannot be tested without the signing material, and untested signing automation is worse than the checklist above.
 
+## By hand, before any store account (campaign start)
+
+The first campaign ([ADR-0028](../adr/0028-consumer-launch-target.md)) does not wait for the stores. Both builds below carry the commit id, so a matrix row names its build exactly as a store build would.
+
+**Android** (a debug build installed over USB; enable *USB debugging* in the developer options of the phone):
+
+```sh
+# JAVA_HOME must point at JDK 21; adb is in <sdk.dir>/platform-tools (sdk.dir is in local.properties)
+./gradlew :apps:android:installDebug -Paveryn.versionName=0.1.0-dev.1 -Paveryn.commit=$(git rev-parse HEAD)
+adb devices          # the phone must be listed as "device", not "unauthorized"
+```
+
+With several phones, add `-Pandroid.injected.device.serial=<serial>` or run `adb -s <serial> install -r apps/android/build/outputs/apk/debug/*.apk` once per phone. A debug build is not optimised the way a release build is; rows about battery drain (S8, S11) are repeated on a release build once signing exists.
+
+**iPhone** (from the Mac; a free Apple ID is enough, the profile lasts 7 days and the app must be re-installed after that):
+
+1. `brew install xcodegen`, then in `apps/ios`: `xcodegen`.
+2. Open `Averyn.xcodeproj`, select the target, *Signing & Capabilities*: choose your Apple ID team and let Xcode manage signing. Change the bundle id only for this local install if Xcode refuses `dev.averyn.app`, and note it in the matrix row.
+3. Select the iPhone as the destination and run. For the diagnostics to carry the commit: *Edit Scheme → Run → Arguments* is not enough; build with `xcodebuild ... AVERYN_COMMIT=$(git rev-parse HEAD)` or set `AVERYN_COMMIT` in the target's build settings before running.
+4. On the phone: *Settings → General → VPN & Device Management* → trust the developer profile.
+
+HealthKit and the background location mode need a real device and the capability enabled for your team; if Xcode reports a missing capability, enable it in *Signing & Capabilities* and note it.
+
+**The server for S12–S14 and later rows.** The phone must reach a backend over TLS. Use the Compose stack of [self-hosting.md](self-hosting.md) with its [TLS overlay](self-hosting.md#tls-public-instance): it needs two public names with working certificates (the issuer is fixed once chosen), so it runs on a small rented host or on a machine with a domain pointing at it, not on a bare local address. This is the first thing that needs a decision from the owner (the host); until then S1–S11 and S25 need no server. The address goes in the app under the account section (later under *Advanced*).
+
+**Order of the first run.** One phone, S1, S2 and S5 first: if the recording itself is wrong, nothing else matters. Fill a row the same day, with the exported diagnostics, in a private folder.
+
 ## After installing
 
 Run the scenarios of the device matrix. In the app, **History** exports the GPX, the `diagnostics-v3` report and the raw file of any stored activity; attach the diagnostics to the results row together with its `buildId`.
