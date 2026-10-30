@@ -16,6 +16,7 @@ import kotlinx.io.writeString
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.serializer
 
 /**
  * The format version new activity files are written with (ADR-0020): GPS samples plus optional `HR ` records.
@@ -93,6 +94,8 @@ private const val RR_FILE_SUFFIX = ".rr.jsonl"
 
 /** The file name suffix of the local summary sidecar (TDD-0011): the numbers of an activity on this device. */
 private const val SUMMARY_FILE_SUFFIX = ".summary.json"
+private const val DROPS_FILE_SUFFIX = ".drops.json"
+private val dropsSerializer = serializer<Map<DroppedInputReason, Int>>()
 
 // NaN/Infinity in an optional field (altitude, speed, bearing) is stored as the platform reported it rather than
 // crashing the recording thread: raw samples are immutable and never silently lost (F5).
@@ -169,6 +172,8 @@ class ActivityStore(
     private fun pathFor(activityId: String) = Path(directory, "$activityId.jsonl")
 
     private fun pathForLocalSummary(activityId: String) = Path(directory, "$activityId$SUMMARY_FILE_SUFFIX")
+
+    private fun pathForDrops(activityId: String) = Path(directory, "$activityId$DROPS_FILE_SUFFIX")
 
     fun create(metadata: ActivityMetadata) {
         SystemFileSystem.sink(pathFor(metadata.activityId), append = false).buffered().use { sink ->
@@ -344,6 +349,42 @@ class ActivityStore(
         val path = pathFor(activityId)
         if (SystemFileSystem.exists(path)) SystemFileSystem.delete(path)
         deleteLocalSummary(activityId)
+        val drops = pathForDrops(activityId)
+        if (SystemFileSystem.exists(drops)) SystemFileSystem.delete(drops)
+    }
+
+    // --- Dropped-input counters, local only: `<id>.drops.json`. Not part of the raw file and never uploaded.
+
+    /**
+     * Writes what the recorder could not use so far for this activity (F5), so a kill does not lose the count.
+     * Atomic (a temporary file and a rename). A counter that cannot be written is a counter that is behind: the
+     * activity itself is intact, and the failure must not be the reason a fix is lost.
+     */
+    fun writeDroppedInputs(
+        activityId: String,
+        counts: Map<DroppedInputReason, Int>,
+    ) {
+        val target = pathForDrops(activityId)
+        val temp = Path(directory, "$activityId$DROPS_FILE_SUFFIX.tmp")
+        try {
+            SystemFileSystem.sink(temp, append = false).buffered().use { sink ->
+                sink.writeString(json.encodeToString(dropsSerializer, counts))
+            }
+            SystemFileSystem.atomicMove(temp, target)
+        } catch (e: Exception) {
+            if (SystemFileSystem.exists(temp)) SystemFileSystem.delete(temp)
+        }
+    }
+
+    /** The counters written by [writeDroppedInputs]; empty when there are none or the file cannot be read. */
+    fun readDroppedInputs(activityId: String): Map<DroppedInputReason, Int> {
+        val path = pathForDrops(activityId)
+        if (!SystemFileSystem.exists(path)) return emptyMap()
+        return try {
+            json.decodeFromString(dropsSerializer, SystemFileSystem.source(path).buffered().use { it.readString() })
+        } catch (e: Exception) {
+            emptyMap()
+        }
     }
 
     // --- Local summary sidecar (TDD-0011): `<id>.summary.json`, the numbers of an activity on this device.
