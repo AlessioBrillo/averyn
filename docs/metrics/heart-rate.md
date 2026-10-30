@@ -34,7 +34,9 @@ minimum do not change between the two versions.
 
 ## Minimum quality requirements
 
-The caller passes only records stored by the adapter; platform-reported `bpm <= 0` or `> 240` is counted as an artifact (see `rr-quality-v1` for RR-side artifacts), not silently dropped: `hr_v1_artifacts` counts them alongside the metric.
+The frame parser rejects a `bpm` outside 0..300 and an RR outside 1..3000 ms and reports each as `ParseResult.Invalid`: the rest of the frame is kept and the value is never thrown or silently lost. The caller passes only records stored by the adapter; a `bpm` of 0 is stored ("no reading") and a value above 240 that the parser accepted is counted by the metric as an artifact (`artifacts` in the analysis), not dropped. See `rr-quality-v1` for RR-side artifacts.
+
+The RR unit on the wire is 1/1024 s; the parser stores milliseconds (`(raw * 1000 + 512) / 1024`). The RR sidecar's own `formatVersion` is 2 for milliseconds; a sidecar without the field (written before 2026-10-30) is 1, holds the raw unit as if it were milliseconds, and is read as it was written, never converted.
 
 ## Missing-data handling
 

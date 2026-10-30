@@ -29,6 +29,13 @@ const val CURRENT_FORMAT_VERSION = 2
  */
 const val IMPORT_FORMAT_VERSION = 3
 
+/**
+ * The format version of the RR sidecar's own META. 1 = the intervals in the unit on the wire (1/1024 s, stored
+ * as if they were milliseconds); 2 = milliseconds. A sidecar without the field decodes to 1 and is never
+ * converted: it is read as it was written.
+ */
+const val RR_FORMAT_VERSION = 2
+
 /** The format versions this build can read: 1 (GPS only), 2 (GPS + heart rate), 3 (imported). */
 val SUPPORTED_FORMAT_VERSIONS = setOf(1, CURRENT_FORMAT_VERSION, IMPORT_FORMAT_VERSION)
 
@@ -407,7 +414,7 @@ class ActivityStore(
     private fun pathForRr(activityId: String) = Path(directory, "$activityId$RR_FILE_SUFFIX")
 
     /**
-     * Creates the sidecar's META line (formatVersion 1) from the activity's own metadata, so the sidecar
+     * Creates the sidecar's META line (formatVersion [RR_FORMAT_VERSION]) from the activity's own metadata, so the sidecar
      * says which activity it belongs to (ADR-0020). Overwrites an existing sidecar's META: the sidecar's
      * lifecycle is separate, but its header is always the activity it was recorded with.
      */
@@ -417,7 +424,7 @@ class ActivityStore(
                 META_PREFIX +
                     json.encodeToString(
                         ActivityMetadata.serializer(),
-                        metadata.copy(formatVersion = 1),
+                        metadata.copy(formatVersion = RR_FORMAT_VERSION),
                     ) +
                     "\n",
             )

@@ -73,14 +73,38 @@ class HeartRateFrameParserTest {
 
     @Test
     fun parsesRrIntervals() {
-        val data = frame(rrPresent = true, bpm = 70, rr = *intArrayOf(857, 800, 1000))
+        // On the wire the unit is 1/1024 s: 1024 is one second, 877 is 856.4 ms.
+        val data = frame(rrPresent = true, bpm = 70, rr = *intArrayOf(877, 819, 1024))
         val (results, consumed) = parseHeartRateFrames(data, 0, 1000L, 2000L)
         assertEquals(data.size, consumed)
         val complete =
             results[0] as? ParseResult.Complete
                 ?: error("expected Complete")
-        assertEquals(listOf(857, 800, 1000), complete.rrIntervals.map { it.rrMs })
+        assertEquals(listOf(856, 800, 1000), complete.rrIntervals.map { it.rrMs })
         assertEquals(70, complete.heartRate?.bpm)
+    }
+
+    @Test
+    fun aBpmOutOfRangeIsReportedNotThrown() {
+        val data = frame(uint16 = true, bpm = 301, rrPresent = true, rr = *intArrayOf(1024))
+        val (results, consumed) = parseHeartRateFrames(data, 0, 1000L, 2000L)
+        assertEquals(data.size, consumed)
+        assertEquals(1, results.count { it is ParseResult.Invalid })
+        val complete = results.filterIsInstance<ParseResult.Complete>().single()
+        assertEquals(null, complete.heartRate)
+        assertEquals(listOf(1000), complete.rrIntervals.map { it.rrMs })
+    }
+
+    @Test
+    fun anRrOutOfRangeIsReportedNotThrown() {
+        // 0 and 4000 (3.9 s) are not intervals between two beats; 1024 is.
+        val data = frame(bpm = 70, rrPresent = true, rr = *intArrayOf(0, 4096, 1024))
+        val (results, consumed) = parseHeartRateFrames(data, 0, 1000L, 2000L)
+        assertEquals(data.size, consumed)
+        assertEquals(2, results.count { it is ParseResult.Invalid })
+        val complete = results.filterIsInstance<ParseResult.Complete>().single()
+        assertEquals(70, complete.heartRate?.bpm)
+        assertEquals(listOf(1000), complete.rrIntervals.map { it.rrMs })
     }
 
     @Test
