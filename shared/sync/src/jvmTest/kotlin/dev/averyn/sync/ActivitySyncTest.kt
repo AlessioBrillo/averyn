@@ -147,6 +147,53 @@ class ActivitySyncTest {
         }
 
     @Test
+    fun aSidecarThatFailedRetryablyIsTriedAgainOnTheNextPass() =
+        runBlocking {
+            finishedActivity("a1")
+            store.ensureRrMetadata(ActivityMetadata("a1", Sport.RUN, 1_000))
+            store.appendRrInterval("a1", RrInterval(1_000, 1_000, 857))
+
+            fun answer(rrStatus: HttpStatusCode): suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
+                { request ->
+                    if (request.url.toString().endsWith("/rr")) {
+                        respond("", rrStatus)
+                    } else {
+                        respond("""{"id":"srv-1"}""", HttpStatusCode.Created)
+                    }
+                }
+
+            // The activity goes up, the sidecar meets a server error: the pass says "try again".
+            val first = sync(answer(HttpStatusCode.ServiceUnavailable)).syncPending("tok")
+            assertEquals(1, first.uploaded)
+            assertEquals(1, first.retryable)
+            assertEquals(SyncState.FAILED_RETRYABLE, statuses.readRr("a1")?.state)
+
+            // The activity is READY now; the sidecar must still get its second chance.
+            val second = sync(answer(HttpStatusCode.Created)).syncPending("tok")
+            assertEquals(0, second.retryable)
+            assertEquals(SyncState.READY, statuses.readRr("a1")?.state)
+        }
+
+    @Test
+    fun aRefusedTokenOnTheSidecarAsksForLogin() =
+        runBlocking {
+            finishedActivity("a1")
+            store.ensureRrMetadata(ActivityMetadata("a1", Sport.RUN, 1_000))
+            store.appendRrInterval("a1", RrInterval(1_000, 1_000, 857))
+
+            val result =
+                sync { request ->
+                    if (request.url.toString().endsWith("/rr")) {
+                        respond("", HttpStatusCode.Unauthorized)
+                    } else {
+                        respond("""{"id":"srv-1"}""", HttpStatusCode.Created)
+                    }
+                }.syncPending("tok")
+
+            assertEquals(true, result.needsLogin)
+        }
+
+    @Test
     fun aRefusedSidecarIsNotUploadedAgainAndTheLocalCopyGoes() =
         runBlocking {
             finishedActivity("a1")

@@ -14,6 +14,7 @@ import dev.averyn.sensors.HeartRateSample
 import dev.averyn.sensors.RrInterval
 import dev.averyn.tracking.ActivityRecorder
 import dev.averyn.tracking.ActivityStore
+import dev.averyn.tracking.DroppedInputReason
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -131,6 +132,10 @@ class AverynApplication : Application() {
  *  intervals in the consent-gated sidecar. */
 fun AverynApplication.feedHeartRate(sample: HeartRateSample) {
     recorder.onHeartRate(sample)
+}
+
+fun AverynApplication.feedInvalidHeartRate() {
+    recorder.recordDroppedInput(DroppedInputReason.INVALID_HEART_RATE)
 }
 
 fun AverynApplication.feedRrInterval(rr: RrInterval) {
