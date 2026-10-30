@@ -14,14 +14,14 @@
 ### SYNAPSE-24: La Nascita da un'Insoddisfazione Tecnica
 SYNAPSE-24 nasce perché **non esiste oggi nessun wearable che faccia davvero "24/7 multimodale"**:
 - Wearable sportivi mainstream: ottimi per sport, **zero neuro** (niente EEG, fNIRS, EDA research-grade)
-- Muse / EmotiBit / OpenBCI: ottimi per neuro, **zero sport** (niente GPS, mappe, segmenti, social)
+- Dispositivi neuro di consumo e di ricerca: ottimi per neuro, **zero sport** (niente GPS, mappe, segmenti, social)
 - Tutti: **closed source, cloud proprietario, dati bloccati, subscription obbligatorie**
 
 SYNAPSE-24 ha già risolto la parte difficile: **il software**. Phase 0 completato significa:
 - Algoritmi validati su dataset pubblici (WESAD stress ≥80%, MIT-BIH R-peak ≥99.6%, Sleep-EDF staging)
 - Pipeline completa: acquisizione → signal quality → edge AI (TFLM) → LSL/XDF sync
 - Architettura tiered (T0 continuo, T1 sonno/riposo, T2 task) che risolve il problema energetico
-- Hardware abstraction per ESP32-S3, Cerelog, EmotiBit, PiEEG, in-ear EEG
+- Hardware abstraction per ESP32-S3 e per schede EEG/biosensori di ricerca di terzi, in-ear EEG
 
 **Ma manca il prodotto vendibile** e manca il canale per arrivare agli utenti.
 
@@ -107,8 +107,8 @@ Averyn è **pre-alpha**: ha solo l'architettura (KMP, Ktor, PostGIS, Docker Comp
 ## 🎭 Perché Questa Cosa Non È Mai Stata Fatta Prima
 
 1. **Hardware companies** (produttori mainstream di wearable sportivi) → **chiudono tutto** per vendere subscription
-2. **Open hardware projects** (OpenBCI, Muse) → **non fanno consumer apps**, restano nicchia ricerca
-3. **Open source apps** (Gadgetbridge, OpenTracks) → **niente hardware**, niente cloud, niente AI
+2. **Open hardware projects** → **non fanno consumer apps**, restano nicchia ricerca
+3. **Open source apps** → **niente hardware**, niente cloud, niente AI
 4. **Research projects** → **non pensano a business model**, finiscono in paper accademici
 
 **Noi uniamo tutto**: Hardware open + App open + Cloud open + Business model sostenibile.

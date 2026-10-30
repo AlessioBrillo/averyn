@@ -111,7 +111,7 @@ SYNAPSE-24/                          # REPO PRINCIPALE: Device Software Platform
 | Signal Quality Full | `signal_quality/fnirs.py`, `eeg.py`, `ecg.py` (full), `ppg.py` (full) | Embedded in firmware; full in `synapse-ml/` |
 | XDF/Utils Cloud | `utils/xdf.py`, `xdf_correction.py`, `scripts/validate_live_*.py` | `synapse-cloud/` |
 | Test Non-Device | `tests/test_edge_ai.py`, `test_ingestion.py`, `test_*_closure*.py` | `synapse-ml/` |
-| Hardware EEG/fNIRS | `hardware/cerelog.py`, `emotibit.py`, `inear_eeg.py` | `firmware/esp32_headband/` (futuro) |
+| Hardware EEG/fNIRS | `hardware/` (schede di terzi), `inear_eeg.py` | `firmware/esp32_headband/` (futuro) |
 
 ---
 
@@ -133,7 +133,7 @@ SYNAPSE-24/                          # REPO PRINCIPALE: Device Software Platform
 ## 💡 Note Critiche per l'Esecuzione
 
 1. **Porting Python → C non è banale**: Usa i test Python come reference oracle. State machine, clock sync, signal quality vanno riscritti in C embedded.
-2. **FIT Writer è critico**: Deve produrre file validi per `fitparse` / Garmin Connect. Usa libreria C esistente o scrivi minimal writer.
+2. **FIT Writer è critico**: Deve produrre file validi per i parser FIT e per le piattaforme sportive. Usa libreria C esistente o scrivi minimal writer.
 3. **Provisioning UX**: Deve funzionare "out of box" — utente apre Averyn App → "Aggiungi Band" → magia. Testa con non-tecnici.
 4. **OTA Security**: Firma Ed25519, public key in firmware, private key offline (HSM o air-gapped). Non saltare.
 5. **Certificati Device**: Ogni Band ha cert X.509 unico (mTLS con cloud). Generazione in factory test.

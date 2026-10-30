@@ -1,8 +1,19 @@
 # Synapse integration contract
 
-Status: v0.2 — draft. What Averyn requires from, and does with, a Synapse device, under [ADR-0010](../adr/0010-ecosystem-boundary.md), [ADR-0011](../adr/0011-identity-oidc.md), [ADR-0014](../adr/0014-sensor-integration-contract.md) and [ADR-0026](../adr/0026-averyn-synapse-link.md). It supersedes the device-side specifics in [`docs/strategy/`](../strategy/README.md) (corrections in [`review-2026-09-27.md`](../strategy/review-2026-09-27.md)). v0.2 replaces the byte-level tables of v0.1: the device repository owns them.
+Status: v0.3 — draft (2026-10-29). What Averyn requires from, and does with, a Synapse device, under [ADR-0010](../adr/0010-ecosystem-boundary.md), [ADR-0011](../adr/0011-identity-oidc.md), [ADR-0014](../adr/0014-sensor-integration-contract.md) and [ADR-0026](../adr/0026-averyn-synapse-link.md). It supersedes the device-side specifics in [`docs/strategy/`](../strategy/README.md) (corrections in [`review-2026-09-27.md`](../strategy/review-2026-09-27.md)). v0.2 replaced the byte-level tables of v0.1: the device repository owns them. v0.3 adds the roles of the two products, the way a contract change travels and the pairing experience.
 
 Level L0 needs no code. Level L1 is scheduled in the [roadmap](../product/roadmap.md#synapse-track) as a beta and is the first item on the cut line; its pure core is in place (section 1b), the native adapters, the sidecar and the server side wait for a prototype that produces real frames and for the approval of [ADR-0026](../adr/0026-averyn-synapse-link.md).
+
+## Roles of the two products
+
+| | Averyn | Synapse |
+|---|---|---|
+| What it is | The free app (iOS, Android, web) and the cloud | A band that talks BLE, plus a research SDK |
+| Owns | Accounts, consent, activities, the only system of record | The device, its firmware, the byte-level contract |
+| Pays for | The managed cloud, from donations and from the margin of the bands sold ([business model](../product/business-model.md)) | The band, sold at a price that includes that margin |
+| Never does | Call the Synapse data-plane API, subscribe to the raw research streams | Run a consumer cloud or hold user accounts; the provisioning path to a cloud in the firmware is not used by the product |
+
+Data path: band → BLE → phone (Averyn) → sync → Averyn cloud. Nothing else. The pages and calls that the Synapse repository's own interface document once assumed (an HTTP pull by Averyn, `/synapse/*` pages) are dropped: that document is rewritten in the device repository ([#72](https://github.com/AlessioBrillo/averyn/issues/72)).
 
 ## Principle
 
@@ -19,11 +30,11 @@ The contract is owned by the device repository (`SYNAPSE-24`): `contracts/gatt_v
 | Vendored copy and sha256 | `shared/sensors/src/jvmTest/resources/synapse/gatt_v1.json`, sha256 `0c6b9e38…88a9`, checked by `SynapseFeatureFrameVectorsTest` (a changed contract fails the build until it is re-pinned on purpose) |
 | Golden vectors | `feature_frame_v1_vectors.json`, same folder: frame bytes → expected values, 9 of them (every field present; what the current firmware sends; everything not available; a wrapping counter and a negative temperature; out-of-range values; a longer frame; an unknown version; a cut frame; nothing). Generated with Python's `struct` from the packed layout of `synapse_feature_stream_t`: the device SDK decodes only the raw research streams, so there is no decoder there to take vectors from |
 
-A change of the contract is a version bump in the device repository, then a pin update plus tests here. A frame whose version this parser does not know is counted as a loss and skipped, never interpreted (ADR-0014).
+**How a contract change travels.** (1) A pull request in the device repository changes `contracts/` and bumps the version, regenerates the vectors with the SDK encoder and updates its own checks; (2) a pull request here updates the vendored copy, the sha256 in the test and the parser, with the vectors as tests; (3) neither merges alone — the second is opened against the first and both are merged the same day. Until the vectors come from the SDK encoder, the ones here are generated from the packed struct and are labelled as such. A frame whose version this parser does not know is counted as a loss and skipped, never interpreted (ADR-0014).
 
 ### 1b. What is in place
 
-`parseSynapseFeatureFrame` (`shared/sensors`) decodes the feature frame: pure, no platform types, never throws on a short or foreign frame, every field the band marks "not available" is **null** and never zero, a value out of its range is null too. `SynapseSequenceTracker` counts the frames the link lost from the 16-bit counter (it wraps; a repeat or an old frame is counted apart and does not move the counter back). The service and characteristic UUIDs are constants next to it, tested against the vendored contract.
+`parseSynapseFeatureFrame` (`shared/sensors`) decodes the feature frame: pure, no platform types, never throws on a short or foreign frame, every field the band marks "not available" is **null** and never zero, a value out of its range is null too. `SynapseSequenceTracker` counts the frames the link lost from the 16-bit counter (it wraps; a repeat or an old frame is counted apart and does not move the counter back; a counter that restarts, because the band rebooted, is counted as a restart and followed — it is not tens of thousands of lost frames). The service and characteristic UUIDs are constants next to it, tested against the vendored contract.
 
 **A discrepancy to fix in the device repository:** the packed struct is **23 bytes** (1 + 2 + 2 + 2 + 8 × 1 + 2 + 2 + 2 + 2), while the comment in `ble_gatt_server.h` says 26. The parser follows the struct, accepts a longer frame of the same version (reading the fields it knows) and reports a shorter one as truncated; the device repository should correct the comment and publish the size in the contract ([#72](https://github.com/AlessioBrillo/averyn/issues/72)).
 
@@ -33,6 +44,10 @@ What Averyn relies on, without copying the tables:
 - **One consumer service** with a feature-stream characteristic notified at 1 Hz, a versioned frame with a `sequence`, and a per-field "not available" sentinel. The current firmware fills only heart rate, the PPG quality index, the motion-artifact probability and the stress class; RMSSD, SDNN and RR are always "not available".
 - **A research service** with raw ECG/PPG/IMU streams. Averyn never subscribes to it.
 - **FIT developer fields**, flat scalars. The stress enum is `0 = baseline, 1 = stress, 2 = artifact, 3 = unknown`.
+
+### Pairing experience (L0 and L1)
+
+The band is found by the generic strap scan, with the name it advertises, and works as a strap with no setup (L0). Only when the band offers the feature service does the app offer the extra signals, in a separate step that explains in wellness words what is read and asks for the two consents (`signal_quality`, `stress_monitoring`) one by one; declining leaves the band working as a strap. Data produced by the band is labelled "via Synapse" wherever it is shown.
 
 ## 2. Levels
 

@@ -1,13 +1,12 @@
 # Architecture overview
 
-Status: v0.1 — target architecture; only the pieces marked ✅ exist in the scaffold.
+Status: v0.2 (2026-10-29) — target architecture. There is no admin or moderation interface: the operator works with runbooks and the database (moderation arrives with MVP-4). `sensors --> mobile` is the only link to Synapse: a band is a BLE sensor read by the phone ([ADR-0026](../adr/0026-averyn-synapse-link.md)).
 
 ## System context
 
 ```mermaid
 flowchart LR
   athlete([Athlete])
-  admin([Admin / moderator])
   subgraph averyn["Averyn"]
     mobile[Mobile apps<br/>iOS · Android]
     web[Web app]
@@ -19,7 +18,6 @@ flowchart LR
   idp[/OIDC identity provider/]
   worker[/Synapse inference worker<br/>optional, stateless/]
   athlete --> mobile & web
-  admin --> web
   sensors --> mobile
   health <--> mobile
   mobile <-->|sync| api

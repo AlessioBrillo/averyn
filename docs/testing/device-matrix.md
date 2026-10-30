@@ -1,6 +1,6 @@
 # Device test matrix
 
-Status: ready for the first campaign — protocol below; results are filled in as devices are tested during MVP-0. Emulators are **not** valid evidence for background, battery or recovery behavior ([TDD-0001 §6](../design/TDD-0001-tracking-engine.md)). Builds under test come from the tester tracks ([ADR-0019](../adr/0019-crash-reporting-and-tester-builds.md)); every result row names the build.
+Status: ready for the first campaign — protocol below; **no row has been run yet** (0 of 48 scenarios). Results are filled in as devices are tested; a feature is `verified` only when its row is green ([ADR-0028](../adr/0028-consumer-launch-target.md)). Emulators are **not** valid evidence for background, battery or recovery behavior ([TDD-0001 §6](../design/TDD-0001-tracking-engine.md)). Builds under test come from the tester tracks ([ADR-0019](../adr/0019-crash-reporting-and-tester-builds.md)); every result row names the build.
 
 ## Dimensions ([report §6.4](../product/reference-report-v0.1.md))
 
@@ -15,6 +15,10 @@ OS version · device model/vendor · battery state · signal quality · app stat
 | GPX export validates | S1 row: `xmllint --noout --schema gpx-1.1.xsd activity.gpx` passes |
 | Diagnostics report shows quality | `quality.grade`, flag counts and `accuracyWithin20mPercent` present in the exported JSON |
 | Results logged here | one row per run in Results |
+
+## Launch exit criteria
+
+The public launch ([roadmap](../product/roadmap.md#mvp-l-launch)) needs, on ≥ 2 Android and ≥ 2 iOS devices: S1–S28 green, **and** the rows of every launch feature green: S32–S41 (profile, zones, map, imports, deletion, health platforms, language) and S42–S48 (privacy zones, share card, voice cues, progress, onboarding, accessibility). S29–S31 (Synapse) are needed only for the Synapse beta.
 
 ## Scenarios (each run records pass/fail + notes)
 
@@ -60,6 +64,16 @@ Setup common to all: fully charged unless the scenario says otherwise, location 
 | S39 | Save to Health ([TDD-0014](../design/TDD-0014-health-platforms.md)) | On an iPhone, the same run; choose Save to Health and allow it; open the Health app; save again | The workout is in Health with its route map, the heart rate and the distance; saving again says it is already there and adds nothing; refusing writes nothing and says so |
 | S40 | Language (issue #69) | Set the phone to Italian, then to English; open the app, the recording screen, the history, a detail, the account section and the Health Connect rationale; trigger an interrupted-activity notification | Every text is in the language of the phone, none is cut off or overlaps, the notifications are in the same language |
 | S41 | Language on iPhone (issue #69) | Set the iPhone to Italian, then to English; open the app, the recording screen, the history, a detail, the account section; read the location and Bluetooth permission prompts | Every text is in the language of the phone, none is cut off or overlaps; the prompts are in the same language |
+| S29 | The band as a plain heart-rate strap (Synapse L0) | Record ≥ 10 min with the Synapse band as the only strap, next to a reference strap; compare as in S15 | Same pass criteria as S15; the band is listed by its name; no crash if it disconnects and comes back; no Synapse-specific permission is asked |
+| S30 | Synapse feature frame (L1, beta; [ADR-0026](../adr/0026-averyn-synapse-link.md)) | With the `signal_quality` consent granted, record ≥ 10 min with the band; then revoke the consent mid-activity | Signal quality, motion artifact and stress class are stored with `source: synapse-device`; a field the band marks "not available" is empty, never `0`; revoking stops the stream at once and deletes the sidecar, leaving a tombstone; without the consent the app does not subscribe at all |
+| S31 | The band restarts during an activity | Reboot the band (or take it out of range and back) during a recording with S30 active | The recording does not stop; the stream resumes; the counter restart is counted as a restart, not as thousands of lost frames; the heart rate has a gap of the real length |
+| S42 | Privacy zones (design doc to be written with the code) | Set a zone of 200 m around the start; record from inside it; open the activity on the phone and on the web; share the card (S43); export the GPX | The map, the card and the web hide the part of the track inside the zone; the raw file and the private export keep every sample; changing the zone changes the display of old activities; the numbers (distance, time) are the real ones |
+| S43 | The share card | Finish an activity and share its card to a chat app; repeat with a private zone around the start | The image shows the map, the track and the main numbers, is readable in a chat preview, and does not show the part of the track in the zone; sharing is always the user's tap, nothing is uploaded by the app |
+| S44 | Voice cues | Settings: voice every 1 km; record 3 km with the screen locked and music playing; repeat in Italian and English | The cue is spoken at each kilometre (±50 m) with time, pace and, with a strap, heart rate; the music lowers and comes back; nothing is spoken when the setting is off; no extra battery drain over 5 % per hour compared with S2 |
+| S45 | Progress | With ≥ 10 activities over ≥ 6 weeks (imports allowed), open Progress | Weekly and monthly totals equal the sum of the list (distance ±0.1 %, time ±1 s); the calendar marks the days with an activity; deleting an activity changes the totals; works offline |
+| S46 | First run | Install on a clean phone; open the app for the first time | The app can record without an account; the permissions are explained before they are asked; the location prompt is answered once and the choice is understood; pairing a strap or the band is optional and skippable |
+| S47 | Recording screen in the real world | Run outside in bright sun, then at night, with sweaty or gloved hands | The numbers are readable at arm's length; the pause and stop buttons are hit on the first try; the screen stays on only when the user asked for it |
+| S48 | Accessibility | Turn on the largest text, then TalkBack/VoiceOver; go through recording, summary and history | No text is cut off; every control has a spoken name; the order of reading is the order of the screen; the contrast of the numbers passes AA |
 
 ### Recovery loss (S5/S6)
 

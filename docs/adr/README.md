@@ -29,7 +29,8 @@ Format: [MADR](https://adr.github.io/madr/)-style, see [template](template.md). 
 | [0023](0023-activity-analysis-storage.md) | Activity analysis: derived data in PostgreSQL, the raw file stays the source | accepted |
 | [0024](0024-personal-records.md) | Personal records: derived rows and a live projection, not a table of records | accepted |
 | [0025](0025-device-side-cache-of-server-activities.md) | The server's copy on the device: a bounded cache with an end, not a mirror | accepted |
-| [0026](0026-averyn-synapse-link.md) | Averyn–Synapse link: the contract is owned by the device, pinned by Averyn, phased in levels | proposed |
+| [0026](0026-averyn-synapse-link.md) | Averyn–Synapse link: the contract is owned by the device, pinned by Averyn, phased in levels | accepted |
 | [0027](0027-managed-cloud-baseline.md) | Managed cloud baseline: one EU host, the self-host stack, off-site backups, self-hosted map tiles | proposed |
+| [0028](0028-consumer-launch-target.md) | The launch target: a free, privacy-first consumer app built around three moments, proved on devices first | accepted |
 
 Open decisions still without an ADR are tracked in [product/roadmap.md](../product/roadmap.md#open-decisions).

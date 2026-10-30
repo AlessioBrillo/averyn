@@ -8,7 +8,7 @@ Docs live in the repo, are reviewed like code, and are checked in CI (markdownli
 | **Strategy** | [`strategy/`](strategy/README.md) | Frozen ecosystem-strategy input (Italian, unedited) plus its technical review | Input is frozen; the review is edited freely |
 | **Integrations** | [`integrations/`](integrations/synapse.md) | Contracts required from a third-party device/vendor to integrate | Kept current with what Averyn actually requires |
 | **ADR** (Architecture Decision Record) | [`adr/`](adr/README.md) | One hard-to-reverse decision: problem, options, decision, consequences | `proposed` → `accepted` → (`superseded` \| `deprecated`). **Immutable once accepted**; supersede with a new ADR |
-| **Design doc** (TDD) | [`design/`](design/template.md) | How a non-trivial feature/system will work, before it is built | `draft` → `in-review` → `approved` → `implemented`. Updated to reflect reality after shipping |
+| **Design doc** (TDD) | [`design/`](design/template.md) | How a non-trivial feature/system will work, before it is built | `draft` → `in-review` → `approved` → `implemented` (code and tests merged) → `verified` (the rows of the [device matrix](testing/device-matrix.md) that cover it are green). Updated to reflect reality after shipping |
 | **Metric spec** | [`metrics/`](metrics/template.md) | The 11-field definition of one metric, versioned | New version = new section; old versions are never edited |
 | **Architecture** | [`architecture/`](architecture/overview.md) | C4 diagrams and system overview | Kept current with `main` |
 | **Privacy** | [`privacy/`](privacy/data-classification.md) | Data classification, [threat model](privacy/threat-model.md), retention | Reviewed on any change to collected data |
@@ -21,20 +21,22 @@ Docs live in the repo, are reviewed like code, and are checked in CI (markdownli
 
 | # | Title | Status |
 |---|---|---|
-| [0001](design/TDD-0001-tracking-engine.md) | Tracking engine | implemented |
-| [0002](design/TDD-0002-activity-sync.md) | Activity sync | implemented |
-| [0003](design/TDD-0003-web-activity-view.md) | Web activity view | implemented |
-| [0004](design/TDD-0004-data-deletion-and-export.md) | Data deletion and export | implemented |
-| [0005](design/TDD-0005-self-host-hardening.md) | Self-host hardening | implemented |
-| [0006](design/TDD-0006-field-readiness.md) | Field readiness | implemented |
-| [0007](design/TDD-0007-sensor-channels.md) | Sensor channels: BLE heart rate | implemented |
-| [0008](design/TDD-0008-gpx-import.md) | GPX import | implemented |
-| [0009](design/TDD-0009-activity-analysis.md) | Activity analysis | implemented |
-| [0010](design/TDD-0010-best-efforts.md) | Best efforts and personal records | implemented |
-| [0011](design/TDD-0011-mobile-read-path.md) | The server on the phone: reading, offline copy, local summary | implemented |
-| [0012](design/TDD-0012-profile-zones-phone-map.md) | Profile, heart-rate zones and the map on the phone | implemented |
-| [0013](design/TDD-0013-fit-import.md) | FIT import and archive import | implemented |
-| [0014](design/TDD-0014-health-platforms.md) | Saving an activity to HealthKit and Health Connect | implemented |
+| [0001](design/TDD-0001-tracking-engine.md) | Tracking engine | implemented, not verified |
+| [0002](design/TDD-0002-activity-sync.md) | Activity sync | implemented, not verified |
+| [0003](design/TDD-0003-web-activity-view.md) | Web activity view | implemented, not verified |
+| [0004](design/TDD-0004-data-deletion-and-export.md) | Data deletion and export | implemented, not verified |
+| [0005](design/TDD-0005-self-host-hardening.md) | Self-host hardening | implemented, not verified |
+| [0006](design/TDD-0006-field-readiness.md) | Field readiness | implemented, not verified |
+| [0007](design/TDD-0007-sensor-channels.md) | Sensor channels: BLE heart rate | implemented, not verified |
+| [0008](design/TDD-0008-gpx-import.md) | GPX import | implemented, not verified |
+| [0009](design/TDD-0009-activity-analysis.md) | Activity analysis | implemented, not verified |
+| [0010](design/TDD-0010-best-efforts.md) | Best efforts and personal records | implemented, not verified |
+| [0011](design/TDD-0011-mobile-read-path.md) | The server on the phone: reading, offline copy, local summary | implemented, not verified |
+| [0012](design/TDD-0012-profile-zones-phone-map.md) | Profile, heart-rate zones and the map on the phone | implemented, not verified |
+| [0013](design/TDD-0013-fit-import.md) | FIT import and archive import | implemented, not verified |
+| [0014](design/TDD-0014-health-platforms.md) | Saving an activity to HealthKit and Health Connect | implemented, not verified |
+
+Nothing is `verified` yet: the device matrix has no filled row ([ADR-0028](adr/0028-consumer-launch-target.md)). The status line inside each design doc keeps saying `implemented` until its rows are green.
 
 ## Rules
 
