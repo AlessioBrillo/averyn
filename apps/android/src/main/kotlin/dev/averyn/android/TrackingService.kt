@@ -115,6 +115,7 @@ class TrackingService : Service() {
                     // Wire the HR adapter callbacks once we know there is an activity to feed.
                     hrAdapter.onSample = { app.feedHeartRate(it) }
                     hrAdapter.onRrInterval = { app.feedRrInterval(it) }
+                    hrAdapter.onInvalid = { app.feedInvalidHeartRate() }
                     if (hrAdapter.isAvailable && !hrActive) {
                         // Fire-and-forget: HR is best-effort; a missing strap never stops GPS tracking.
                         hrActive = true

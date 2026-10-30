@@ -107,7 +107,7 @@ class DiagnosticsTest {
         recorder.onSample(sample(10_000, 45.001))
         val diag = recorder.stop(10_000, 11_000).diagnostics
 
-        assertEquals("diagnostics-v3", diag.formatVersion)
+        assertEquals("diagnostics-v4", diag.formatVersion)
         assertEquals(AlgorithmVersions("distance-v1", "time-v1", "speed-v1", "quality-v2"), diag.algorithms)
         assertEquals(
             listOf(

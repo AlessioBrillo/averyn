@@ -65,4 +65,4 @@ HealthKit and the background location mode need a real device and the capability
 
 ## After installing
 
-Run the scenarios of the device matrix. In the app, **History** exports the GPX, the `diagnostics-v3` report and the raw file of any stored activity; attach the diagnostics to the results row together with its `buildId`.
+Run the scenarios of the device matrix. In the app, **History** exports the GPX, the `diagnostics-v4` report and the raw file of any stored activity; attach the diagnostics to the results row together with its `buildId`.

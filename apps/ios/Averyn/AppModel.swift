@@ -110,6 +110,9 @@ final class AppModel {
         heartRate.onRrInterval = { [weak self] rr in
             self?.feedRrInterval(rr)
         }
+        heartRate.onInvalid = { [weak self] in
+            self?.recorder.recordDroppedInput(reason: .invalidHeartRate)
+        }
         if heartRate.isAvailable {
             Task {
                 do {

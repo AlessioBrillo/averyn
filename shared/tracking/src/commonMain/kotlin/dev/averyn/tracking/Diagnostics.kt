@@ -12,9 +12,11 @@ import kotlinx.serialization.json.Json
 
 /**
  * Format version stamped on every [DiagnosticsReport]. TDD-0001 F8/§5.4, Q5; v2 adds the TDD-0006 §5.5 fields;
- * v3 lets the accuracy percentage be null (quality-v2: an accuracy that was never measured).
+ * v3 lets the accuracy percentage be null (quality-v2: an accuracy that was never measured); v4 keeps the
+ * counters of `droppedInputs` across a kill (they were rebuilt as an empty map) and adds the reasons
+ * `INVALID_HEART_RATE` and `STORAGE_WRITE_FAILED`.
  */
-const val DIAGNOSTICS_FORMAT_VERSION = "diagnostics-v3"
+const val DIAGNOSTICS_FORMAT_VERSION = "diagnostics-v4"
 
 /**
  * Aggregate quality/battery report for one completed activity (TDD-0001 F8), built by [ActivityRecorder]
@@ -78,6 +80,12 @@ enum class DroppedInputReason {
 
     /** The platform produced a fix the sample model rejects (NaN, out-of-range coordinate). */
     INVALID_SAMPLE,
+
+    /** The strap sent a value the heart-rate model rejects (a bpm above 300, an RR of 0 ms). */
+    INVALID_HEART_RATE,
+
+    /** The sample was valid but the device could not write it (disk full, I/O error): it is lost, and counted. */
+    STORAGE_WRITE_FAILED,
 }
 
 /**

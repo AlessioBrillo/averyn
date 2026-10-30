@@ -83,6 +83,9 @@ class BleHrAdapter(
     override var onSample: ((HeartRateSample) -> Unit)? = null
     override var onRrInterval: ((RrInterval) -> Unit)? = null
 
+    /** A value of a frame the heart-rate model rejects: the caller counts it as a dropped input. */
+    var onInvalid: (() -> Unit)? = null
+
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var connectJob: Job? = null
     private val lock = Any()
@@ -260,6 +263,7 @@ class BleHrAdapter(
                         val elapsed = android.os.SystemClock.elapsedRealtime()
                         val (results, _) = parseHeartRateFrames(data, 0, elapsed, now)
                         for (result in results) {
+                            if (result is ParseResult.Invalid) onInvalid?.invoke()
                             if (result is ParseResult.Complete) {
                                 result.heartRate?.let { onSample?.invoke(it) }
                                 if (recordRrIntervals) {

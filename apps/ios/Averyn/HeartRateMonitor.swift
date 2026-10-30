@@ -27,6 +27,8 @@ final class HeartRateMonitor: NSObject, @unchecked Sendable, SensorAdapter, CBCe
 
     var onSample: ((HeartRateSample) -> Void)? = nil
     var onRrInterval: ((RrInterval) -> Void)? = nil
+    /// A value of a frame the heart-rate model rejects: the caller counts it as a dropped input.
+    var onInvalid: (() -> Void)? = nil
 
     // MARK: - State (main queue only)
 
@@ -211,7 +213,11 @@ final class HeartRateMonitor: NSObject, @unchecked Sendable, SensorAdapter, CBCe
             data: bytes, offset: 0, elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs()
         )
 
-        for case let complete as ParseResult.Complete in (parsed.first as? [Any]) ?? [] {
+        let results = (parsed.first as? [Any]) ?? []
+        for case is ParseResult.Invalid in results {
+            onInvalid?()
+        }
+        for case let complete as ParseResult.Complete in results {
             if let sample = complete.heartRate {
                 onSample?(sample)
             }

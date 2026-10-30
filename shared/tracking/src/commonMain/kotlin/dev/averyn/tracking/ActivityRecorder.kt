@@ -10,6 +10,7 @@ import dev.averyn.metrics.ActivitySnapshot
 import dev.averyn.sensors.HR_ALGORITHM_VERSION
 import dev.averyn.sensors.HeartRateMetrics
 import dev.averyn.sensors.HeartRateSample
+import kotlinx.io.IOException
 import kotlin.math.abs
 
 /**
@@ -18,6 +19,7 @@ import kotlin.math.abs
  * this. Sized above NTP corrections and below any realistic reboot (TDD-0006 section 5.2).
  */
 private const val CLOCK_DISAGREEMENT_TOLERANCE_MS = 60_000L
+private const val DROPPED_INPUT_WRITE_EVERY = 10
 
 data class LiveSnapshot(
     val state: ActivityState,
@@ -171,7 +173,16 @@ class ActivityRecorder(
 
     /** Counts an input the caller could not turn into a usable fix (e.g. NaN coordinates) - F5. */
     fun recordDroppedInput(reason: DroppedInputReason) {
-        droppedInputs[reason] = (droppedInputs[reason] ?: 0) + 1
+        val count = (droppedInputs[reason] ?: 0) + 1
+        droppedInputs[reason] = count
+        // Kept on disk too, so a kill does not lose the count. A new reason is written at once, a repeated one
+        // every tenth time (a strap sending garbage at 1 Hz must not cost a write a second): a kill loses at
+        // most nine counts of the same reason.
+        if (count == 1 || count % DROPPED_INPUT_WRITE_EVERY == 0) persistDroppedInputs()
+    }
+
+    private fun persistDroppedInputs() {
+        activityId?.let { store.writeDroppedInputs(it, droppedInputs) }
     }
 
     /** Current numbers, callable anytime (not just from [listener]) — e.g. right after [start] or [recover]. */
@@ -191,6 +202,7 @@ class ActivityRecorder(
         recoveryGaps = RecoveryGapTracker()
         timeline.clear()
         droppedInputs.clear()
+        hrRecorded = false
         this.activityId = activityId
         this.sport = sport
         this.startedAtMs = timeMs
@@ -246,7 +258,13 @@ class ActivityRecorder(
             recordDroppedInput(DroppedInputReason.ACTIVITY_ENDED)
             return
         }
-        store.appendSample(id, sample) // raw, exactly as the platform reported it
+        try {
+            store.appendSample(id, sample) // raw, exactly as the platform reported it
+        } catch (e: IOException) {
+            // Disk full or an I/O error: the fix is lost, and counted, instead of ending the recording thread.
+            recordDroppedInput(DroppedInputReason.STORAGE_WRITE_FAILED)
+            return
+        }
         totalSamples++
         recoveryGaps.onSample(sample.timeMs)
         trackLastKnown(sample.elapsedRealtimeMs, sample.timeMs)
@@ -268,7 +286,12 @@ class ActivityRecorder(
             recordDroppedInput(DroppedInputReason.ACTIVITY_ENDED)
             return
         }
-        store.appendHeartRate(id, sample)
+        try {
+            store.appendHeartRate(id, sample)
+        } catch (e: IOException) {
+            recordDroppedInput(DroppedInputReason.STORAGE_WRITE_FAILED)
+            return
+        }
         // The metric counts the samples of the recording state only: the ones of a paused activity are stored
         // but are not part of `hr-v2` (docs/metrics/heart-rate.md).
         if (state == ActivityState.RECORDING) heartRateMetrics.onSample(sample.bpm)
@@ -414,6 +437,12 @@ class ActivityRecorder(
         qualityAccumulator = replayed.quality
         // The heart-rate metric of the activity so far: the samples of the recording state are already in it.
         heartRateMetrics = replayed.heartRate
+        hrRecorded = replayed.hasHeartRate
+        // What was dropped before the kill is on disk; what was dropped since (before this recovery) is in memory.
+        for ((reason, count) in store.readDroppedInputs(activityId)) {
+            droppedInputs[reason] = (droppedInputs[reason] ?: 0) + count
+        }
+        persistDroppedInputs()
         resetDiagnosticsCounters()
         totalSamples = replayed.totalSamples
         recordingSamples = replayed.recordingSamples

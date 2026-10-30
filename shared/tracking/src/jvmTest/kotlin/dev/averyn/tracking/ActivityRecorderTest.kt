@@ -5,6 +5,8 @@ import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Reason
 import dev.averyn.domain.Sport
 import dev.averyn.domain.StateEvent
+import dev.averyn.sensors.HR_ALGORITHM_VERSION
+import dev.averyn.sensors.HeartRateSample
 import kotlinx.io.files.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
@@ -116,6 +118,67 @@ class ActivityRecorderTest {
         fresh.onSample(sample(20_000, 2 * step))
         val completed = fresh.stop(30_000, 30_000)
         assertEquals(200.0, completed.metrics.distanceM, 1.0)
+    }
+
+    @Test
+    fun theDroppedInputCountsSurviveAKill() {
+        val original = ActivityRecorder(store)
+        original.start("a1", Sport.RUN, 0, 0)
+        original.gpsReady(0, 0)
+        original.recordDroppedInput(DroppedInputReason.INVALID_HEART_RATE)
+        original.recordDroppedInput(DroppedInputReason.INVALID_SAMPLE)
+        // No stop(): a kill. The counters were written when each reason first appeared.
+
+        // What a history export of that activity says, from a process that never saw the recorder:
+        assertEquals(
+            mapOf(DroppedInputReason.INVALID_HEART_RATE to 1, DroppedInputReason.INVALID_SAMPLE to 1),
+            store.diagnosticsOf("a1")?.droppedInputs,
+        )
+
+        // A fix that arrived before the recovery (no activity yet) is added to the ones from before the kill.
+        val fresh = ActivityRecorder(store)
+        fresh.recordDroppedInput(DroppedInputReason.INVALID_SAMPLE)
+        fresh.recover("a1", 10_000, 10_000)
+        val diagnostics = fresh.stop(20_000, 20_000).diagnostics
+        assertEquals(2, diagnostics.droppedInputs[DroppedInputReason.INVALID_SAMPLE])
+        assertEquals(1, diagnostics.droppedInputs[DroppedInputReason.INVALID_HEART_RATE])
+    }
+
+    @Test
+    fun theDroppedInputCountsGoWithTheActivity() {
+        val recorder = ActivityRecorder(store)
+        recorder.start("a1", Sport.RUN, 0, 0)
+        recorder.recordDroppedInput(DroppedInputReason.INVALID_SAMPLE)
+        assertEquals(1, store.readDroppedInputs("a1").size)
+
+        store.delete("a1")
+
+        assertEquals(emptyMap(), store.readDroppedInputs("a1"))
+    }
+
+    @Test
+    fun aRecoveredActivityKeepsItsHeartRateAndANewOneStartsWithout() {
+        val original = ActivityRecorder(store)
+        original.start("a1", Sport.RUN, 0, 0)
+        original.gpsReady(0, 0)
+        original.onSample(sample(0, 0.0))
+        original.onHeartRate(HeartRateSample(1_000, 1_000, 140))
+
+        val fresh = ActivityRecorder(store)
+        fresh.recover("a1", 5_000, 5_000)
+        val recovered = fresh.stop(6_000, 6_000).diagnostics
+        assertEquals(HR_ALGORITHM_VERSION, recovered.algorithms.heartRate)
+
+        // The same recorder serves the next activity: it has no heart rate, and must not be stamped with one.
+        fresh.start("a2", Sport.RUN, 10_000, 10_000)
+        fresh.gpsReady(10_000, 10_000)
+        fresh.onSample(sample(10_000, 0.0))
+        assertEquals(
+            null,
+            fresh
+                .stop(11_000, 11_000)
+                .diagnostics.algorithms.heartRate,
+        )
     }
 
     @Test
