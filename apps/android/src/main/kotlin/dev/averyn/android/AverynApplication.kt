@@ -2,6 +2,7 @@ package dev.averyn.android
 
 import android.app.Application
 import android.os.BatteryManager
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -15,6 +16,7 @@ import dev.averyn.sensors.RrInterval
 import dev.averyn.tracking.ActivityRecorder
 import dev.averyn.tracking.ActivityStore
 import dev.averyn.tracking.DroppedInputReason
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -93,7 +95,17 @@ class AverynApplication : Application() {
     private val rrConsentScope = "rr_recording"
 
     /** Work that outlives an activity: the consent refresh runs here. */
-    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val appScope =
+        CoroutineScope(
+            SupervisorJob() + Dispatchers.IO +
+                // Net for background work that throws: the class only, never the message (it can carry a URL).
+                CoroutineExceptionHandler {
+                    _,
+                    e,
+                    ->
+                    Log.w("Averyn", "background task failed: ${e.javaClass.simpleName}")
+                },
+        )
 
     /**
      * Asks the server which consents the user has and caches them (ADR-0021). The server is authoritative:
@@ -102,9 +114,11 @@ class AverynApplication : Application() {
      */
     fun refreshConsents() {
         appScope.launch {
-            val token = auth.freshAccessToken() ?: return@launch
             val scopes: Set<String> =
                 try {
+                    // freshAccessToken() throws on transient trouble (no network): inside the try, like the call
+                    // below, so a signed-in phone that is offline keeps recording instead of dying here.
+                    val token = auth.freshAccessToken() ?: return@launch
                     val client = history().client
                     val result = client.consents(token)
                     val grants = result.value ?: listOf<ConsentGrant>()
