@@ -54,6 +54,11 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
         session = CLBackgroundActivitySession()
         manager.startUpdatingLocation()
         manager.startMonitoringSignificantLocationChanges()
+        // Permission already refused before "Start": CoreLocation then sends no authorization-change callback, and the
+        // activity would wait for a fix that cannot come. (Not determined and granted do nothing here.)
+        if manager.authorizationStatus == .denied || manager.authorizationStatus == .restricted {
+            handleAuthorization()
+        }
     }
 
     func stop() {
@@ -68,6 +73,16 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
     // still PREPARING (no fix yet) has no "resume" to offer, so it fails outright instead of pausing —
     // otherwise the activity would be stuck showing "Waiting for GPS…" forever.
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        handleAuthorization()
+    }
+
+    /// A refusal arrives as an error when updates are started without permission. "Location unknown" is only a fix
+    /// that has not arrived yet, and is ignored.
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        if (error as? CLError)?.code == .denied { handleAuthorization() }
+    }
+
+    private func handleAuthorization() {
         let denied = manager.authorizationStatus == .denied || manager.authorizationStatus == .restricted
         let reduced = manager.accuracyAuthorization == .reducedAccuracy
         guard denied || reduced else { return }
