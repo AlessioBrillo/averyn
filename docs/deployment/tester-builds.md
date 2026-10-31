@@ -23,7 +23,7 @@ Without `AVERYN_KEYSTORE_FILE` there is no release signing configuration (a deve
 **One-time setup, done by the owner** (it needs accounts and keys this repository must never hold):
 
 1. A Google Play Console app with the id `dev.averyn.app`, an internal testing track and the testers' addresses.
-2. An upload keystore (`keytool -genkeys ...`), kept offline. Repository secrets: `AVERYN_KEYSTORE_BASE64` (the keystore, base64), `AVERYN_KEYSTORE_PASSWORD`, `AVERYN_KEY_ALIAS`, `AVERYN_KEY_PASSWORD`.
+2. An upload keystore (`keytool -genkeypair ...`), kept offline. Repository secrets: `AVERYN_KEYSTORE_BASE64` (the keystore, base64), `AVERYN_KEYSTORE_PASSWORD`, `AVERYN_KEY_ALIAS`, `AVERYN_KEY_PASSWORD`.
 3. Upload the downloaded `.aab` to the internal track in the Play Console.
 
 ## iOS
