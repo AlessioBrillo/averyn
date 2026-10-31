@@ -43,6 +43,16 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 private const val NOTIFICATION_CHANNEL_ID = "tracking"
 private const val NOTIFICATION_ID = 1
+
+/** No fix for this long while RECORDING: the user is told, the recording goes on (S2, S5). */
+internal const val GPS_GAP_WARNING_MS = 5L * 60 * 1000
+
+internal fun noFixForTooLong(
+    state: ActivityState,
+    nowMs: Long,
+    lastFixMs: Long,
+): Boolean = state == ActivityState.RECORDING && lastFixMs > 0 && nowMs - lastFixMs > GPS_GAP_WARNING_MS
+
 private const val LOCATION_INTERVAL_MS = 1_000L
 
 /**
@@ -78,20 +88,19 @@ class TrackingService : Service() {
     // Watchdog: if RECORDING but no fix arrives for too long, surface it instead of staying silent (S5).
     private val watchdogHandler = Handler(Looper.getMainLooper())
     private var lastFixMs: Long = 0
+    private var gpsLostPosted = false
 
     companion object {
-        private const val WATCHDOG_GAP_MS = 5L * 60 * 1000 // no fix for 5 minutes while recording
         private const val WATCHDOG_CHECK_INTERVAL_MS = 2L * 60 * 1000 // check every 2 minutes
     }
 
     private val watchdogRunnable: Runnable =
         Runnable {
-            if (recorder.currentState == ActivityState.RECORDING && lastFixMs > 0) {
-                val now = SystemClock.elapsedRealtime()
-                if (now - lastFixMs > WATCHDOG_GAP_MS) {
-                    interruptAndStop(Reason.PROVIDER_DISABLED)
-                    return@Runnable
-                }
+            // A silence is surfaced, never ended: a tunnel or a gym must not cost the rest of the run. The
+            // gap is in the stored samples (diagnostics); the user sees the notice and can open the app.
+            if (noFixForTooLong(recorder.currentState, SystemClock.elapsedRealtime(), lastFixMs)) {
+                postGpsLostNotification(this@TrackingService)
+                gpsLostPosted = true
             }
             // The consent is the server's answer: ask again while recording, so a consent withdrawn in the
             // meantime stops the heart-rate intervals within a couple of minutes (ADR-0021).
@@ -112,16 +121,10 @@ class TrackingService : Service() {
             override fun onLocationChanged(location: Location) {
                 if (recorder.currentState == ActivityState.PREPARING) {
                     recorder.gpsReady(SystemClock.elapsedRealtime(), System.currentTimeMillis())
-                    // Wire the HR adapter callbacks once we know there is an activity to feed.
-                    hrAdapter.onSample = { app.feedHeartRate(it) }
-                    hrAdapter.onRrInterval = { app.feedRrInterval(it) }
-                    hrAdapter.onInvalid = { app.feedInvalidHeartRate() }
-                    if (hrAdapter.isAvailable && !hrActive) {
-                        // Fire-and-forget: HR is best-effort; a missing strap never stops GPS tracking.
-                        hrActive = true
-                        hrScope.launch { hrAdapter.start(recorder.currentActivityId ?: "") }
-                    }
                 }
+                // Not only on the first fix: a recovered activity, or one resumed after an interruption, is
+                // RECORDING without ever passing through PREPARING, and its strap has to start too.
+                if (recorder.currentState == ActivityState.RECORDING) startHr()
                 // Always forward the fix: ActivityRecorder.onSample stores it in every non-terminal state
                 // (F5) and only feeds live metrics while RECORDING — gating the call itself here would
                 // silently lose every fix that arrives while PAUSED instead of just excluding it from metrics.
@@ -135,6 +138,10 @@ class TrackingService : Service() {
                     }
                 recorder.onSample(sample)
                 lastFixMs = SystemClock.elapsedRealtime()
+                if (gpsLostPosted) {
+                    cancelGpsLostNotification(this@TrackingService)
+                    gpsLostPosted = false
+                }
             }
 
             @Deprecated("Deprecated in Java") // required override pre-API 29; no-op, no status info to act on
@@ -276,9 +283,24 @@ class TrackingService : Service() {
     override fun onDestroy() {
         locationManager.removeUpdates(listener)
         watchdogHandler.removeCallbacks(watchdogRunnable)
+        cancelGpsLostNotification(this)
         stopHr()
         hrScope.coroutineContext[Job]?.cancel()
         super.onDestroy()
+    }
+
+    /**
+     * Starts the strap for the activity being recorded, once. Best-effort: a missing strap never stops GPS
+     * tracking. The adapter calls back on a Bluetooth thread and the recorder is not thread-safe, so every value
+     * is handed to the main thread, where the fixes arrive too.
+     */
+    private fun startHr() {
+        if (hrActive || !hrAdapter.isAvailable) return
+        hrActive = true
+        hrAdapter.onSample = { sample -> mainHandler.post { app.feedHeartRate(sample) } }
+        hrAdapter.onRrInterval = { rr -> mainHandler.post { app.feedRrInterval(rr) } }
+        hrAdapter.onInvalid = { mainHandler.post { app.feedInvalidHeartRate() } }
+        hrScope.launch { hrAdapter.start(recorder.currentActivityId ?: "") }
     }
 
     /** Stops the HR sensor and clears the flag so a new activity can start it again. */
@@ -312,7 +334,10 @@ class TrackingService : Service() {
             // interrupted in the store; the user is one tap away from resuming it — never a crash loop.
             interruptAndStop(Reason.PERMISSION_REVOKED)
         }
-        // Start watching for a silent loss of fixes while recording (F1.7 / S5).
+        // Start watching for a silent loss of fixes while recording (F1.7 / S5). The clock starts now, so a restart
+        // that never gets a fix (no background location on Android 11-13) is told apart from a quiet start.
+        lastFixMs = SystemClock.elapsedRealtime()
+        watchdogHandler.removeCallbacks(watchdogRunnable) // one chain, however many times the service starts
         watchdogHandler.postDelayed(watchdogRunnable, WATCHDOG_CHECK_INTERVAL_MS)
     }
 

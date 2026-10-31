@@ -122,6 +122,8 @@
     <string name="channel_interrupted">Interrupted activity</string>
     <string name="notif_interrupted_title">Activity interrupted</string>
     <string name="notif_interrupted_text">Tap to resume or finish it.</string>
+    <string name="notif_gps_lost_title">No GPS signal</string>
+    <string name="notif_gps_lost_text">No position for 5 minutes. Recording continues; open the app to check.</string>
     <string name="health_rationale_title">Why Averyn asks for these permissions</string>
     <string name="health_rationale_text">Averyn saves a finished activity to Health Connect only when you ask it to, from the list of activities on this phone: the workout, its route, the heart rate that was recorded and the distance.\n\nIt only writes. It never reads anything from Health Connect, and it asks for no permission to read.\n\nSaving the same activity again does not make a copy. You can remove what Averyn wrote at any time in Health Connect, and take the permissions back in its settings.</string>
 </resources>
