@@ -121,16 +121,10 @@ class TrackingService : Service() {
             override fun onLocationChanged(location: Location) {
                 if (recorder.currentState == ActivityState.PREPARING) {
                     recorder.gpsReady(SystemClock.elapsedRealtime(), System.currentTimeMillis())
-                    // Wire the HR adapter callbacks once we know there is an activity to feed.
-                    hrAdapter.onSample = { app.feedHeartRate(it) }
-                    hrAdapter.onRrInterval = { app.feedRrInterval(it) }
-                    hrAdapter.onInvalid = { app.feedInvalidHeartRate() }
-                    if (hrAdapter.isAvailable && !hrActive) {
-                        // Fire-and-forget: HR is best-effort; a missing strap never stops GPS tracking.
-                        hrActive = true
-                        hrScope.launch { hrAdapter.start(recorder.currentActivityId ?: "") }
-                    }
                 }
+                // Not only on the first fix: a recovered activity, or one resumed after an interruption, is
+                // RECORDING without ever passing through PREPARING, and its strap has to start too.
+                if (recorder.currentState == ActivityState.RECORDING) startHr()
                 // Always forward the fix: ActivityRecorder.onSample stores it in every non-terminal state
                 // (F5) and only feeds live metrics while RECORDING — gating the call itself here would
                 // silently lose every fix that arrives while PAUSED instead of just excluding it from metrics.
@@ -293,6 +287,20 @@ class TrackingService : Service() {
         stopHr()
         hrScope.coroutineContext[Job]?.cancel()
         super.onDestroy()
+    }
+
+    /**
+     * Starts the strap for the activity being recorded, once. Best-effort: a missing strap never stops GPS
+     * tracking. The adapter calls back on a Bluetooth thread and the recorder is not thread-safe, so every value
+     * is handed to the main thread, where the fixes arrive too.
+     */
+    private fun startHr() {
+        if (hrActive || !hrAdapter.isAvailable) return
+        hrActive = true
+        hrAdapter.onSample = { sample -> mainHandler.post { app.feedHeartRate(sample) } }
+        hrAdapter.onRrInterval = { rr -> mainHandler.post { app.feedRrInterval(rr) } }
+        hrAdapter.onInvalid = { mainHandler.post { app.feedInvalidHeartRate() } }
+        hrScope.launch { hrAdapter.start(recorder.currentActivityId ?: "") }
     }
 
     /** Stops the HR sensor and clears the flag so a new activity can start it again. */
