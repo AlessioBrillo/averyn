@@ -16,9 +16,9 @@ Legend: ✅ in place · 🟡 partly · ⬜ not started · 🔒 needs something o
 | Onboarding and accessibility | ⬜ | permission explanations, pairing of a strap or band, large text, screen readers | 1 week | S46, S48 |
 | Distribution | 🟡 Android signing wired, never run; iOS manual | by hand first (APK; iOS from the Mac, 7-day provisioning); then store accounts 🔒 (personal), Play internal, TestFlight, signing team in `project.yml` | 2–3 days + store waits (new personal Play account: closed test, 12 testers, 14 days) | A build installed from each store |
 | CI | 🟡 two pipelines; GitHub green except iOS history; Woodpecker runs on PRs but has no iOS, compose or round-trip job | iOS build kept green, shared tests that run on iOS (today most are `jvmTest`: `tracking` 1 of 12, `client` 0 of 6, `sync` 0 of 1), a test target for the iOS app | 1.5 weeks | A green PR check, iOS job included |
-| Mobile | 🟡 sign-in, sync, history, detail, HR, profile and units, zones, map, IT/EN, account deletion, health write | the experience rows above; store declarations for the health permissions; adapter unit tests (Android has 3 unit tests in total) | with the experience rows | Matrix rows S32–S41 |
+| Mobile | 🟡 sign-in, sync, history, detail, HR, profile and units, zones, map, IT/EN, account deletion, health write | the experience rows above; store declarations for the health permissions; adapter unit tests (Android has 3 test files, none for the service, the recovery, Bluetooth or permissions); the profile (units, maximum heart rate) is hidden without an account, which the "no account" row has to fix | with the experience rows | Matrix rows S32–S41 |
 | Web | 🟡 list, detail, map, analysis, zones, records, GPX / FIT / archive import, account, profile, IT/EN | tests for the list, detail, account and auth pages; private zones; sign-up page (needs the IdP on the cloud) | 1.5 weeks | Page checks + web tests |
-| Backend | 🟡 ingest, analysis, records, consents, quotas, export, deletion, FIT and archive import, profile | zones in the profile; `devices` table only with Synapse L1 | 1 week | Backend tests (Testcontainers) |
+| Backend | 🟡 ingest, analysis, records, consents, quotas, export, deletion, FIT and archive import, profile | privacy zones (`V13`; the heart-rate zones already exist); `devices` table (`V14`) only with Synapse L1 | 1 week | Backend tests (Testcontainers) |
 | Sensors | 🟡 standard HR on both platforms; the Synapse frame parser and pinned contract are in place and not wired | S29 (band as a strap); adapter unit tests; L1 adapters wait for the prototype and the handoff | 1.5 weeks after the prototype | S15, S16, S29–S31 |
 | Managed cloud | 🟡 Compose stack with TLS, runbooks, `backup.sh` / `restore.sh` with a drill and a signed-in round trip in CI | EU VM 🔒, off-site target 🔒, a restore drill on the real host, uptime checks and alerts, SMTP 🔒, open sign-up in the IdP, map tiles; controller liability reviewed before opening | 1.5 weeks | Restore drill log; alert fired in a test |
 | Maps | 🟡 MapLibre on web and phones | tile source for the cloud | in [ADR-0027](../adr/0027-managed-cloud-baseline.md) | Tiles load on the cloud instance |
@@ -37,12 +37,12 @@ Each increment lists its files and the matrix rows it needs. The order is in the
 | 3 | Experience on Android | `apps/android/.../MainActivity.kt` split into screens, `ui/theme/`, `History.kt`, `TrackMapView.kt` | S47, S48 |
 | 4 | Experience on iOS | `ContentView.swift`, `RecorderViewModel.swift`, `TrackMapView.swift`, a test target in `project.yml` | S47, S48 |
 | 5 | Progress | `shared/client` (totals, calendar), both apps, web | S45 |
-| 6 | Privacy zones | `backend/.../V14__privacy_zones.sql`, `shared/api`, `shared/analysis`, both apps, web | S42 |
+| 6 | Privacy zones | `backend/.../V13__privacy_zones.sql`, `shared/api`, `shared/analysis`, both apps, web | S42 |
 | 7 | Share card | both apps | S43 |
 | 8 | Voice cues | `shared/tracking` (per-km events), `TrackingService.kt`, `LocationTracker.swift` | S44 |
 | 9 | Onboarding and accessibility | both apps | S46, S48 |
 | 10 | Cloud, legal, stores | `infrastructure/compose/`, `docs/privacy/dpia.md`, store listings | beta feedback |
-| 11 | Synapse L1 beta | `shared/sensors`, both native adapters, `V13__devices.sql` | S30, S31 |
+| 11 | Synapse L1 beta | `shared/sensors`, both native adapters, `V14__devices.sql` | S30, S31 |
 
 Already built and waiting for the campaign: the profile, zones and phone map (S32–S34), FIT and archive import (S35, S36), account deletion (S37), HealthKit / Health Connect write (S38, S39), IT/EN (S40, S41).
 
