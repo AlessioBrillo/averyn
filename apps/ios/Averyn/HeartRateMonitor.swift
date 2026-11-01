@@ -43,7 +43,8 @@ final class HeartRateMonitor: NSObject, @unchecked Sendable, SensorAdapter, CBCe
 
     private static let scanTimeoutSeconds: TimeInterval = 15
     /// Reconnect backoff: 1 s, 2 s, 4 s, 8 s, then stop.
-    private static let reconnectBackoffSeconds: [TimeInterval] = [1, 2, 4, 8]
+    /// The last value repeats: a strap that drops often during a long activity is retried for as long as it lasts.
+    private static let reconnectBackoffSeconds: [TimeInterval] = [1, 2, 4, 8, 16, 30]
 
     private let hrServiceUUID = CBUUID(string: "180D")
     private let hrMeasurementUUID = CBUUID(string: "2A37")
@@ -114,9 +115,12 @@ final class HeartRateMonitor: NSObject, @unchecked Sendable, SensorAdapter, CBCe
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.scanTimeoutSeconds, execute: timeout)
     }
 
-    /// No strap in range: it is optional, so recording simply goes on without it.
+    /// No strap in range: it is optional, so recording simply goes on without it. A strap that was connected before
+    /// is waited for (it was switched off, or out of range for a moment); without one, no more scans: they cost
+    /// battery for nobody.
     private func scanTimedOut() {
         stopScanning()
+        if lastIdentifier != nil { scheduleReconnect() }
     }
 
     private func stopScanning() {
@@ -136,8 +140,8 @@ final class HeartRateMonitor: NSObject, @unchecked Sendable, SensorAdapter, CBCe
 
     private func scheduleReconnect() {
         peripheral = nil
-        guard running, attempt < Self.reconnectBackoffSeconds.count else { return }
-        let delay = Self.reconnectBackoffSeconds[attempt]
+        guard running else { return }
+        let delay = Self.reconnectBackoffSeconds[min(attempt, Self.reconnectBackoffSeconds.count - 1)]
         attempt += 1
         let work = DispatchWorkItem { [weak self] in self?.connectOrScan() }
         retryWork = work

@@ -53,7 +53,7 @@ With several phones, add `-Pandroid.injected.device.serial=<serial>` or run `adb
 **iPhone** (from the Mac; a free Apple ID is enough, the profile lasts 7 days and the app must be re-installed after that):
 
 1. `brew install xcodegen`, then in `apps/ios`: `xcodegen`.
-2. Open `Averyn.xcodeproj`, select the target, *Signing & Capabilities*: choose your Apple ID team and let Xcode manage signing. Change the bundle id only for this local install if Xcode refuses `dev.averyn.app`, and note it in the matrix row.
+2. Open `Averyn.xcodeproj`, select the target, *Signing & Capabilities*: choose your Apple ID team and let Xcode manage signing (`xcodegen` regenerates the project and forgets the team: choose it again after every run). Change the bundle id only for this local install if Xcode refuses `dev.averyn.app`, and note it in the matrix row.
 3. Select the iPhone as the destination and run. For the diagnostics to carry the commit: *Edit Scheme → Run → Arguments* is not enough; build with `xcodebuild ... AVERYN_COMMIT=$(git rev-parse HEAD)` or set `AVERYN_COMMIT` in the target's build settings before running.
 4. On the phone: *Settings → General → VPN & Device Management* → trust the developer profile.
 
