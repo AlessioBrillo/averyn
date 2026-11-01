@@ -5,6 +5,7 @@ import dev.averyn.backend.activities.DEFAULT_REQUESTS_PER_MINUTE
 import dev.averyn.backend.activities.DEFAULT_USER_QUOTA_BYTES
 import dev.averyn.backend.activities.UserData
 import dev.averyn.backend.activities.activities
+import dev.averyn.backend.activities.perUserRateLimit
 import dev.averyn.backend.auth.OidcConfig
 import dev.averyn.backend.auth.auth
 import dev.averyn.backend.consent.ConsentScope
@@ -57,6 +58,10 @@ fun Application.module() {
     // analysed at the same time.
     val analysisService = AnalysisService(db, raw)
     val userData = UserData(db, raw, analysisService = analysisService)
+    // The per-user limit is configured once, before the first module that uses it.
+    perUserRateLimit(
+        cfg.propertyOrNull("averyn.limits.requestsPerMinute")?.getString()?.toInt() ?: DEFAULT_REQUESTS_PER_MINUTE,
+    )
     val consentStore =
         consent(db) { ownerId, scope ->
             // Revoking the recording consent really deletes the data it covers (ADR-0021).
