@@ -206,7 +206,8 @@ fun replay(
 /**
  * The diagnostics report of a stored activity, rebuilt by [replay] (what a history screen exports for an
  * activity that is no longer the one just recorded). Null when the file has no readable metadata. Inputs the
- * recorder dropped before storing (`droppedInputs`) are not in the file, so that map is empty here.
+ * recorder dropped before storing (`droppedInputs`) are not in the file: they come from the local counters it
+ * wrote next to it, and the map is empty for an activity that has none (an import, an older build).
  */
 fun ActivityStore.diagnosticsOf(activityId: String): DiagnosticsReport? {
     metadataOf(activityId) ?: return null
@@ -224,7 +225,7 @@ fun ActivityStore.diagnosticsOf(activityId: String): DiagnosticsReport? {
         batteryStartPercent = replayed.batteryStartPercent,
         batteryEndPercent = replayed.batteryEndPercent,
         batteryReadingCount = replayed.batteryReadingCount,
-        droppedInputs = emptyMap(),
+        droppedInputs = readDroppedInputs(activityId),
         recoveryGaps = replayed.recoveryGaps.snapshot(),
         events = replayed.timeline,
         endedAtMs = replayed.lastKnownTimeMs,
