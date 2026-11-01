@@ -268,9 +268,6 @@ class ActivityIngestTest {
                 upload(rec.id, "not an activity file\n".toByteArray()).status,
             )
             assertEquals(HttpStatusCode.UnprocessableEntity, upload(rec.id, ByteArray(0)).status)
-            // A line that parses but breaks the model (latitude 123) is an invalid upload, not a server error.
-            val badLatitude = String(rec.bytes).replace("\"latitude\":0.0", "\"latitude\":123.0").toByteArray()
-            assertEquals(HttpStatusCode.UnprocessableEntity, upload(rec.id, badLatitude).status)
             // A metadata line that is not a valid activity header.
             assertEquals(
                 HttpStatusCode.UnprocessableEntity,
@@ -279,6 +276,21 @@ class ActivityIngestTest {
             // The file's own activity id must match the one in the URL.
             assertEquals(HttpStatusCode.UnprocessableEntity, upload(UUID.randomUUID(), rec.bytes).status)
             assertEquals(0L, scalar("SELECT count(*) FROM activities"))
+        }
+
+    @Test
+    fun aLineThatBreaksTheModelIsCountedAndTheRestOfTheUploadIsKept() =
+        app {
+            val rec = record()
+            // Latitude 123 parses as JSON and is not a position: ADR-0029, counted like a cut line, not a refusal.
+            val badLatitude = String(rec.bytes).replaceFirst("\"latitude\":0.0", "\"latitude\":123.0").toByteArray()
+
+            val response = upload(rec.id, badLatitude)
+
+            assertEquals(HttpStatusCode.Created, response.status)
+            assertEquals(1, response.summary().droppedRecords)
+            // The raw file is stored exactly as it came (immutable); only the count says a line was unusable.
+            assertEquals(sha256(badLatitude), scalar("SELECT raw_sha256 FROM activities"))
         }
 
     @Test
