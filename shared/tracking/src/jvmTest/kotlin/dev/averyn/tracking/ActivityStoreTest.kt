@@ -213,7 +213,7 @@ class ActivityStoreTest {
 
         assertEquals(listOf(RrInterval(1000, 1000, 857), RrInterval(2000, 2000, 800)), rrs)
         assertTrue(losses.isEmpty())
-        assertEquals(ActivityMetadata("a1", Sport.RUN, 0, formatVersion = 1), store.rrMetadataOf("a1"))
+        assertEquals(ActivityMetadata("a1", Sport.RUN, 0, formatVersion = RR_FORMAT_VERSION), store.rrMetadataOf("a1"))
     }
 
     @Test
@@ -221,8 +221,11 @@ class ActivityStoreTest {
         val metadata = ActivityMetadata("a1", Sport.RIDE, 12_345, formatVersion = 2)
         store.createRrMetadata(metadata)
 
-        // The sidecar's own format version is 1, but it says which activity it was recorded with.
-        assertEquals(ActivityMetadata("a1", Sport.RIDE, 12_345, formatVersion = 1), store.rrMetadataOf("a1"))
+        // The sidecar has its own format version, but it says which activity it was recorded with.
+        assertEquals(
+            ActivityMetadata("a1", Sport.RIDE, 12_345, formatVersion = RR_FORMAT_VERSION),
+            store.rrMetadataOf("a1"),
+        )
     }
 
     @Test
@@ -237,7 +240,7 @@ class ActivityStoreTest {
         store.forEachRrRecord("a1") { rrs += it }
 
         assertEquals(listOf(RrInterval(1000, 1000, 857)), rrs)
-        assertEquals(ActivityMetadata("a1", Sport.RUN, 0, formatVersion = 1), store.rrMetadataOf("a1"))
+        assertEquals(ActivityMetadata("a1", Sport.RUN, 0, formatVersion = RR_FORMAT_VERSION), store.rrMetadataOf("a1"))
     }
 
     @Test

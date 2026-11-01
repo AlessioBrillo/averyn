@@ -16,4 +16,13 @@ sealed class ParseResult {
     data class Incomplete(
         val neededBytes: Int,
     ) : ParseResult()
+
+    /**
+     * A value the sensor sent that the sample model rejects (a bpm above 300, an RR that rounds to 0 ms): the
+     * value is left out of the [Complete] next to it and reported here, so the caller counts it instead of
+     * crashing or dropping it silently.
+     */
+    data class Invalid(
+        val reason: String,
+    ) : ParseResult()
 }
