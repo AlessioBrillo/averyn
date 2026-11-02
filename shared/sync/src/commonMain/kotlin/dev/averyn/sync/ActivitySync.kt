@@ -25,6 +25,9 @@ data class SyncRunResult(
     val needsLogin: Boolean,
 )
 
+// The failures a later pass can still fix; the codes a SyncStatus carries (see syncPending).
+private val RETRYABLE_HTTP = setOf("HTTP_408", "HTTP_429") + (500..599).map { "HTTP_$it" }
+
 /**
  * Uploads finished activities to the server (TDD-0002): one idempotent `PUT /v1/activities/{id}` of the raw file
  * each, oldest first, and remembers the outcome in a [SyncStatusStore]. Retry timing and backoff belong to the
@@ -69,7 +72,24 @@ class ActivitySync internal constructor(
         for (metadata in store.list().sortedBy { it.startedAtMs }) {
             val id = metadata.activityId
             val previous = statuses.read(id)
-            if (previous?.state == SyncState.READY || previous?.state == SyncState.FAILED_PERMANENT) continue
+            if (previous?.state == SyncState.READY) {
+                // The activity is up; its heart-rate sidecar may not be (it failed retryably, or it came into being
+                // after the upload): it is tried again here, otherwise it would never go up.
+                if (!sidecarPending(id)) continue
+                if (accessToken == null) {
+                    needsLogin = true
+                    break
+                }
+                when (uploadRrSidecar(id, accessToken)?.lastError) {
+                    "AUTH" -> {
+                        needsLogin = true
+                        break
+                    }
+                    "NETWORK", in RETRYABLE_HTTP -> retryable++
+                }
+                continue
+            }
+            if (previous?.state == SyncState.FAILED_PERMANENT) continue
             if (!statuses.isFinished(id)) continue
             if (accessToken == null) {
                 needsLogin = true
@@ -102,12 +122,15 @@ class ActivitySync internal constructor(
                 SyncState.READY -> {
                     uploaded++
                     // The heart-rate sidecar goes up after the activity it belongs to, and never holds it back.
-                    uploadRrSidecar(id, accessToken)
+                    when (uploadRrSidecar(id, accessToken)?.lastError) {
+                        "AUTH" -> needsLogin = true
+                        "NETWORK", in RETRYABLE_HTTP -> retryable++
+                    }
                 }
                 SyncState.FAILED_PERMANENT -> permanent++
                 else -> retryable++
             }
-            if (status.lastError == "AUTH") {
+            if (needsLogin || status.lastError == "AUTH") {
                 needsLogin = true
                 break // the same token would be refused for every other activity too
             }
@@ -145,10 +168,9 @@ class ActivitySync internal constructor(
     private suspend fun uploadRrSidecar(
         activityId: String,
         accessToken: String,
-    ) {
-        if (store.rrMetadataOf(activityId) == null) return
+    ): SyncStatus? {
+        if (!sidecarPending(activityId)) return null
         val previous = statuses.readRr(activityId)
-        if (previous?.state == SyncState.READY || previous?.state == SyncState.FAILED_PERMANENT) return
         val attempts = (previous?.attempts ?: 0) + 1
         statuses.writeRr(activityId, SyncStatus(SyncState.UPLOADING, attempts, previous?.lastError))
         val response = uploadRrFile(activityId, accessToken)
@@ -168,6 +190,14 @@ class ActivitySync internal constructor(
         if (status.lastError == "CONSENT_REVOKED" || status.lastError == "DELETED_ON_SERVER") {
             store.deleteRr(activityId)
         }
+        return status
+    }
+
+    /** Whether the activity has a sidecar that is neither on the server nor refused for good. */
+    private fun sidecarPending(activityId: String): Boolean {
+        if (store.rrMetadataOf(activityId) == null) return false
+        val state = statuses.readRr(activityId)?.state
+        return state != SyncState.READY && state != SyncState.FAILED_PERMANENT
     }
 
     /** The response, or null if the request could not be completed (no network, timeout, ...). */
