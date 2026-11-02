@@ -138,7 +138,11 @@ class AverynApplication : Application() {
         refreshConsents()
         // The activities recorded by an older build have no local summary yet: they get one, in the background
         // (TDD-0011), so their numbers are there even without a connection.
-        appScope.launch { store.backfillLocalSummaries() }
+        appScope.launch {
+            // Killed before the first fix: nothing was recorded, and the file would stay for good.
+            store.discardEmptyPreparing()
+            store.backfillLocalSummaries()
+        }
     }
 }
 

@@ -265,6 +265,19 @@ class ActivityStore(
         ) : DecodeResult
     }
 
+    /**
+     * Why a line did not decode. kotlinx.serialization 1.12 reports a value that breaks the model (`require` in a
+     * constructor) as a SerializationException whose cause is the plain IllegalArgumentException; a missing field or
+     * a wrong type has no such cause. Telling them apart by the cause keeps one answer across versions; 1.11 lets
+     * that IllegalArgumentException through as it is.
+     */
+    private fun lossOf(e: IllegalArgumentException): RecordLossReason {
+        val cause = e.cause
+        val brokenModel =
+            e !is SerializationException || (cause is IllegalArgumentException && cause !is SerializationException)
+        return if (brokenModel) RecordLossReason.INVALID_VALUE else RecordLossReason.TRUNCATED_RECORD
+    }
+
     private fun decodeLine(line: String): DecodeResult =
         try {
             when {
@@ -289,15 +302,9 @@ class ActivityStore(
                 else -> DecodeResult.Loss(RecordLossReason.UNKNOWN_RECORD_TYPE)
             }
         } catch (e: SerializationException) {
-            // kotlinx.serialization 1.12 reports a value that breaks the model (`require` in a constructor) as a
-            // SerializationException whose cause is the plain IllegalArgumentException; a missing field or a wrong
-            // type has no such cause. Telling them apart by the cause keeps one answer across versions.
-            val cause = e.cause
-            val brokenModel = cause is IllegalArgumentException && cause !is SerializationException
-            DecodeResult.Loss(if (brokenModel) RecordLossReason.INVALID_VALUE else RecordLossReason.TRUNCATED_RECORD)
+            DecodeResult.Loss(lossOf(e))
         } catch (e: IllegalArgumentException) {
-            // kotlinx.serialization 1.11 lets that IllegalArgumentException through as it is.
-            DecodeResult.Loss(RecordLossReason.INVALID_VALUE)
+            DecodeResult.Loss(lossOf(e))
         }
 
     fun list(): List<ActivityMetadata> =
@@ -340,6 +347,37 @@ class ActivityStore(
                 lastState == ActivityState.PAUSED ||
                 lastState == ActivityState.STOPPING
         }
+
+    /**
+     * Removes the activities that were killed while still PREPARING and have no sample: the user pressed start and
+     * the process died before the first fix, so nothing was recorded (the same case as [cancel][ActivityRecorder.cancel],
+     * which also keeps nothing). Without this the file stays forever: it is not interrupted (no recording to resume),
+     * not finished (it is never synced) and not an activity either. One that has a sample is left alone.
+     *
+     * Call it at process start, with [exceptId] the activity this process is recording, if any.
+     *
+     * @return how many files were removed.
+     */
+    fun discardEmptyPreparing(exceptId: String? = null): Int {
+        var removed = 0
+        for (metadata in list()) {
+            val id = metadata.activityId
+            if (id == exceptId || lastStateOf(id) != ActivityState.PREPARING) continue
+            if (hasSample(id)) continue
+            delete(id)
+            removed++
+        }
+        return removed
+    }
+
+    private fun hasSample(activityId: String): Boolean {
+        val path = pathFor(activityId)
+        if (!SystemFileSystem.exists(path)) return false
+        return SystemFileSystem.source(path).buffered().use { source ->
+            source.readLine() // META line
+            generateSequence { source.readLine() }.any { it.startsWith(SAMPLE_PREFIX) }
+        }
+    }
 
     /**
      * Throws one activity off the device: the raw file and the local summary sidecar (TDD-0011). The
@@ -537,10 +575,15 @@ class ActivityStore(
                     onLoss(RecordLossReason.UNKNOWN_RECORD_TYPE)
                     continue
                 }
-                runCatching {
-                    json.decodeFromString(RrInterval.serializer(), line.removePrefix(RR_PREFIX))
-                }.onFailure { onLoss(RecordLossReason.TRUNCATED_RECORD) }
-                    .onSuccess { action(it) }
+                val rr =
+                    try {
+                        json.decodeFromString(RrInterval.serializer(), line.removePrefix(RR_PREFIX))
+                    } catch (e: IllegalArgumentException) {
+                        // SerializationException is one: a cut line and a value out of range are told apart.
+                        onLoss(lossOf(e))
+                        continue
+                    }
+                action(rr)
             }
         }
     }
