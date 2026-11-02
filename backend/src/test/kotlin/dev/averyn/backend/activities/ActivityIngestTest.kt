@@ -806,4 +806,27 @@ class ActivityIngestTest {
 
             assertEquals(HttpStatusCode.InternalServerError, response.status)
         }
+
+    @Test
+    fun anExportThatFailsAfterItStartedIsAnErrorNotATruncatedArchive() =
+        app {
+            val rec = record()
+            assertEquals(HttpStatusCode.Created, upload(rec.id, rec.bytes).status)
+            val key = scalar("SELECT raw_object_key FROM activities") as String
+            // The file is there (so the check before the ZIP passes) but cannot be turned into a GPX.
+            val broken = dir.resolve("broken.jsonl")
+            java.nio.file.Files
+                .writeString(broken, "not a record\n")
+            raw.put(key, broken)
+
+            val response = get("/v1/me/export") { bearerAuth(alice) }
+
+            assertEquals(HttpStatusCode.InternalServerError, response.status)
+        }
+
+    @Test
+    fun theObjectStoreAnswersForTheReadinessCheck() =
+        app {
+            assertEquals(true, raw.isReachable())
+        }
 }
