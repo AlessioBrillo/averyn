@@ -2,6 +2,7 @@ package dev.averyn.android
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
@@ -42,6 +43,7 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -197,6 +199,15 @@ private fun RecordScreen(app: AverynApplication) {
             }
         }
 
+    // Whoever granted the location earlier is never sent through requestPermissions(), so the strap's Bluetooth
+    // permissions and the notifications are asked here, once per launch, before the first recording.
+    var optionalAsked by remember { mutableStateOf(false) }
+    val optionalLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+            // Refused or not, the recording goes on (GPS only without the strap).
+            if (recorder.currentState == ActivityState.IDLE) startRecording(context, app, pendingSport)
+        }
+
     /** Fine + coarse go together (Android 12+ ignores a fine-only request); notifications only where they exist. */
     fun requestPermissions() {
         val wanted =
@@ -260,7 +271,20 @@ private fun RecordScreen(app: AverynApplication) {
                     pendingSport = sport
                     if (hasPreciseLocation(context)) {
                         permissionMessage = null
-                        startRecording(context, app, sport)
+                        val missing =
+                            if (optionalAsked) {
+                                emptyList()
+                            } else {
+                                optionalPermissionsMissing(Build.VERSION.SDK_INT) {
+                                    ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+                                }
+                            }
+                        optionalAsked = true
+                        if (missing.isEmpty()) {
+                            startRecording(context, app, sport)
+                        } else {
+                            optionalLauncher.launch(missing.toTypedArray())
+                        }
                     } else {
                         requestPermissions()
                     }
