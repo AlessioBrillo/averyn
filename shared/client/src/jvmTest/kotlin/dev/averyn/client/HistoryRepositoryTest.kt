@@ -45,6 +45,7 @@ class HistoryRepositoryTest {
                 cache = ActivityCache(Path(dir.toString(), "cache"), "https://server.example", nowMs = { 1_000 }),
                 client = reader,
                 statuses = statuses,
+                localProfile = LocalProfileStore(Path(dir.toString(), "profile").toString()),
                 nowMs = { 1_000 },
             )
     }
@@ -406,6 +407,8 @@ class HistoryRepositoryTest {
             return ApiResult(Unit)
         }
 
+        var savedProfile: UserProfile? = null
+
         override suspend fun profile(accessToken: String): ApiResult<UserProfile> =
             failure?.let { ApiResult(failure = it) } ?: ApiResult(profile)
 
@@ -415,6 +418,7 @@ class HistoryRepositoryTest {
         ): ApiResult<UserProfile> {
             failure?.let { return ApiResult(failure = it) }
             this.profile = profile
+            savedProfile = profile
             return ApiResult(profile)
         }
     }

@@ -54,6 +54,7 @@ class AverynApplication : Application() {
                 store = store,
                 cacheDirectory = serverCacheDirectory.absolutePath,
                 serverUrl = server,
+                profileDirectory = File(filesDir, "profile").absolutePath,
                 nowMs = { System.currentTimeMillis() },
             )
         historyRepository = created
@@ -68,7 +69,6 @@ class AverynApplication : Application() {
      */
     fun clearServerCache() {
         serverCacheDirectory.deleteRecursively()
-        units = UnitSystem.METRIC
     }
 
     /**

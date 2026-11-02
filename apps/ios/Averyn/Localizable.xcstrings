@@ -931,6 +931,16 @@
         }
       }
     },
+    "Saved on this phone. It will go to your account when the server answers.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salvato su questo telefono. Andrà sul tuo account quando il server risponde."
+          }
+        }
+      }
+    },
     "Saved": {
       "localizations": {
         "it": {

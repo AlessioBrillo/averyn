@@ -19,6 +19,8 @@ final class AppModel {
     let activitiesDirectory: URL
     /// Where the copy of the server lives (TDD-0011): its own directory, excluded from the backup.
     let serverCacheDirectory: URL
+    /// Where the profile lives: the user's own settings, kept with or without an account (backed up, not in the cache).
+    let profileDirectory: URL
 
     /// The history of the account: the server, the copy and the device. Rebuilt when the server changes.
     private var historyRepository: HistoryRepository?
@@ -62,6 +64,9 @@ final class AppModel {
         cacheValues.isExcludedFromBackup = true
         try? cacheDir.setResourceValues(cacheValues)
         serverCacheDirectory = cacheDir
+        profileDirectory = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("profile", isDirectory: true)
 
         UIDevice.current.isBatteryMonitoringEnabled = true
         let recorder = ActivityRecorder(store: store)
@@ -195,7 +200,8 @@ final class AppModel {
         let created = HistoryRepository.companion.create(
             store: store,
             cacheDirectory: serverCacheDirectory.path,
-            serverUrl: server
+            serverUrl: server,
+            profileDirectory: profileDirectory.path
         )
         historyRepository = created
         historyServerURL = server
