@@ -11,12 +11,12 @@ Legend: ✅ in place · 🟡 partly · ⬜ not started · 🔒 needs something o
 | Device validation | 🟡 protocol ready, **0 of 48 scenarios run** | builds on the test devices; S1–S28 and the launch rows on ≥ 2 Android and ≥ 2 iPhone with a reference strap; the fixes the campaign finds; `distance-v2` from the data | 3–4 weeks, in parallel | Filled rows in the [device matrix](../testing/device-matrix.md) |
 | Experience: recording | ⬜ the main screen of the Android app is a server field and a column of buttons | design system and mockups; a readable recording screen; voice cues | 3 weeks with the summary | S44, S47 |
 | Experience: summary | 🟡 detail, splits, curves, map exist | a summary right after the activity; the share card | in the same 3 weeks | S43 |
-| Experience: history and progress | 🟡 list, offline copy, records exist | weekly / monthly totals, a calendar, a clearer list | 2 weeks | S45 |
+| Experience: history and progress | 🟡 list, offline copy, records exist; the totals and the calendar are computed in `shared/client` (not shown by any app yet) | the screens for them, a clearer list | 2 weeks | S45 |
 | Privacy features | 🟡 deletion, export, consents exist | private zones (display-only cut) on phones, web and card; recording and viewing with no account; a visible "what is stored" page | 2 weeks | S42, S46 |
 | Onboarding and accessibility | ⬜ | permission explanations, pairing of a strap or band, large text, screen readers | 1 week | S46, S48 |
 | Distribution | 🟡 Android signing wired, never run; iOS manual | by hand first (APK; iOS from the Mac, 7-day provisioning); then store accounts 🔒 (personal), Play internal, TestFlight, signing team in `project.yml` | 2–3 days + store waits (new personal Play account: closed test, 12 testers, 14 days) | A build installed from each store |
-| CI | 🟡 two pipelines; GitHub green except iOS history; Woodpecker runs on PRs but has no iOS, compose or round-trip job | iOS build kept green, shared tests that run on iOS (today most are `jvmTest`: `tracking` 1 of 12, `client` 0 of 6, `sync` 0 of 1), a test target for the iOS app | 1.5 weeks | A green PR check, iOS job included |
-| Mobile | 🟡 sign-in, sync, history, detail, HR, profile and units, zones, map, IT/EN, account deletion, health write | the experience rows above; store declarations for the health permissions; adapter unit tests (Android has 3 test files, none for the service, the recovery, Bluetooth or permissions); the profile (units, maximum heart rate) is hidden without an account, which the "no account" row has to fix | with the experience rows | Matrix rows S32–S41 |
+| CI | 🟡 two pipelines; GitHub green except iOS history; Woodpecker runs on PRs but has no iOS, compose or round-trip job | iOS build kept green, shared tests that run on iOS (today most are `jvmTest`: `tracking` 2 of 13, `client` 4 of 7 after the move of three portable tests, `sync` 0 of 1), a test target for the iOS app | 1.5 weeks | A green PR check, iOS job included |
+| Mobile | 🟡 sign-in, sync, history, detail, HR, profile and units, zones, map, IT/EN, account deletion, health write | the experience rows above; store declarations for the health permissions; adapter unit tests (Android has 3 test files, none for the service, the recovery, Bluetooth or permissions); the profile (units, maximum heart rate) now works with no account (kept on the phone, sent when there is a session) | with the experience rows | Matrix rows S32–S41 |
 | Web | 🟡 list, detail, map, analysis, zones, records, GPX / FIT / archive import, account, profile, IT/EN | tests for the list, detail, account and auth pages; private zones; sign-up page (needs the IdP on the cloud) | 1.5 weeks | Page checks + web tests |
 | Backend | 🟡 ingest, analysis, records, consents, quotas, export, deletion, FIT and archive import, profile | privacy zones (`V13`; the heart-rate zones already exist); `devices` table (`V14`) only with Synapse L1 | 1 week | Backend tests (Testcontainers) |
 | Sensors | 🟡 standard HR on both platforms; the Synapse frame parser and pinned contract are in place and not wired | S29 (band as a strap); adapter unit tests; L1 adapters wait for the prototype and the handoff | 1.5 weeks after the prototype | S15, S16, S29–S31 |
@@ -33,13 +33,13 @@ Each increment lists its files and the matrix rows it needs. The order is in the
 | Inc | Scope | Main files | Rows |
 |---|---|---|---|
 | 1 | Campaign and builds | `docs/deployment/tester-builds.md`, `docs/testing/device-matrix.md`, the fixes it finds | S1–S28 |
-| 2 | Design system and mockups | `docs/design/TDD-0015-consumer-ux.md`, mockups | approved by the owner |
+| 2 | Design system and mockups | `docs/design/TDD-0015-consumer-ux.md` (draft, merged); the mockups are outside the repository until approved | approved by the owner |
 | 3 | Experience on Android | `apps/android/.../MainActivity.kt` split into screens, `ui/theme/`, `History.kt`, `TrackMapView.kt` | S47, S48 |
 | 4 | Experience on iOS | `ContentView.swift`, `RecorderViewModel.swift`, `TrackMapView.swift`, a test target in `project.yml` | S47, S48 |
 | 5 | Progress | `shared/client` (totals, calendar), both apps, web | S45 |
 | 6 | Privacy zones | `backend/.../V13__privacy_zones.sql`, `shared/api`, `shared/analysis`, both apps, web | S42 |
 | 7 | Share card | both apps | S43 |
-| 8 | Voice cues | `shared/tracking` (per-km events), `TrackingService.kt`, `LocationTracker.swift` | S44 |
+| 8 | Voice cues (the per-km events are in `SplitCues.kt`; the speech and the settings are not) | `shared/tracking`, `TrackingService.kt`, `LocationTracker.swift` | S44 |
 | 9 | Onboarding and accessibility | both apps | S46, S48 |
 | 10 | Cloud, legal, stores | `infrastructure/compose/`, `docs/privacy/dpia.md`, store listings | beta feedback |
 | 11 | Synapse L1 beta | `shared/sensors`, both native adapters, `V14__devices.sql` | S30, S31 |
