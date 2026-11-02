@@ -1,6 +1,7 @@
 package dev.averyn.tracking
 
 import dev.averyn.domain.ActivityState
+import dev.averyn.domain.Reason
 import dev.averyn.domain.Sport
 
 /** One point of the route of a workout. */
@@ -62,10 +63,14 @@ fun ActivityStore.workoutExport(activityId: String): WorkoutExport? {
     var pausedAtMs: Long? = null
     var endMs: Long? = null
     var completed = false
+    var offsetMs = 0L
     forEachRecord(activityId) { record ->
         when (record) {
             is ActivityRecord.Event -> {
                 val event = record.event
+                if (event.reason == Reason.RECOVERED) offsetMs = event.clockOffsetMs
+                // A RECOVERED marker that repeats the state changes nothing: it must not restart a pause.
+                if (event.reason == Reason.RECOVERED && event.state == state) return@forEachRecord
                 state = event.state
                 if (event.state == ActivityState.PAUSED) pausedAtMs = event.timeMs
                 if (event.state == ActivityState.RECORDING) {
@@ -81,7 +86,9 @@ fun ActivityStore.workoutExport(activityId: String): WorkoutExport? {
             }
             is ActivityRecord.Sample -> {
                 val sample = record.sample
-                if (state == ActivityState.RECORDING && assessor.assess(sample).none { it.excludesFromDistance }) {
+                if (state == ActivityState.RECORDING &&
+                    assessor.assess(sample.onClock(offsetMs)).none { it.excludesFromDistance }
+                ) {
                     route +=
                         WorkoutPoint(
                             sample.timeMs,
