@@ -209,6 +209,8 @@ final class AppModel {
     /// The activities recorded by an older build get their local summary, in the background (TDD-0011).
     func backfillLocalSummaries() {
         DispatchQueue.global(qos: .utility).async { [store] in
+            // Killed before the first fix: nothing was recorded, and the file would stay for good.
+            store.discardEmptyPreparing(exceptId: nil)
             store.backfillLocalSummaries(limit: 20)
         }
     }
