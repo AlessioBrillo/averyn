@@ -34,11 +34,15 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.put
 import io.ktor.server.routing.routing
 import io.ktor.utils.io.readAvailable
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
+import org.slf4j.LoggerFactory
+import java.nio.channels.Channels
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardOpenOption
 import java.security.MessageDigest
 import java.util.UUID
 import javax.sql.DataSource
@@ -63,6 +67,7 @@ const val DEFAULT_REQUESTS_PER_MINUTE = 120
 
 /** The rate limit every authenticated call shares, whatever it does. */
 internal val PER_USER = RateLimitName("per-user")
+private val exportLog = LoggerFactory.getLogger("dev.averyn.backend.activities.Export")
 
 /**
  * Installs the [PER_USER] limiter once. Every module that serves authenticated routes calls it before it uses
@@ -394,13 +399,40 @@ fun Application.activities(
                                 errorBody("export unavailable: ${missing.size} stored file(s) are missing"),
                             )
                         }
+                        // Built on disk first: answering 200 and then failing half way would close the stream with a
+                        // valid but truncated ZIP the client takes for the whole export.
+                        val zip = Files.createTempFile("averyn-export-", ".zip")
+                        try {
+                            withContext(Dispatchers.IO) {
+                                Files.newOutputStream(zip).use { userData.export(owner, it) }
+                            }
+                        } catch (e: Exception) {
+                            Files.deleteIfExists(zip)
+                            if (e is CancellationException) throw e
+                            // The class only: a message can carry an object key or a line of the data.
+                            exportLog.error("export failed: {}", e.javaClass.simpleName)
+                            return@get call.respond(
+                                HttpStatusCode.InternalServerError,
+                                errorBody("export failed, nothing was lost: retry later"),
+                            )
+                        }
                         val disposition =
                             ContentDisposition.Attachment.withParameter(
                                 ContentDisposition.Parameters.FileName,
                                 "averyn-export.zip",
                             )
                         call.response.header(HttpHeaders.ContentDisposition, disposition.toString())
-                        call.respondOutputStream(ContentType.Application.Zip) { userData.export(owner, this) }
+                        // The body is written after respond() returns: the file goes away when it has been read.
+                        call.respondOutputStream(ContentType.Application.Zip) {
+                            Channels
+                                .newInputStream(
+                                    Files.newByteChannel(
+                                        zip,
+                                        StandardOpenOption.READ,
+                                        StandardOpenOption.DELETE_ON_CLOSE,
+                                    ),
+                                ).use { it.copyTo(this) }
+                        }
                     } finally {
                         exportSlots.release()
                     }

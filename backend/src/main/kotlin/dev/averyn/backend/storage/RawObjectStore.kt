@@ -67,6 +67,19 @@ class RawObjectStore(
         }
     }
 
+    /**
+     * Whether the store answers for the bucket: what `/ready` asks. A restored store can accept connections before
+     * its volumes are loaded, and a read then fails; the bucket check fails with it.
+     */
+    fun isReachable(): Boolean =
+        try {
+            s3.headBucket { it.bucket(bucket) }
+            true
+        } catch (e: SdkException) {
+            log.warn("object store not reachable: {}", e.javaClass.simpleName)
+            false
+        }
+
     /** Whether [key] exists, without reading it. */
     fun exists(key: String): Boolean =
         try {

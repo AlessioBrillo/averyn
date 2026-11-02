@@ -45,7 +45,7 @@ fun Application.module() {
             secretKey = cfg.property("averyn.s3.secretKey").getString(),
         ).also { it.ensureBucket() }
     content()
-    observability(isReady = db::isReachable)
+    observability(isReady = { db.isReachable() && raw.isReachable() })
     auth(oidc)
     // The oldest app version this instance still supports (TDD-0011): optional, an unset value means no minimum.
     val minClientVersion = cfg.propertyOrNull("averyn.client.minClientVersion")?.getString()?.ifBlank { null }
