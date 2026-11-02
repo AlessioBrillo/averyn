@@ -2,10 +2,12 @@ package dev.averyn.backend.activities
 
 import dev.averyn.backend.auth.TestIssuer
 import dev.averyn.backend.auth.auth
+import dev.averyn.backend.consent.consent
 import dev.averyn.backend.content
 import dev.averyn.backend.storage.RawObjectStore
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
+import io.ktor.client.request.post
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.testApplication
@@ -43,5 +45,24 @@ class RateLimitTest {
             assertEquals(HttpStatusCode.BadRequest, client.get("/v1/activities/x") { bearerAuth(bob) }.status)
             // Authentication comes first: without a valid token it stays 401, never 429.
             assertEquals(HttpStatusCode.Unauthorized, client.get("/v1/activities/x").status)
+        }
+
+    @Test
+    fun theConsentRoutesShareTheLimitOfTheOtherAuthenticatedCalls() =
+        testApplication {
+            application {
+                content()
+                auth(idp.config, idp.jwks)
+                // The first module to ask decides the limit; the application asks before all of them.
+                perUserRateLimit(2)
+                consent(PGSimpleDataSource()) { _, _ -> }
+            }
+            val alice = idp.token(subject = "alice")
+            // An unknown scope is answered before the database is touched, but it still counts.
+            repeat(2) {
+                assertEquals(HttpStatusCode.BadRequest, client.post("/v1/consents/bogus") { bearerAuth(alice) }.status)
+            }
+
+            assertEquals(HttpStatusCode.TooManyRequests, client.post("/v1/consents/bogus") { bearerAuth(alice) }.status)
         }
 }

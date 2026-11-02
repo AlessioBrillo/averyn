@@ -213,7 +213,46 @@ class ActivityStoreTest {
 
         assertEquals(listOf(RrInterval(1000, 1000, 857), RrInterval(2000, 2000, 800)), rrs)
         assertTrue(losses.isEmpty())
-        assertEquals(ActivityMetadata("a1", Sport.RUN, 0, formatVersion = 1), store.rrMetadataOf("a1"))
+        assertEquals(ActivityMetadata("a1", Sport.RUN, 0, formatVersion = RR_FORMAT_VERSION), store.rrMetadataOf("a1"))
+    }
+
+    @Test
+    fun anOutOfRangeRrValueIsNotACutLine() {
+        store.createRrMetadata(ActivityMetadata("a1", Sport.RUN, 0))
+        store.appendRrInterval("a1", RrInterval(1000, 1000, 857))
+        // Complete JSON that breaks the model, then a line cut in the middle, then a good one.
+        val path = dir.resolve("a1.rr.jsonl").toFile()
+        path.appendText("RR {\"timeMs\":2000,\"elapsedRealtimeMs\":2000,\"rrMs\":0}\n")
+        path.appendText("RR {\"timeMs\":3000,\"elapsedRealtim")
+        path.appendText("\nRR {\"timeMs\":4000,\"elapsedRealtimeMs\":4000,\"rrMs\":900}\n")
+
+        val rrs = mutableListOf<RrInterval>()
+        val losses = mutableListOf<RecordLossReason>()
+        store.forEachRrRecord("a1", onLoss = { losses += it }) { rrs += it }
+
+        assertEquals(listOf(857, 900), rrs.map { it.rrMs })
+        assertEquals(listOf(RecordLossReason.INVALID_VALUE, RecordLossReason.TRUNCATED_RECORD), losses)
+    }
+
+    @Test
+    fun anActivityKilledBeforeItsFirstFixIsDiscardedAndOneWithDataIsNot() {
+        // Killed while PREPARING, nothing recorded.
+        store.create(ActivityMetadata("empty", Sport.RUN, 0, formatVersion = 2))
+        store.appendEvent("empty", StateEvent(0, 0, ActivityState.PREPARING, Reason.USER))
+        // Killed while PREPARING, but a fix had been stored.
+        store.create(ActivityMetadata("data", Sport.RUN, 0, formatVersion = 2))
+        store.appendEvent("data", StateEvent(0, 0, ActivityState.PREPARING, Reason.USER))
+        store.appendSample("data", LocationSample(10, 10, 0.0, 0.0, 5.0))
+        // The one this process is recording right now.
+        store.create(ActivityMetadata("live", Sport.RUN, 0, formatVersion = 2))
+        store.appendEvent("live", StateEvent(0, 0, ActivityState.PREPARING, Reason.USER))
+        // A recording that was interrupted: the recovery's business, not this.
+        store.create(ActivityMetadata("rec", Sport.RUN, 0, formatVersion = 2))
+        store.appendEvent("rec", StateEvent(0, 0, ActivityState.RECORDING, Reason.GPS_READY))
+
+        assertEquals(1, store.discardEmptyPreparing(exceptId = "live"))
+
+        assertEquals(setOf("data", "live", "rec"), store.list().map { it.activityId }.toSet())
     }
 
     @Test
@@ -221,8 +260,11 @@ class ActivityStoreTest {
         val metadata = ActivityMetadata("a1", Sport.RIDE, 12_345, formatVersion = 2)
         store.createRrMetadata(metadata)
 
-        // The sidecar's own format version is 1, but it says which activity it was recorded with.
-        assertEquals(ActivityMetadata("a1", Sport.RIDE, 12_345, formatVersion = 1), store.rrMetadataOf("a1"))
+        // The sidecar has its own format version, but it says which activity it was recorded with.
+        assertEquals(
+            ActivityMetadata("a1", Sport.RIDE, 12_345, formatVersion = RR_FORMAT_VERSION),
+            store.rrMetadataOf("a1"),
+        )
     }
 
     @Test
@@ -237,7 +279,7 @@ class ActivityStoreTest {
         store.forEachRrRecord("a1") { rrs += it }
 
         assertEquals(listOf(RrInterval(1000, 1000, 857)), rrs)
-        assertEquals(ActivityMetadata("a1", Sport.RUN, 0, formatVersion = 1), store.rrMetadataOf("a1"))
+        assertEquals(ActivityMetadata("a1", Sport.RUN, 0, formatVersion = RR_FORMAT_VERSION), store.rrMetadataOf("a1"))
     }
 
     @Test

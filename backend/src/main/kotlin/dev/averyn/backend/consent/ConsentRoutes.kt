@@ -1,5 +1,7 @@
 package dev.averyn.backend.consent
 
+import dev.averyn.backend.activities.PER_USER
+import dev.averyn.backend.activities.perUserRateLimit
 import dev.averyn.backend.auth.AccountDeletedException
 import dev.averyn.backend.auth.OIDC_AUTH
 import dev.averyn.backend.auth.userIdFor
@@ -9,6 +11,7 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
+import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.response.respond
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
@@ -45,55 +48,58 @@ fun Application.consent(
     deletion: ConsentDataDeletion,
 ): ConsentStore {
     val store = ConsentStore(db)
+    perUserRateLimit()
 
     routing {
         authenticate(OIDC_AUTH) {
-            get("/v1/consents") {
-                val owner = call.owner(db) ?: return@get
-                val grants =
-                    withContext(Dispatchers.IO) { store.list(owner) }
-                call.respond(
-                    grants.map {
-                        mapOf(
-                            "scope" to it.scope,
-                            "grantedAt" to it.grantedAt.toString(),
-                            "revokedAt" to it.revokedAt?.toString(),
-                        )
-                    },
-                )
-            }
+            rateLimit(PER_USER) {
+                get("/v1/consents") {
+                    val owner = call.owner(db) ?: return@get
+                    val grants =
+                        withContext(Dispatchers.IO) { store.list(owner) }
+                    call.respond(
+                        grants.map {
+                            mapOf(
+                                "scope" to it.scope,
+                                "grantedAt" to it.grantedAt.toString(),
+                                "revokedAt" to it.revokedAt?.toString(),
+                            )
+                        },
+                    )
+                }
 
-            post("/v1/consents/{scope}") {
-                val scope = call.parameters["scope"]
-                if (scope == null) {
-                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "missing scope"))
-                    return@post
+                post("/v1/consents/{scope}") {
+                    val scope = call.parameters["scope"]
+                    if (scope == null) {
+                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to "missing scope"))
+                        return@post
+                    }
+                    if (scope !in ConsentScope.ALL) {
+                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to "unknown consent scope"))
+                        return@post
+                    }
+                    val owner = call.owner(db) ?: return@post
+                    withContext(Dispatchers.IO) { store.grant(owner, scope) }
+                    call.respond(HttpStatusCode.Created)
                 }
-                if (scope !in ConsentScope.ALL) {
-                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "unknown consent scope"))
-                    return@post
-                }
-                val owner = call.owner(db) ?: return@post
-                withContext(Dispatchers.IO) { store.grant(owner, scope) }
-                call.respond(HttpStatusCode.Created)
-            }
 
-            delete("/v1/consents/{scope}") {
-                val scope = call.parameters["scope"]
-                if (scope == null) {
-                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "missing scope"))
-                    return@delete
+                delete("/v1/consents/{scope}") {
+                    val scope = call.parameters["scope"]
+                    if (scope == null) {
+                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to "missing scope"))
+                        return@delete
+                    }
+                    if (scope !in ConsentScope.ALL) {
+                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to "unknown consent scope"))
+                        return@delete
+                    }
+                    val owner = call.owner(db) ?: return@delete
+                    withContext(Dispatchers.IO) { store.revoke(owner, scope) }
+                    // Revoking really deletes the data it covers: the grant is off, so nothing new comes in, and
+                    // what was stored for it goes away (ADR-0021).
+                    withContext(Dispatchers.IO) { deletion.delete(owner, scope) }
+                    call.respond(HttpStatusCode.NoContent)
                 }
-                if (scope !in ConsentScope.ALL) {
-                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "unknown consent scope"))
-                    return@delete
-                }
-                val owner = call.owner(db) ?: return@delete
-                withContext(Dispatchers.IO) { store.revoke(owner, scope) }
-                // Revoking really deletes the data it covers: the grant is off, so nothing new comes in, and
-                // what was stored for it goes away (ADR-0021).
-                withContext(Dispatchers.IO) { deletion.delete(owner, scope) }
-                call.respond(HttpStatusCode.NoContent)
             }
         }
     }

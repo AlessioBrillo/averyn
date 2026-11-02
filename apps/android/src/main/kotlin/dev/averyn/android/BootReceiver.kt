@@ -29,9 +29,16 @@ class BootReceiver : BroadcastReceiver() {
         val app = context.applicationContext as AverynApplication
         // Off the broadcast thread: listing + replaying every interrupted activity can take seconds
         // for long runs (S11), well inside the 10 s broadcast budget only if we don't block it.
+        // goAsync() keeps the process alive until finish(): without it the system may kill the process as soon as
+        // onReceive returns, with the scan half done.
+        val pending = goAsync()
         java.lang
             .Thread({
-                if (app.store.interrupted().isNotEmpty()) postInterruptedNotification(context)
+                try {
+                    if (app.store.interrupted().isNotEmpty()) postInterruptedNotification(context)
+                } finally {
+                    pending.finish()
+                }
             })
             .start()
     }
