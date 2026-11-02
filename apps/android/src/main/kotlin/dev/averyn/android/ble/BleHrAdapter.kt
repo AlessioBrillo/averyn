@@ -47,7 +47,15 @@ private val CCCD = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 private val SCAN_TIMEOUT_MS = 15_000L
 
 /** Reconnect backoff: 1s, 2s, 4s, 8s, then stop. */
-private val RECONNECT_BACKOFF_MS = longArrayOf(1_000, 2_000, 4_000, 8_000)
+private const val RECONNECT_BACKOFF_FIRST_MS = 1_000L
+private const val RECONNECT_BACKOFF_MAX_MS = 30_000L
+
+/**
+ * The wait before reconnect number [attempt] (1 = the first): doubling from one second, capped. The strap is
+ * never given up on while the activity lasts: a three-hour run has more than four drops in it (S11, S15).
+ */
+internal fun reconnectBackoffMs(attempt: Int): Long =
+    (RECONNECT_BACKOFF_FIRST_MS shl (attempt - 1).coerceIn(0, 5)).coerceAtMost(RECONNECT_BACKOFF_MAX_MS)
 
 /**
  * Android implementation of [SensorAdapter] over the standard BLE Heart Rate service (`0x180D` /
@@ -278,25 +286,22 @@ class BleHrAdapter(
             val gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
             synchronized(lock) { currentGatt = gatt }
             if (!connected.await()) {
-                if (++attempt >= RECONNECT_BACKOFF_MS.size) return@connectAndStream
-                delay(RECONNECT_BACKOFF_MS[attempt - 1])
+                delay(reconnectBackoffMs(++attempt))
                 continue
             }
             if (!servicesOk.await()) {
-                if (++attempt >= RECONNECT_BACKOFF_MS.size) return@connectAndStream
-                delay(RECONNECT_BACKOFF_MS[attempt - 1])
+                delay(reconnectBackoffMs(++attempt))
                 continue
             }
             if (!enableNotifications(gatt)) {
-                if (++attempt >= RECONNECT_BACKOFF_MS.size) return@connectAndStream
-                delay(RECONNECT_BACKOFF_MS[attempt - 1])
+                delay(reconnectBackoffMs(++attempt))
                 continue
             }
-            // Streaming: wait until cancelled (stop) or the connection drops.
+            // Streaming: the budget of reconnects is for failures in a row, not for the whole activity.
+            attempt = 0
             disconnected.await()
             // Connection lost: reconnect with backoff.
-            if (++attempt >= RECONNECT_BACKOFF_MS.size) return@connectAndStream
-            delay(RECONNECT_BACKOFF_MS[attempt - 1])
+            delay(reconnectBackoffMs(++attempt))
         }
     }
 
