@@ -36,6 +36,7 @@ class HistoryRepository(
     private val cache: ActivityCache,
     val client: ActivityReader,
     private val statuses: SyncStatusStore = SyncStatusStore(store),
+    private val localProfile: LocalProfileStore? = null,
     private val nowMs: () -> Long = { currentTimeMillis() },
 ) {
     companion object {
@@ -49,13 +50,15 @@ class HistoryRepository(
             store: ActivityStore,
             cacheDirectory: String,
             serverUrl: String,
-        ): HistoryRepository = create(store, cacheDirectory, serverUrl) { currentTimeMillis() }
+            profileDirectory: String,
+        ): HistoryRepository = create(store, cacheDirectory, serverUrl, profileDirectory) { currentTimeMillis() }
 
         /** The repository with a given clock (the tests). */
         fun create(
             store: ActivityStore,
             cacheDirectory: String,
             serverUrl: String,
+            profileDirectory: String,
             nowMs: () -> Long,
         ): HistoryRepository {
             val server = serverUrl.trimEnd('/')
@@ -63,6 +66,7 @@ class HistoryRepository(
                 store = store,
                 cache = ActivityCache(Path(cacheDirectory), server, nowMs = nowMs),
                 client = AverynClient.create(server),
+                localProfile = LocalProfileStore(profileDirectory),
                 nowMs = nowMs,
             )
         }
@@ -281,8 +285,78 @@ class HistoryRepository(
     /** The unit system as the device last knew it: the cached one, or metric. Never touches the network. */
     suspend fun cachedUnits(): UnitSystem =
         withContext(Dispatchers.Default) {
-            cache.readUnits() ?: UnitSystem.METRIC
+            localProfile
+                ?.takeIf { it.exists() }
+                ?.read()
+                ?.profile
+                ?.units ?: cache.readUnits() ?: UnitSystem.METRIC
         }
+
+    /** The profile as this phone has it, with no account and no network: units and maximum heart rate. */
+    suspend fun localProfile(): UserProfile =
+        withContext(Dispatchers.Default) { localProfile?.read()?.profile ?: UserProfile() }
+
+    /**
+     * Saves the profile on the phone first, so it works with no account, then sends it when [accessToken] is there.
+     * A profile that is not valid ([UserProfile.problem]) is refused here and changes nothing.
+     * If the server cannot be reached the profile stays marked as unsynced and goes up with the next [syncProfile];
+     * the answer then has the local [ProfileSnapshot.profile] and the failure.
+     */
+    suspend fun saveProfileLocalFirst(
+        accessToken: String?,
+        profile: UserProfile,
+    ): ProfileSnapshot =
+        withContext(Dispatchers.Default) {
+            if (profile.problem() != null) {
+                return@withContext ProfileSnapshot(
+                    units = localProfile?.read()?.profile?.units ?: UnitSystem.METRIC,
+                    fromCache = true,
+                    failure = ApiFailure(ApiFailureKind.UNEXPECTED, status = 422),
+                )
+            }
+            localProfile?.write(StoredProfile(profile, unsynced = true))
+            if (accessToken.isNullOrBlank()) {
+                return@withContext ProfileSnapshot(
+                    profile,
+                    profile.units,
+                    fromCache = true,
+                )
+            }
+            syncProfileNow(accessToken)
+        }
+
+    /**
+     * Brings the phone and the server together: a profile changed here and not sent yet goes up, otherwise the
+     * server's one is taken. Without a token it only reads the phone's. The last change made wins.
+     *
+     * ponytail: "last change wins" is the unsynced flag, not a timestamp. An edit on two devices before either syncs
+     * keeps whichever syncs last. A server `updatedAt` would fix it; add it if that ever happens.
+     */
+    suspend fun syncProfile(accessToken: String?): ProfileSnapshot =
+        withContext(Dispatchers.Default) {
+            if (accessToken.isNullOrBlank()) {
+                val profile = localProfile?.read()?.profile ?: UserProfile()
+                return@withContext ProfileSnapshot(profile, profile.units, fromCache = true)
+            }
+            syncProfileNow(accessToken)
+        }
+
+    private suspend fun syncProfileNow(accessToken: String): ProfileSnapshot {
+        val local = localProfile?.read() ?: StoredProfile()
+        val result =
+            if (local.unsynced) {
+                client.saveProfile(accessToken, local.profile)
+            } else {
+                client.profile(accessToken)
+            }
+        val server = result.value
+        if (server == null) {
+            return ProfileSnapshot(local.profile, local.profile.units, fromCache = true, failure = result.failure)
+        }
+        localProfile?.write(StoredProfile(server))
+        cache.writeUnits(server.units)
+        return ProfileSnapshot(server, server.units)
+    }
 
     /**
      * Reads the profile from the server (TDD-0012). The unit system is remembered, so that the numbers are written

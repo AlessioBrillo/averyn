@@ -90,6 +90,7 @@
     <string name="saved">Saved</string>
     <string name="profile_invalid">That is not a valid profile.</string>
     <string name="profile_save_failed">Could not save your profile.</string>
+    <string name="profile_saved_on_phone">Saved on this phone. It will go to your account when the server answers.</string>
     <string name="save_profile">Save profile</string>
     <string name="compat_app_too_old">This server is newer than the app: update the app to use everything.</string>
     <string name="compat_below_minimum">This server needs a newer app: update the app.</string>

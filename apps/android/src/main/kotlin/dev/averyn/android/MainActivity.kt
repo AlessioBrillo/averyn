@@ -509,8 +509,8 @@ private fun DeleteAccountDialog(
 }
 
 /**
- * The settings of the account (TDD-0012): the unit system and the maximum heart rate. They live on the server, so
- * the section needs a session; the unit system is also remembered on the device and holds offline.
+ * The settings (TDD-0012): the unit system and the maximum heart rate. They live on the phone and work with no
+ * account; with one, they are kept in step with the server.
  */
 @Composable
 private fun ProfileSection(
@@ -526,22 +526,22 @@ private fun ProfileSection(
     val input = parseMaxHr(maxHr)
 
     LaunchedEffect(signedIn) {
-        if (!signedIn) {
-            loaded = false
-            return@LaunchedEffect
-        }
+        // The phone's own profile first: it is there with no account and no network.
+        val local = app.history().localProfile()
+        units = local.units
+        maxHr = local.maxHrBpm?.toString().orEmpty()
+        loaded = true
+        if (!signedIn) return@LaunchedEffect
         val token = runCatching { app.auth.freshAccessToken() }.getOrNull()
-        val profile = app.history().refreshProfile(token).profile
-        if (profile != null) {
-            units = profile.units
-            maxHr = profile.maxHrBpm?.toString().orEmpty()
-            loaded = true
-        } else {
-            message = resources.getString(R.string.profile_load_failed)
+        val synced = app.history().syncProfile(token)
+        synced.profile?.let {
+            units = it.units
+            maxHr = it.maxHrBpm?.toString().orEmpty()
+            app.units = it.units
         }
+        if (synced.failure != null) message = resources.getString(R.string.profile_load_failed)
     }
 
-    if (!signedIn) return
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(stringResource(R.string.profile))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -577,15 +577,21 @@ private fun ProfileSection(
             enabled = loaded && input.valid,
             onClick = {
                 scope.launch {
-                    val token = runCatching { app.auth.freshAccessToken() }.getOrNull()
-                    if (token == null) {
-                        message = resources.getString(R.string.sign_in_again_profile)
-                        return@launch
-                    }
-                    val saved = app.history().saveProfile(token, UserProfile(units, input.value))
+                    // Without a session the profile is saved on the phone only; with one it is sent as well.
+                    val token = if (signedIn) runCatching { app.auth.freshAccessToken() }.getOrNull() else null
+                    val saved = app.history().saveProfileLocalFirst(token, UserProfile(units, input.value))
                     if (saved.profile != null) {
                         app.units = saved.units
-                        message = resources.getString(R.string.saved)
+                        message =
+                            resources.getString(
+                                if (signedIn &&
+                                    saved.failure != null
+                                ) {
+                                    R.string.profile_saved_on_phone
+                                } else {
+                                    R.string.saved
+                                },
+                            )
                     } else {
                         message =
                             if (saved.failure?.status ==

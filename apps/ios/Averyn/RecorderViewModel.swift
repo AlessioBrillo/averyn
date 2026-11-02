@@ -93,31 +93,37 @@ final class RecorderViewModel: ObservableObject {
         deviceActivities = (try? await repository.deviceData()) ?? []
     }
 
-    /// Reads the profile of the account (TDD-0012) and the unit system with it.
+    /// Reads the profile (TDD-0012): the one on the phone at once, then, with a session, brought in step with the
+    /// server. It works with no account.
     func loadProfile() async {
         let repository = AppModel.shared.history()
-        guard let snapshot = try? await repository.refreshProfile(accessToken: await accessToken()) else { return }
-        units = snapshot.units
-        profile = snapshot.profile
-        profileMessage = snapshot.profile == nil ? tr("Could not load your profile.") : nil
+        if let local = try? await repository.localProfile() {
+            units = local.units
+            profile = local
+        }
+        guard let token = await accessToken() else { return }
+        guard let synced = try? await repository.syncProfile(accessToken: token) else { return }
+        units = synced.units
+        profile = synced.profile
+        profileMessage = synced.failure == nil ? nil : tr("Could not load your profile.")
     }
 
-    /// Saves the profile. The server checks it again: a profile it refuses changes nothing.
+    /// Saves the profile on the phone and, with a session, sends it. A profile that is not valid changes nothing.
     func saveProfile(units chosen: UnitSystem, maxHr: MaxHrInput) async {
-        guard maxHr.valid, let token = await accessToken() else {
-            profileMessage = tr("Sign in again to save your profile.")
-            return
-        }
+        guard maxHr.valid else { return }
         let repository = AppModel.shared.history()
         let wanted = UserProfile(units: chosen, maxHrBpm: maxHr.value)
-        guard let saved = try? await repository.saveProfile(accessToken: token, profile: wanted) else {
+        let token = await accessToken()
+        guard let saved = try? await repository.saveProfileLocalFirst(accessToken: token, profile: wanted) else {
             profileMessage = tr("Could not save your profile.")
             return
         }
         if let stored = saved.profile {
             units = saved.units
             profile = stored
-            profileMessage = tr("Saved")
+            profileMessage = token != nil && saved.failure != nil
+                ? tr("Saved on this phone. It will go to your account when the server answers.")
+                : tr("Saved")
         } else {
             profileMessage = saved.failure?.status?.intValue == 422
                 ? tr("That is not a valid profile.")

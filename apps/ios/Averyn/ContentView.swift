@@ -456,8 +456,8 @@ private struct AccountSection: View {
     }
 }
 
-/// The settings of the account (TDD-0012): the unit system and the maximum heart rate. They live on the server, so
-/// the section needs a session; the unit system is also remembered on the device and holds offline.
+/// The settings (TDD-0012): the unit system and the maximum heart rate. They live on the phone and work with no
+/// account; with a session they are kept in step with the server.
 private struct ProfileSection: View {
     @ObservedObject var viewModel: RecorderViewModel
     let isSignedIn: Bool
@@ -467,7 +467,7 @@ private struct ProfileSection: View {
 
     var body: some View {
         let input = UserProfileKt.parseMaxHr(text: maxHr)
-        if isSignedIn {
+        Group {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Profile")
                 Picker("Units", selection: $units) {
