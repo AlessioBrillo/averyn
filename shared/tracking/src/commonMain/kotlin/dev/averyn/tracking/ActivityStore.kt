@@ -16,6 +16,7 @@ import kotlinx.io.writeString
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.serializer
 
 /**
  * The format version new activity files are written with (ADR-0020): GPS samples plus optional `HR ` records.
@@ -93,6 +94,8 @@ private const val RR_FILE_SUFFIX = ".rr.jsonl"
 
 /** The file name suffix of the local summary sidecar (TDD-0011): the numbers of an activity on this device. */
 private const val SUMMARY_FILE_SUFFIX = ".summary.json"
+private const val DROPS_FILE_SUFFIX = ".drops.json"
+private val dropsSerializer = serializer<Map<DroppedInputReason, Int>>()
 
 // NaN/Infinity in an optional field (altitude, speed, bearing) is stored as the platform reported it rather than
 // crashing the recording thread: raw samples are immutable and never silently lost (F5).
@@ -169,6 +172,8 @@ class ActivityStore(
     private fun pathFor(activityId: String) = Path(directory, "$activityId.jsonl")
 
     private fun pathForLocalSummary(activityId: String) = Path(directory, "$activityId$SUMMARY_FILE_SUFFIX")
+
+    private fun pathForDrops(activityId: String) = Path(directory, "$activityId$DROPS_FILE_SUFFIX")
 
     fun create(metadata: ActivityMetadata) {
         SystemFileSystem.sink(pathFor(metadata.activityId), append = false).buffered().use { sink ->
@@ -260,6 +265,19 @@ class ActivityStore(
         ) : DecodeResult
     }
 
+    /**
+     * Why a line did not decode. kotlinx.serialization 1.12 reports a value that breaks the model (`require` in a
+     * constructor) as a SerializationException whose cause is the plain IllegalArgumentException; a missing field or
+     * a wrong type has no such cause. Telling them apart by the cause keeps one answer across versions; 1.11 lets
+     * that IllegalArgumentException through as it is.
+     */
+    private fun lossOf(e: IllegalArgumentException): RecordLossReason {
+        val cause = e.cause
+        val brokenModel =
+            e !is SerializationException || (cause is IllegalArgumentException && cause !is SerializationException)
+        return if (brokenModel) RecordLossReason.INVALID_VALUE else RecordLossReason.TRUNCATED_RECORD
+    }
+
     private fun decodeLine(line: String): DecodeResult =
         try {
             when {
@@ -284,15 +302,9 @@ class ActivityStore(
                 else -> DecodeResult.Loss(RecordLossReason.UNKNOWN_RECORD_TYPE)
             }
         } catch (e: SerializationException) {
-            // kotlinx.serialization 1.12 reports a value that breaks the model (`require` in a constructor) as a
-            // SerializationException whose cause is the plain IllegalArgumentException; a missing field or a wrong
-            // type has no such cause. Telling them apart by the cause keeps one answer across versions.
-            val cause = e.cause
-            val brokenModel = cause is IllegalArgumentException && cause !is SerializationException
-            DecodeResult.Loss(if (brokenModel) RecordLossReason.INVALID_VALUE else RecordLossReason.TRUNCATED_RECORD)
+            DecodeResult.Loss(lossOf(e))
         } catch (e: IllegalArgumentException) {
-            // kotlinx.serialization 1.11 lets that IllegalArgumentException through as it is.
-            DecodeResult.Loss(RecordLossReason.INVALID_VALUE)
+            DecodeResult.Loss(lossOf(e))
         }
 
     fun list(): List<ActivityMetadata> =
@@ -337,6 +349,37 @@ class ActivityStore(
         }
 
     /**
+     * Removes the activities that were killed while still PREPARING and have no sample: the user pressed start and
+     * the process died before the first fix, so nothing was recorded (the same case as [cancel][ActivityRecorder.cancel],
+     * which also keeps nothing). Without this the file stays forever: it is not interrupted (no recording to resume),
+     * not finished (it is never synced) and not an activity either. One that has a sample is left alone.
+     *
+     * Call it at process start, with [exceptId] the activity this process is recording, if any.
+     *
+     * @return how many files were removed.
+     */
+    fun discardEmptyPreparing(exceptId: String? = null): Int {
+        var removed = 0
+        for (metadata in list()) {
+            val id = metadata.activityId
+            if (id == exceptId || lastStateOf(id) != ActivityState.PREPARING) continue
+            if (hasSample(id)) continue
+            delete(id)
+            removed++
+        }
+        return removed
+    }
+
+    private fun hasSample(activityId: String): Boolean {
+        val path = pathFor(activityId)
+        if (!SystemFileSystem.exists(path)) return false
+        return SystemFileSystem.source(path).buffered().use { source ->
+            source.readLine() // META line
+            generateSequence { source.readLine() }.any { it.startsWith(SAMPLE_PREFIX) }
+        }
+    }
+
+    /**
      * Throws one activity off the device: the raw file and the local summary sidecar (TDD-0011). The
      * heart-rate sidecar and the sync status have their own lifecycle and are deleted by their owners.
      */
@@ -344,6 +387,42 @@ class ActivityStore(
         val path = pathFor(activityId)
         if (SystemFileSystem.exists(path)) SystemFileSystem.delete(path)
         deleteLocalSummary(activityId)
+        val drops = pathForDrops(activityId)
+        if (SystemFileSystem.exists(drops)) SystemFileSystem.delete(drops)
+    }
+
+    // --- Dropped-input counters, local only: `<id>.drops.json`. Not part of the raw file and never uploaded.
+
+    /**
+     * Writes what the recorder could not use so far for this activity (F5), so a kill does not lose the count.
+     * Atomic (a temporary file and a rename). A counter that cannot be written is a counter that is behind: the
+     * activity itself is intact, and the failure must not be the reason a fix is lost.
+     */
+    fun writeDroppedInputs(
+        activityId: String,
+        counts: Map<DroppedInputReason, Int>,
+    ) {
+        val target = pathForDrops(activityId)
+        val temp = Path(directory, "$activityId$DROPS_FILE_SUFFIX.tmp")
+        try {
+            SystemFileSystem.sink(temp, append = false).buffered().use { sink ->
+                sink.writeString(json.encodeToString(dropsSerializer, counts))
+            }
+            SystemFileSystem.atomicMove(temp, target)
+        } catch (e: Exception) {
+            if (SystemFileSystem.exists(temp)) SystemFileSystem.delete(temp)
+        }
+    }
+
+    /** The counters written by [writeDroppedInputs]; empty when there are none or the file cannot be read. */
+    fun readDroppedInputs(activityId: String): Map<DroppedInputReason, Int> {
+        val path = pathForDrops(activityId)
+        if (!SystemFileSystem.exists(path)) return emptyMap()
+        return try {
+            json.decodeFromString(dropsSerializer, SystemFileSystem.source(path).buffered().use { it.readString() })
+        } catch (e: Exception) {
+            emptyMap()
+        }
     }
 
     // --- Local summary sidecar (TDD-0011): `<id>.summary.json`, the numbers of an activity on this device.
@@ -496,10 +575,15 @@ class ActivityStore(
                     onLoss(RecordLossReason.UNKNOWN_RECORD_TYPE)
                     continue
                 }
-                runCatching {
-                    json.decodeFromString(RrInterval.serializer(), line.removePrefix(RR_PREFIX))
-                }.onFailure { onLoss(RecordLossReason.TRUNCATED_RECORD) }
-                    .onSuccess { action(it) }
+                val rr =
+                    try {
+                        json.decodeFromString(RrInterval.serializer(), line.removePrefix(RR_PREFIX))
+                    } catch (e: IllegalArgumentException) {
+                        // SerializationException is one: a cut line and a value out of range are told apart.
+                        onLoss(lossOf(e))
+                        continue
+                    }
+                action(rr)
             }
         }
     }

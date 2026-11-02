@@ -15,6 +15,7 @@ import dev.averyn.sensors.HeartRateSample
 import dev.averyn.sensors.RrInterval
 import dev.averyn.tracking.ActivityRecorder
 import dev.averyn.tracking.ActivityStore
+import dev.averyn.tracking.DroppedInputReason
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -137,7 +138,11 @@ class AverynApplication : Application() {
         refreshConsents()
         // The activities recorded by an older build have no local summary yet: they get one, in the background
         // (TDD-0011), so their numbers are there even without a connection.
-        appScope.launch { store.backfillLocalSummaries() }
+        appScope.launch {
+            // Killed before the first fix: nothing was recorded, and the file would stay for good.
+            store.discardEmptyPreparing()
+            store.backfillLocalSummaries()
+        }
     }
 }
 
@@ -145,6 +150,10 @@ class AverynApplication : Application() {
  *  intervals in the consent-gated sidecar. */
 fun AverynApplication.feedHeartRate(sample: HeartRateSample) {
     recorder.onHeartRate(sample)
+}
+
+fun AverynApplication.feedInvalidHeartRate() {
+    recorder.recordDroppedInput(DroppedInputReason.INVALID_HEART_RATE)
 }
 
 fun AverynApplication.feedRrInterval(rr: RrInterval) {

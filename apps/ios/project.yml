@@ -5,6 +5,10 @@ options:
   bundleIdPrefix: dev.averyn
   deploymentTarget:
     iOS: "17.0"
+# The signing team lives in Config/Local.xcconfig (git-ignored), so regenerating the project does not forget it.
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
 settings:
   base:
     SWIFT_VERSION: "6.0"
