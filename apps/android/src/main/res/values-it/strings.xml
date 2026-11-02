@@ -122,6 +122,8 @@
     <string name="channel_interrupted">Attività interrotta</string>
     <string name="notif_interrupted_title">Attività interrotta</string>
     <string name="notif_interrupted_text">Tocca per riprenderla o concluderla.</string>
+    <string name="notif_gps_lost_title">Nessun segnale GPS</string>
+    <string name="notif_gps_lost_text">Nessuna posizione da 5 minuti. La registrazione continua; apri Averyn per controllare.</string>
     <string name="health_rationale_title">Perché Averyn chiede questi permessi</string>
     <string name="health_rationale_text">Averyn salva un\'attività conclusa in Health Connect solo quando glielo chiedi, dall\'elenco delle attività su questo telefono: l\'allenamento, il percorso, la frequenza cardiaca registrata e la distanza.\n\nScrive soltanto. Non legge mai nulla da Health Connect e non chiede alcun permesso di lettura.\n\nSalvare di nuovo la stessa attività non crea una copia. Puoi rimuovere ciò che Averyn ha scritto in qualsiasi momento in Health Connect e ritirare i permessi dalle sue impostazioni.</string>
 </resources>

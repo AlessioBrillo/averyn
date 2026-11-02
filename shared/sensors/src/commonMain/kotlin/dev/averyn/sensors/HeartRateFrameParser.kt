@@ -1,5 +1,9 @@
 package dev.averyn.sensors
 
+// The ranges the sample model accepts (HeartRateSample, RrInterval): a value outside is reported, not thrown.
+private val BPM_RANGE = 0..300
+private val RR_RANGE_MS = 1..3000
+
 /**
  * Parses one or more back-to-back `0x2A37` notifications from [data], starting at [offset].
  * [elapsedRealtimeMs] is stamped on every produced value (the parser never reads a clock itself;
@@ -68,10 +72,17 @@ fun parseHeartRateFrames(
         }
 
         val rrIntervals = mutableListOf<RrInterval>()
+        val invalid = mutableListOf<ParseResult.Invalid>()
         if (rrPresent) {
             while (pos + 2 <= data.size) {
-                val rrMs = (data[pos].toInt() and 0xFF) or ((data[pos + 1].toInt() and 0xFF) shl 8)
-                rrIntervals += RrInterval(timeMs, elapsedRealtimeMs, rrMs)
+                // The unit on the wire is 1/1024 s (Bluetooth HRS), not milliseconds.
+                val raw = (data[pos].toInt() and 0xFF) or ((data[pos + 1].toInt() and 0xFF) shl 8)
+                val rrMs = (raw * 1000 + 512) / 1024
+                if (rrMs in RR_RANGE_MS) {
+                    rrIntervals += RrInterval(timeMs, elapsedRealtimeMs, rrMs)
+                } else {
+                    invalid += ParseResult.Invalid("rr out of range: $rrMs ms")
+                }
                 pos += 2
             }
             // An odd trailing byte means a truncated last RR: don't consume it.
@@ -81,9 +92,18 @@ fun parseHeartRateFrames(
             }
         }
 
+        // A bpm the sample model rejects leaves the frame without a sample; the RR intervals still count.
+        val heartRate =
+            if (bpm in BPM_RANGE) {
+                HeartRateSample(timeMs, elapsedRealtimeMs, bpm, contact)
+            } else {
+                invalid += ParseResult.Invalid("bpm out of range: $bpm")
+                null
+            }
+        results += invalid
         results +=
             ParseResult.Complete(
-                heartRate = HeartRateSample(timeMs, elapsedRealtimeMs, bpm, contact),
+                heartRate = heartRate,
                 rrIntervals = rrIntervals,
                 energyExpended = energyExpended,
                 consumedBytes = pos - frameStart,

@@ -34,12 +34,14 @@ android {
     }
 
     if (releaseKeystore != null) {
+        // A keystore without its passwords used to fail later, deep in the signing task, with a null argument.
+        fun required(name: String) = System.getenv(name) ?: error("$name must be set when AVERYN_KEYSTORE_FILE is")
         signingConfigs {
             create("release") {
                 storeFile = file(releaseKeystore)
-                storePassword = System.getenv("AVERYN_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("AVERYN_KEY_ALIAS")
-                keyPassword = System.getenv("AVERYN_KEY_PASSWORD")
+                storePassword = required("AVERYN_KEYSTORE_PASSWORD")
+                keyAlias = required("AVERYN_KEY_ALIAS")
+                keyPassword = required("AVERYN_KEY_PASSWORD")
             }
         }
         buildTypes { release { signingConfig = signingConfigs.getByName("release") } }
