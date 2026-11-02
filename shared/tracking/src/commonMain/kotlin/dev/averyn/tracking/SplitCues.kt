@@ -27,6 +27,12 @@ class SplitCueTracker(
     private val unitM: Double,
     startDistanceM: Double = 0.0,
     startMovingMs: Long = 0,
+    /**
+     * The moving time of the activity at the last boundary passed before the recovery (from the splits of the
+     * replayed activity). Without it the first split after a recovery would count only from [startMovingMs], not
+     * the whole kilometre. Defaults to [startMovingMs] for a start from zero.
+     */
+    lastBoundaryMovingMs: Long = startMovingMs,
 ) {
     init {
         require(unitM > 0) { "unitM must be positive: $unitM" }
@@ -35,7 +41,7 @@ class SplitCueTracker(
     private var lastDistanceM = startDistanceM
     private var lastMovingMs = startMovingMs
     private var nextIndex = (startDistanceM / unitM).toInt() + 1
-    private var lastCueMovingMs = startMovingMs
+    private var lastCueMovingMs = lastBoundaryMovingMs
 
     fun onSnapshot(snapshot: ActivitySnapshot): List<SplitCue> {
         val distanceM = snapshot.distanceM
