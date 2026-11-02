@@ -7,7 +7,6 @@ import dev.averyn.domain.Sport
 import dev.averyn.domain.StateEvent
 import dev.averyn.sensors.HeartRateSample
 import kotlinx.io.files.Path
-import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -20,18 +19,18 @@ import kotlin.test.assertTrue
  * The local summary of an activity (TDD-0011): the numbers the list shows when the server cannot be reached.
  */
 class LocalSummaryTest {
-    private lateinit var dir: java.nio.file.Path
+    private lateinit var dir: Path
     private lateinit var store: ActivityStore
 
     @BeforeTest
     fun setUp() {
-        dir = createTempDirectory("averyn-local-summary-test")
-        store = ActivityStore(Path(dir.toString()))
+        dir = createTestDir("averyn-local-summary-test")
+        store = ActivityStore(dir)
     }
 
     @AfterTest
     fun tearDown() {
-        dir.toFile().deleteRecursively()
+        dir.deleteRecursively()
     }
 
     private fun sample(

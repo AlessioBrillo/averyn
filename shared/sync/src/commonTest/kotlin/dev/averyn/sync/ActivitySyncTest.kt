@@ -18,11 +18,9 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
+import kotlinx.io.IOException
 import kotlinx.io.files.Path
-import java.io.File
-import java.io.IOException
-import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -32,21 +30,21 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ActivitySyncTest {
-    private lateinit var dir: java.nio.file.Path
+    private lateinit var dir: Path
     private lateinit var store: ActivityStore
     private lateinit var statuses: SyncStatusStore
     private val requests = mutableListOf<HttpRequestData>()
 
     @BeforeTest
     fun setUp() {
-        dir = createTempDirectory("averyn-sync-test")
-        store = ActivityStore(Path(dir.toString()))
+        dir = createTestDir("averyn-sync-test")
+        store = ActivityStore(dir)
         statuses = SyncStatusStore(store)
     }
 
     @AfterTest
     fun tearDown() {
-        dir.toFile().deleteRecursively()
+        dir.deleteRecursively()
     }
 
     private fun finishedActivity(
@@ -98,7 +96,7 @@ class ActivitySyncTest {
 
     @Test
     fun uploadsAFinishedActivityExactlyAsStoredAndMarksItReady() =
-        runBlocking {
+        runTest {
             finishedActivity("a1")
 
             val result = sync(created).syncPending("tok")
@@ -109,7 +107,7 @@ class ActivitySyncTest {
             assertEquals("https://server.test/v1/activities/a1", request.url.toString())
             assertEquals("Bearer tok", request.headers[HttpHeaders.Authorization])
             assertEquals("application/x-ndjson", request.body.contentType.toString())
-            assertContentEquals(File(dir.toFile(), "a1.jsonl").readBytes(), request.body.toByteArray())
+            assertContentEquals(Path(dir, "a1.jsonl").readBytes(), request.body.toByteArray())
             assertEquals(
                 SyncStatus(SyncState.READY, attempts = 1, serverActivityId = "srv-1"),
                 statuses.statusOf("a1"),
@@ -118,7 +116,7 @@ class ActivitySyncTest {
 
     @Test
     fun aReadyActivityIsNeverUploadedAgain() =
-        runBlocking {
+        runTest {
             finishedActivity("a1")
             sync(created).syncPending("tok")
             requests.clear()
@@ -131,7 +129,7 @@ class ActivitySyncTest {
 
     @Test
     fun theHeartRateSidecarGoesUpAfterItsActivity() =
-        runBlocking {
+        runTest {
             finishedActivity("a1")
             store.ensureRrMetadata(ActivityMetadata("a1", Sport.RUN, 1_000))
             store.appendRrInterval("a1", RrInterval(1_000, 1_000, 857))
@@ -148,7 +146,7 @@ class ActivitySyncTest {
 
     @Test
     fun aSidecarThatFailedRetryablyIsTriedAgainOnTheNextPass() =
-        runBlocking {
+        runTest {
             finishedActivity("a1")
             store.ensureRrMetadata(ActivityMetadata("a1", Sport.RUN, 1_000))
             store.appendRrInterval("a1", RrInterval(1_000, 1_000, 857))
@@ -176,7 +174,7 @@ class ActivitySyncTest {
 
     @Test
     fun aRefusedTokenOnTheSidecarAsksForLogin() =
-        runBlocking {
+        runTest {
             finishedActivity("a1")
             store.ensureRrMetadata(ActivityMetadata("a1", Sport.RUN, 1_000))
             store.appendRrInterval("a1", RrInterval(1_000, 1_000, 857))
@@ -195,7 +193,7 @@ class ActivitySyncTest {
 
     @Test
     fun aRefusedSidecarIsNotUploadedAgainAndTheLocalCopyGoes() =
-        runBlocking {
+        runTest {
             finishedActivity("a1")
             store.ensureRrMetadata(ActivityMetadata("a1", Sport.RUN, 1_000))
             store.appendRrInterval("a1", RrInterval(1_000, 1_000, 857))
@@ -224,7 +222,7 @@ class ActivitySyncTest {
 
     @Test
     fun serverAndNetworkTroubleIsRetriedLaterThenSucceeds() =
-        runBlocking {
+        runTest {
             finishedActivity("a1")
 
             assertEquals(1, sync(failing(HttpStatusCode.InternalServerError)).syncPending("tok").retryable)
@@ -243,7 +241,7 @@ class ActivitySyncTest {
 
     @Test
     fun aRejectedActivityIsPermanentAndNotRetried() =
-        runBlocking {
+        runTest {
             finishedActivity("a1")
             finishedActivity("a2", startedAtMs = 2_000)
 
@@ -258,7 +256,7 @@ class ActivitySyncTest {
 
     @Test
     fun aRefusedTokenStopsTheRunAndAsksForLogin() =
-        runBlocking {
+        runTest {
             finishedActivity("a1")
             finishedActivity("a2", startedAtMs = 2_000)
 
@@ -272,7 +270,7 @@ class ActivitySyncTest {
 
     @Test
     fun withoutATokenNothingIsSentAndNothingChanges() =
-        runBlocking {
+        runTest {
             finishedActivity("a1")
 
             val result = sync(created).syncPending(null)
@@ -284,7 +282,7 @@ class ActivitySyncTest {
 
     @Test
     fun onlyFinishedActivitiesAreUploadedAndFailedOnesKeepTheirData() =
-        runBlocking {
+        runTest {
             recordingActivity("running")
             finishedActivity("failed", fail = true)
 
@@ -297,7 +295,7 @@ class ActivitySyncTest {
 
     @Test
     fun theOldestActivityGoesFirst() =
-        runBlocking {
+        runTest {
             finishedActivity("newer", startedAtMs = 9_000)
             finishedActivity("older", startedAtMs = 1_000)
 
@@ -308,7 +306,7 @@ class ActivitySyncTest {
 
     @Test
     fun anUploadInterruptedByAKillIsQueuedAgain() =
-        runBlocking {
+        runTest {
             finishedActivity("a1")
             statuses.write("a1", SyncStatus(SyncState.UPLOADING, attempts = 1))
             assertEquals(SyncState.QUEUED, statuses.statusOf("a1").state)
@@ -319,9 +317,9 @@ class ActivitySyncTest {
 
     @Test
     fun anUnreadableStatusFileJustMeansUploadAgain() =
-        runBlocking {
+        runTest {
             finishedActivity("a1")
-            File(dir.toFile(), "a1.sync.json").writeText("{\"state\":")
+            Path(dir, "a1.sync.json").writeText("{\"state\":")
             assertNull(statuses.read("a1"))
 
             assertEquals(1, sync(created).syncPending("tok").uploaded)
@@ -329,7 +327,7 @@ class ActivitySyncTest {
 
     @Test
     fun aRateLimitedServerIsNotAskedAgainForEveryOtherActivity() =
-        runBlocking {
+        runTest {
             finishedActivity("a1", startedAtMs = 1_000)
             finishedActivity("a2", startedAtMs = 2_000)
 
@@ -344,7 +342,7 @@ class ActivitySyncTest {
 
     @Test
     fun aServerWithNoUploadSlotLeftStopsThePassToo() =
-        runBlocking {
+        runTest {
             finishedActivity("a1", startedAtMs = 1_000)
             finishedActivity("a2", startedAtMs = 2_000)
 
@@ -356,7 +354,7 @@ class ActivitySyncTest {
 
     @Test
     fun aDeletedAccountIsPermanentWithItsOwnReasonAndStopsThePass() =
-        runBlocking {
+        runTest {
             finishedActivity("a1", startedAtMs = 1_000)
             finishedActivity("a2", startedAtMs = 2_000)
 
@@ -369,7 +367,7 @@ class ActivitySyncTest {
 
     @Test
     fun anActivityDeletedOnTheServerIsPermanentButTheOthersStillUpload() =
-        runBlocking {
+        runTest {
             finishedActivity("a1", startedAtMs = 1_000)
             finishedActivity("a2", startedAtMs = 2_000)
 

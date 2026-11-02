@@ -13,7 +13,7 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.OutgoingContent
 import io.ktor.http.headersOf
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -50,7 +50,7 @@ class AverynClientTest {
 
     @Test
     fun `the list is read with the token`() =
-        runBlocking {
+        runTest {
             var seen: HttpRequestData? = null
             val (client, _) =
                 client { request ->
@@ -71,7 +71,7 @@ class AverynClientTest {
 
     @Test
     fun `a refused token is not repeated`() =
-        runBlocking {
+        runTest {
             var calls = 0
             val (client, _) =
                 client {
@@ -85,7 +85,7 @@ class AverynClientTest {
 
     @Test
     fun `an activity that does not exist is not repeated`() =
-        runBlocking {
+        runTest {
             var calls = 0
             val (client, _) =
                 client {
@@ -99,7 +99,7 @@ class AverynClientTest {
 
     @Test
     fun `a busy server is repeated and the wait is the one it asked for`() =
-        runBlocking {
+        runTest {
             var calls = 0
             val (client, waits) =
                 client {
@@ -118,7 +118,7 @@ class AverynClientTest {
 
     @Test
     fun `the analysis in progress is a state and not a repetition`() =
-        runBlocking {
+        runTest {
             var calls = 0
             val (client, _) =
                 client {
@@ -133,7 +133,7 @@ class AverynClientTest {
 
     @Test
     fun `a temporary failure is repeated at most twice`() =
-        runBlocking {
+        runTest {
             var calls = 0
             val (client, _) =
                 client {
@@ -147,7 +147,7 @@ class AverynClientTest {
 
     @Test
     fun `the configuration of the server carries the versions`() =
-        runBlocking {
+        runTest {
             val (client, _) =
                 client {
                     respond(
@@ -164,7 +164,7 @@ class AverynClientTest {
 
     @Test
     fun `an answer that is not the contract is a failure, not a crash`() =
-        runBlocking {
+        runTest {
             val (client, _) =
                 client {
                     respond("not json at all", HttpStatusCode.OK)
@@ -175,7 +175,7 @@ class AverynClientTest {
 
     @Test
     fun `the track is read as GeoJSON`() =
-        runBlocking {
+        runTest {
             val (client, _) =
                 client {
                     respond(
@@ -196,7 +196,7 @@ class AverynClientTest {
 
     @Test
     fun `the profile is read with the token`() =
-        runBlocking {
+        runTest {
             var seen: HttpRequestData? = null
             val (client, _) =
                 client { request ->
@@ -217,7 +217,7 @@ class AverynClientTest {
 
     @Test
     fun `the profile is saved whole with a PUT`() =
-        runBlocking {
+        runTest {
             var seen: HttpRequestData? = null
             var sent = ""
             val (client, _) =
@@ -242,7 +242,7 @@ class AverynClientTest {
 
     @Test
     fun `the account is deleted with a DELETE and a 204 is a success`() =
-        runBlocking {
+        runTest {
             var seen: HttpRequestData? = null
             val (client, _) =
                 client { request ->
@@ -260,7 +260,7 @@ class AverynClientTest {
 
     @Test
     fun `a failed deletion is repeated because the server answers 204 again`() =
-        runBlocking {
+        runTest {
             var calls = 0
             val (client, waits) =
                 client {
@@ -283,7 +283,7 @@ class AverynClientTest {
 
     @Test
     fun `a profile the server refuses is reported with its status and not repeated`() =
-        runBlocking {
+        runTest {
             var calls = 0
             val (client, _) =
                 client {

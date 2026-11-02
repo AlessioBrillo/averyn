@@ -7,7 +7,6 @@ import dev.averyn.domain.Sport
 import dev.averyn.domain.StateEvent
 import dev.averyn.sensors.HeartRateSample
 import kotlinx.io.files.Path
-import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -21,18 +20,18 @@ import kotlin.test.assertTrue
  * file produces are the same.
  */
 class RecoveryDeterminismTest {
-    private lateinit var dir: java.nio.file.Path
+    private lateinit var dir: Path
     private lateinit var store: ActivityStore
 
     @BeforeTest
     fun setUp() {
-        dir = createTempDirectory("averyn-recovery-test")
-        store = ActivityStore(Path(dir.toString()))
+        dir = createTestDir("averyn-recovery-test")
+        store = ActivityStore(dir)
     }
 
     @AfterTest
     fun tearDown() {
-        dir.toFile().deleteRecursively()
+        dir.deleteRecursively()
     }
 
     private val step = 100.0 / 111_195.08 // ~100 m of latitude
