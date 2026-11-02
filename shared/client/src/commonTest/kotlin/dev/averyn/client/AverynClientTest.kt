@@ -163,7 +163,7 @@ class AverynClientTest {
         }
 
     @Test
-    fun `an answer that is not the contract is a failure, not a crash`() =
+    fun `an answer that is not the contract is a failure and not a crash`() =
         runTest {
             val (client, _) =
                 client {

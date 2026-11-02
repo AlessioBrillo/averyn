@@ -128,7 +128,7 @@ class HistoryRepositoryTest {
         }
 
     @Test
-    fun `an activity the server deleted is not in the list any more, but its file stays`() =
+    fun `an activity the server deleted is not in the list any more but its file stays`() =
         runTest {
             localActivity("local1")
             statuses.write("local1", dev.averyn.sync.SyncStatus(dev.averyn.sync.SyncState.READY))
@@ -202,7 +202,7 @@ class HistoryRepositoryTest {
         }
 
     @Test
-    fun `the analysis in progress is a state, not a failure`() =
+    fun `the analysis in progress is a state and not a failure`() =
         runTest {
             reader.activity = summary("s1")
             repository.refreshDetail("s1", "token")
@@ -305,7 +305,7 @@ class HistoryRepositoryTest {
         }
 
     @Test
-    fun `an opened activity carries the map of its track, also from the copy`() =
+    fun `an opened activity carries the map of its track also from the copy`() =
         runTest {
             reader.activity = summary("s1")
             reader.track =
