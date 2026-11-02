@@ -28,7 +28,7 @@ internal fun exportGpx(
     }
 }
 
-/** The `diagnostics-v3` report rebuilt from the stored file, with the device context (no identifiers). */
+/** The `diagnostics-v4` report rebuilt from the stored file, with the device context (no identifiers). */
 internal fun exportDiagnostics(
     context: Context,
     store: ActivityStore,

@@ -66,7 +66,7 @@ Rule: everything in `shared/` is pure Kotlin and unit-testable on the JVM agains
 
 ### 5.2 State machine
 
-States: `IDLE, PREPARING, RECORDING, PAUSED, STOPPING, COMPLETED, FAILED`. Implemented in `shared/domain` (`ActivityState.transition`).
+States: `IDLE, PREPARING, RECORDING, PAUSED, STOPPING, COMPLETED, FAILED`. Implemented in `shared/domain` (`ActivityState.transitionTo`).
 
 ```mermaid
 stateDiagram-v2
@@ -88,6 +88,8 @@ stateDiagram-v2
 ```
 
 `FAILED` never means "data discarded": a failed activity keeps its durable raw samples and can be exported or recovered.
+
+Two moves are outside the diagram on purpose, both in `ActivityRecorder`: `start()` takes a finished activity (COMPLETED or FAILED) back to IDLE, because the apps keep one recorder for the life of the process and it serves many activities; and `recover()` sets the state found in the stored file (RECORDING, PAUSED or STOPPING) without walking the transitions, because the file already holds the ones that led there.
 
 ### 5.3 Sample model (proposal v0)
 
@@ -111,7 +113,7 @@ Supported sports in MVP-0 (Q1, closes the [roadmap open decision](../product/roa
 
 Per-sample flags (a sample can carry several; raw data is preserved): `POOR_ACCURACY`, `DUPLICATE`, `NON_MONOTONIC_TIME`, `SPEED_OUTLIER`, `JUMP`, `ALTITUDE_SPIKE`. Per-activity report: counts per flag, longest gap, sample-interval distribution, % time with accuracy ≤ 20 m, and a summarized grade (`GOOD/FAIR/POOR`).
 
-**`quality-v1` (Q3 — threshold rules, not Kalman/Savitzky–Golay for v0):** evaluated incrementally against the last *accepted* sample (spec in [`docs/metrics/gps-quality.md`](../metrics/gps-quality.md)):
+**`quality-v1` (current version: `quality-v2`, see the history in [`gps-quality.md`](../metrics/gps-quality.md); Q3 — threshold rules, not Kalman/Savitzky–Golay for v0):** evaluated incrementally against the last *accepted* sample (spec in [`docs/metrics/gps-quality.md`](../metrics/gps-quality.md)):
 
 | Flag | Rule |
 |---|---|
@@ -124,14 +126,14 @@ Per-sample flags (a sample can carry several; raw data is preserved): `POOR_ACCU
 
 Grade: `GOOD` if ≤ 5% of samples flagged and % time accuracy ≤ 20 m is ≥ 90; `POOR` if > 20% flagged or that percentage is < 50; `FAIR` otherwise. Thresholds are constants versioned with `QUALITY_ALGORITHM_VERSION`; retuned only as a new version, from fixtures.
 
-**Diagnostics export (`diagnostics-v1`):** F8's per-activity report — the `QualityReport` above plus sample/loss counts, recovery count, moving/paused time and battery start/end/drain-per-hour — is built by `ActivityRecorder` from counters it already keeps while live or replaying during `recover()`. Both apps show it after an activity completes and export it as JSON (`DiagnosticsReport.toJson`, `shared/tracking`) with a `DeviceInfo` (model/OS/app version, no device identifiers). No coordinates in the export. This is the artifact a tester attaches to a [device matrix](../testing/device-matrix.md) row.
+**Diagnostics export (`diagnostics-v1`, now `diagnostics-v4`; the constant in `Diagnostics.kt` says what each version added):** F8's per-activity report — the `QualityReport` above plus sample/loss counts, recovery count, moving/paused time and battery start/end/drain-per-hour — is built by `ActivityRecorder` from counters it already keeps while live or replaying during `recover()`. Both apps show it after an activity completes and export it as JSON (`DiagnosticsReport.toJson`, `shared/tracking`) with a `DeviceInfo` (model/OS/app version, no device identifiers). No coordinates in the export. This is the artifact a tester attaches to a [device matrix](../testing/device-matrix.md) row.
 
 ### 5.5 Local persistence and recovery
 
 - Append-only write path: every record is written and flushed individually before the caller can use it (see the storage engine bullet and [ADR-0015](../adr/0015-local-activity-store.md)); there is no batching and the state is derived from the last `EVENT`, not from a metadata field.
 - Any activity whose state is `RECORDING`/`PAUSED`/`STOPPING` without a clean end is **interrupted**: it is recovered automatically when the platform restarts the app or service ([TDD-0006 §5.1](TDD-0006-field-readiness.md)); anything that cannot resume by itself is shown on the next launch with what was kept, to resume or finish.
 - Background execution: iOS uses the location background mode with `allowsBackgroundLocationUpdates` and pause-safe settings; Android uses a foreground service of type `location` with a persistent notification. Vendor battery-killer behavior is documented per device in the matrix.
-- **Storage engine (Q2/Q4 — resolved, [ADR-0015](../adr/0015-local-activity-store.md)):** an append-only JSON Lines file per activity, one `SAMPLE` or `EVENT` record per line, written and flushed before the caller can use a sample for live metrics. `ActivityStore` in `shared/tracking` exposes `create`/`appendSample`/`appendEvent`/`forEachRecord` (streaming) /`interrupted`/`list`. A truncated or corrupt trailing line (mid-write kill) is dropped and counted as a loss with reason `TRUNCATED_RECORD` — never guessed at or silently repaired. A line that is complete but breaks the model (a latitude of 123, a heart rate of 500) is counted with its own reason, `INVALID_VALUE`, whatever the serialization library throws for it (it changed between 1.11 and 1.12); a recorder never writes one, so the server refuses an upload that has one.
+- **Storage engine (Q2/Q4 — resolved, [ADR-0015](../adr/0015-local-activity-store.md)):** an append-only JSON Lines file per activity, one `SAMPLE` or `EVENT` record per line, written and flushed before the caller can use a sample for live metrics. `ActivityStore` in `shared/tracking` exposes `create`/`appendSample`/`appendEvent`/`forEachRecord` (streaming) /`interrupted`/`list`. A truncated or corrupt trailing line (mid-write kill) is dropped and counted as a loss with reason `TRUNCATED_RECORD` — never guessed at or silently repaired. A line that is complete but breaks the model (a latitude of 123, a heart rate of 500) is counted with its own reason, `INVALID_VALUE`, whatever the serialization library throws for it (it changed between 1.11 and 1.12); a recorder never writes one, and the server counts it in `dropped_records` and keeps the rest of the upload ([ADR-0029](../adr/0029-upload-keeps-valid-lines.md)).
 
 ### 5.6 Pause semantics
 

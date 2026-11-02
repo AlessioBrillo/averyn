@@ -23,7 +23,7 @@ Without `AVERYN_KEYSTORE_FILE` there is no release signing configuration (a deve
 **One-time setup, done by the owner** (it needs accounts and keys this repository must never hold):
 
 1. A Google Play Console app with the id `dev.averyn.app`, an internal testing track and the testers' addresses.
-2. An upload keystore (`keytool -genkeys ...`), kept offline. Repository secrets: `AVERYN_KEYSTORE_BASE64` (the keystore, base64), `AVERYN_KEYSTORE_PASSWORD`, `AVERYN_KEY_ALIAS`, `AVERYN_KEY_PASSWORD`.
+2. An upload keystore (`keytool -genkeypair ...`), kept offline. Repository secrets: `AVERYN_KEYSTORE_BASE64` (the keystore, base64), `AVERYN_KEYSTORE_PASSWORD`, `AVERYN_KEY_ALIAS`, `AVERYN_KEY_PASSWORD`.
 3. Upload the downloaded `.aab` to the internal track in the Play Console.
 
 ## iOS
@@ -53,7 +53,7 @@ With several phones, add `-Pandroid.injected.device.serial=<serial>` or run `adb
 **iPhone** (from the Mac; a free Apple ID is enough, the profile lasts 7 days and the app must be re-installed after that):
 
 1. `brew install xcodegen`, then in `apps/ios`: `xcodegen`.
-2. Open `Averyn.xcodeproj`, select the target, *Signing & Capabilities*: choose your Apple ID team and let Xcode manage signing. Change the bundle id only for this local install if Xcode refuses `dev.averyn.app`, and note it in the matrix row.
+2. Open `Averyn.xcodeproj`, select the target, *Signing & Capabilities*: choose your Apple ID team and let Xcode manage signing (to keep the team across `xcodegen` runs, write `DEVELOPMENT_TEAM = <your team id>` once in `apps/ios/Config/Local.xcconfig`, which is git-ignored: a team chosen only in Xcode is forgotten when the project is regenerated). Change the bundle id only for this local install if Xcode refuses `dev.averyn.app`, and note it in the matrix row.
 3. Select the iPhone as the destination and run. For the diagnostics to carry the commit: *Edit Scheme → Run → Arguments* is not enough; build with `xcodebuild ... AVERYN_COMMIT=$(git rev-parse HEAD)` or set `AVERYN_COMMIT` in the target's build settings before running.
 4. On the phone: *Settings → General → VPN & Device Management* → trust the developer profile.
 
@@ -65,4 +65,4 @@ HealthKit and the background location mode need a real device and the capability
 
 ## After installing
 
-Run the scenarios of the device matrix. In the app, **History** exports the GPX, the `diagnostics-v3` report and the raw file of any stored activity; attach the diagnostics to the results row together with its `buildId`.
+Run the scenarios of the device matrix. In the app, **History** exports the GPX, the `diagnostics-v4` report and the raw file of any stored activity; attach the diagnostics to the results row together with its `buildId`.

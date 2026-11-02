@@ -1,0 +1,4 @@
+// Settings for every build of the app. Your own, never committed, go in Local.xcconfig next to this file:
+//   DEVELOPMENT_TEAM = ABCDE12345
+// `#include?` is optional: without that file (CI, a fresh checkout) nothing changes.
+#include? "Local.xcconfig"

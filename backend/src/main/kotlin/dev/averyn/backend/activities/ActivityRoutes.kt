@@ -16,6 +16,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.install
+import io.ktor.server.application.pluginOrNull
 import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
@@ -64,6 +65,21 @@ const val DEFAULT_REQUESTS_PER_MINUTE = 120
 internal val PER_USER = RateLimitName("per-user")
 
 /**
+ * Installs the [PER_USER] limiter once. Every module that serves authenticated routes calls it before it uses
+ * [PER_USER], so the order the modules are loaded in does not matter; the first call decides the limit, which is why
+ * the application calls it with the configured value before any module.
+ */
+internal fun Application.perUserRateLimit(requestsPerMinute: Int = DEFAULT_REQUESTS_PER_MINUTE) {
+    if (pluginOrNull(RateLimit) != null) return
+    install(RateLimit) {
+        register(PER_USER) {
+            rateLimiter(limit = requestsPerMinute, refillPeriod = 1.minutes)
+            requestKey { call -> checkNotNull(call.principal<JWTPrincipal>()).payload.subject }
+        }
+    }
+}
+
+/**
  * `PUT /v1/activities/{clientActivityId}`, `GET /v1/activities` (list), `GET /v1/activities/{id}` and
  * `GET /v1/activities/{id}/track`, owner-only (TDD-0002 §5.1, TDD-0003 §5.1); `DELETE /v1/activities/{id}`,
  * `DELETE /v1/me` and `GET /v1/me/export` (TDD-0004). When all [uploadSlots] (or [exportSlots]) are taken a further
@@ -91,12 +107,7 @@ fun Application.activities(
     profileStore: ProfileStore = ProfileStore(db),
 ) {
     val ingest = ActivityIngest(db, raw, quotaBytes)
-    install(RateLimit) {
-        register(PER_USER) {
-            rateLimiter(limit = requestsPerMinute, refillPeriod = 1.minutes)
-            requestKey { call -> checkNotNull(call.principal<JWTPrincipal>()).payload.subject }
-        }
-    }
+    perUserRateLimit(requestsPerMinute)
 
     routing {
         authenticate(OIDC_AUTH) {
