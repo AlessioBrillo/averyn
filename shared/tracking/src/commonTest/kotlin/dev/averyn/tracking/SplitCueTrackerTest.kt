@@ -59,6 +59,19 @@ class SplitCueTrackerTest {
     }
 
     @Test
+    fun theFirstSplitAfterARecoveryCountsTheWholeKilometreWhenTheLastBoundaryIsKnown() {
+        // Kilometre 2 was passed at 600 s; the recovery is at 2.4 km, 720 s. Kilometre 3 is crossed at 915 s.
+        val tracker =
+            SplitCueTracker(1_000.0, startDistanceM = 2_400.0, startMovingMs = 720_000, lastBoundaryMovingMs = 600_000)
+
+        val cue = tracker.onSnapshot(at(3_050.0, 915_000)).single()
+
+        assertEquals(3, cue.index)
+        // Crossing at 3000 m: 720 s + (915 - 720) * (600 / 650) = 900 s; the split runs from 600 s.
+        assertEquals(300_000, cue.splitMovingMs)
+    }
+
+    @Test
     fun aDistanceThatGoesBackCrossesNothingAndIsNotCountedTwice() {
         val tracker = SplitCueTracker(1_000.0)
         tracker.onSnapshot(at(1_100.0, 330_000))
