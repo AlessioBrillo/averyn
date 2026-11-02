@@ -26,6 +26,8 @@ final class AppModel {
 
     /// True when this launch resumed an interrupted activity by itself; the UI says so once.
     private(set) var resumedAtLaunch = false
+    /// The recovery of this launch, finished when it has resumed, finalized or left the interruption to the user.
+    private(set) var recovery: Task<Void, Never>?
 
     /// Whether RR intervals (Health class) may be recorded right now. Consent is server-authoritative
     /// (ADR-0021); this cache is populated from GET /v1/consents and failed closed (false) until then.
@@ -218,19 +220,36 @@ final class AppModel {
     /// TDD-0006 §5.1: after a kill or a relaunch by the system, continue an interruption that is recent, by
     /// itself. Anything older, or without precise "Always" location, is left for the user to decide
     /// (`RecorderViewModel.pendingRecovery`). Older interrupted activities are finished at their last known time.
+    ///
+    /// Reading the stored files grows with the activity (a 3 h one is ~10k lines, read more than once), so it runs
+    /// off the main thread: a slow launch is killed by iOS. Only the recorder, which is single-threaded, is touched
+    /// back on the main actor. `recovery` is what the view model awaits before it looks for something to ask.
     func resumeInterruptedIfRecent() {
         guard recorder.currentState == .idle else { return }
         let elapsedMs = nowElapsedRealtimeMs()
         let timeMs = nowTimeMs()
-        guard let decision = store.resumeDecision(nowTimeMs: timeMs, hasPrecisePermission: tracker.canRecordInBackground)
-        else { return }
-        let finishedOlder = store.finishOlderInterrupted(
-            keepId: decision.metadata.activityId,
-            nowElapsedRealtimeMs: elapsedMs,
-            nowTimeMs: timeMs
-        )
-        if finishedOlder > 0 { Task { await sync.syncNow() } }
-        guard decision.action == ResumeAction.resumeNow else { return }
+        let hasPrecisePermission = tracker.canRecordInBackground
+        let store = self.store
+        recovery = Task {
+            let (found, finishedOlder) = await Task.detached(priority: .userInitiated) { () -> (ResumeDecision?, Int32) in
+                guard let decision = store.resumeDecision(nowTimeMs: timeMs, hasPrecisePermission: hasPrecisePermission)
+                else { return (nil, 0) }
+                let finished = store.finishOlderInterrupted(
+                    keepId: decision.metadata.activityId,
+                    nowElapsedRealtimeMs: elapsedMs,
+                    nowTimeMs: timeMs
+                )
+                return (decision, finished)
+            }.value
+            if finishedOlder > 0 { Task { await sync.syncNow() } }
+            // The user may have pressed Start while the files were read: that recording owns the recorder.
+            guard let decision = found, decision.action == ResumeAction.resumeNow, recorder.currentState == .idle
+            else { return }
+            applyRecovery(decision, elapsedMs: elapsedMs, timeMs: timeMs)
+        }
+    }
+
+    private func applyRecovery(_ decision: ResumeDecision, elapsedMs: Int64, timeMs: Int64) {
         let result = recorder.recover(
             activityId: decision.metadata.activityId,
             nowElapsedRealtimeMs: elapsedMs,

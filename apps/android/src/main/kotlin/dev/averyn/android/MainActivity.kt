@@ -64,6 +64,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -100,39 +101,52 @@ private fun RecordScreen(app: AverynApplication) {
         onDispose { recorder.listener = null }
     }
 
+    // Only one recovery at a time: two (the launch and a tap on the dialog) would replay the same file twice and
+    // log a second RECOVERED event.
+    val recoveryInFlight = remember { AtomicBoolean(false) }
+
     /** Recovers [metadata] into the app's recorder; [finishNow] closes it at its last known activity time.
-     * The recover() replay itself is IO-bound (whole stored file): call it off the main thread.
-     * Returns the result so the caller can start the foreground service on the main thread after IO. */
-    fun applyRecovery(
+     * The recover() replay is IO-bound (whole stored file), so it runs on IO; the UI state and the notification
+     * are touched back on the main thread. Returns the result so the caller can start the foreground service
+     * after it, or null when another recovery was already running. */
+    suspend fun applyRecovery(
         metadata: ActivityMetadata,
         finishNow: Boolean,
     ): RecoveryResult? {
-        val (elapsedMs, timeMs) = now()
-        val result = recorder.recover(metadata.activityId, elapsedMs, timeMs)
-        val dropped =
-            when (result) {
-                is RecoveryResult.Resumed -> {
-                    if (finishNow) {
-                        // The last known activity time, not "now": the app can be reopened long after the
-                        // kill, and stopping at wall-clock now would count that whole gap as moving time.
-                        val completed = recorder.stop(recorder.lastKnownElapsedRealtimeMs, recorder.lastKnownTimeMs)
-                        completedDiagnostics = completed.diagnostics
-                        enqueueSync(context)
-                    }
-                    result.droppedRecordCount
+        if (!recoveryInFlight.compareAndSet(false, true)) return null
+        try {
+            val (elapsedMs, timeMs) = now()
+            val (result, closed) =
+                withContext(Dispatchers.IO) {
+                    val recovered = recorder.recover(metadata.activityId, elapsedMs, timeMs)
+                    val diagnostics =
+                        when {
+                            recovered is RecoveryResult.Completed -> recovered.activity.diagnostics
+                            recovered is RecoveryResult.Resumed && finishNow ->
+                                // The last known activity time, not "now": the app can be reopened long after the
+                                // kill, and stopping at wall-clock now would count that whole gap as moving time.
+                                recorder.stop(recorder.lastKnownElapsedRealtimeMs, recorder.lastKnownTimeMs).diagnostics
+                            else -> null
+                        }
+                    recovered to diagnostics
                 }
-                is RecoveryResult.Completed -> {
-                    completedDiagnostics = result.activity.diagnostics
-                    enqueueSync(context)
-                    result.droppedRecordCount
-                }
+            if (closed != null) {
+                completedDiagnostics = closed
+                enqueueSync(context)
             }
-        recoveryWarning = droppedRecordWarning(resources, dropped)
-        historyVersion++
-        // The "tap to resume" notification is no longer needed once the activity has been recovered.
-        // InterruptedNotification.NOTIFICATION_ID == 2 (same module, same channel).
-        NotificationManagerCompat.from(context).cancel(2)
-        return result
+            val dropped =
+                when (result) {
+                    is RecoveryResult.Resumed -> result.droppedRecordCount
+                    is RecoveryResult.Completed -> result.droppedRecordCount
+                }
+            recoveryWarning = droppedRecordWarning(resources, dropped)
+            historyVersion++
+            // The "tap to resume" notification is no longer needed once the activity has been recovered.
+            NotificationManagerCompat.from(context).cancel(INTERRUPTED_NOTIFICATION_ID)
+            return result
+        } finally {
+            recoveryInFlight.set(false)
+        }
     }
 
     // TDD-0001 F4 / TDD-0006 §5.1: an interruption is resumed by itself when it is recent and precise location is
@@ -158,10 +172,7 @@ private fun RecordScreen(app: AverynApplication) {
             // recover() replays the whole stored file: do it off the main thread so a long activity
             // (S11: ~10 k lines for 3 h) doesn't ANR the launcher. Start the foreground service back
             // on the main thread once IO is done.
-            val result =
-                withContext(Dispatchers.IO) {
-                    applyRecovery(decision.metadata, finishNow = false)
-                }
+            val result = applyRecovery(decision.metadata, finishNow = false)
             if (result is RecoveryResult.Resumed) {
                 context.startForegroundService(Intent(context, TrackingService::class.java))
             }
@@ -221,10 +232,7 @@ private fun RecordScreen(app: AverynApplication) {
             onResume = {
                 pendingRecovery = null
                 scope.launch {
-                    val result =
-                        withContext(Dispatchers.IO) {
-                            applyRecovery(metadata, finishNow = false)
-                        }
+                    val result = applyRecovery(metadata, finishNow = false)
                     if (result is RecoveryResult.Resumed) {
                         context.startForegroundService(Intent(context, TrackingService::class.java))
                     }
@@ -235,11 +243,7 @@ private fun RecordScreen(app: AverynApplication) {
             },
             onFinish = {
                 pendingRecovery = null
-                scope.launch {
-                    withContext(Dispatchers.IO) {
-                        applyRecovery(metadata, finishNow = true)
-                    }
-                }
+                scope.launch { applyRecovery(metadata, finishNow = true) }
             },
         )
     }

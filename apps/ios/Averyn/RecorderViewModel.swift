@@ -2,14 +2,6 @@ import Foundation
 @preconcurrency import Shared
 import UIKit
 
-/// One row of the history list (TDD-0006 R8): an activity stored on this device.
-struct HistoryRow: Identifiable {
-    let id: String
-    let title: String
-    let state: String
-    let sync: String
-}
-
 /// The files prepared for sharing one stored activity.
 struct PreparedExport {
     let gpx: URL
@@ -33,7 +25,6 @@ final class RecorderViewModel: ObservableObject {
     @Published var recoveryWarning: String?
     /// Something the user should know right now: an automatic resume, a lost permission.
     @Published var notice: String?
-    @Published var history: [HistoryRow] = []
     @Published var preparedExports: [String: PreparedExport] = [:]
     /// The list of the account (TDD-0011): the server, the copy and the activities that are only here.
     @Published var historySnapshot: HistorySnapshot?
@@ -57,12 +48,21 @@ final class RecorderViewModel: ObservableObject {
         activitiesDirectory = model.activitiesDirectory
         snapshot = recorder.snapshot()
         // TDD-0001 F4: whatever the launch did not resume by itself (see AppModel.resumeInterruptedIfRecent) is
-        // put to the user once. A recorder that is already recording owns its activity.
-        // Pick the newest interrupted activity (file listing order is arbitrary — see m5).
-        pendingRecovery = recorder.currentState == .idle
-            ? store.interrupted().sorted { $0.startedAtMs > $1.startedAtMs }.first
-            : nil
-        notice = model.resumedAtLaunch ? tr("Recording resumed after an interruption") : nil
+        // put to the user once. A recorder that is already recording owns its activity. The launch's recovery runs
+        // off the main thread, so this waits for it; reading the files here would be a second pass on main.
+        let store = self.store
+        Task { [weak self] in
+            await model.recovery?.value
+            guard let self, self.recorder.currentState == .idle else {
+                self?.notice = model.resumedAtLaunch ? tr("Recording resumed after an interruption") : nil
+                return
+            }
+            // Pick the newest interrupted activity (file listing order is arbitrary — see m5).
+            self.pendingRecovery = await Task.detached(priority: .userInitiated) {
+                store.interrupted().sorted { $0.startedAtMs > $1.startedAtMs }.first
+            }.value
+            self.notice = model.resumedAtLaunch ? tr("Recording resumed after an interruption") : nil
+        }
 
         AppModel.shared.addRecorderListener { [weak self] newSnapshot in
             DispatchQueue.main.async { self?.snapshot = newSnapshot }
@@ -70,7 +70,6 @@ final class RecorderViewModel: ObservableObject {
         tracker.onIssue = { [weak self] message in
             DispatchQueue.main.async { self?.notice = message }
         }
-        refreshHistory()
         // The activities of an older build get their local summary, so their numbers are there even offline.
         model.backfillLocalSummaries()
     }
@@ -195,7 +194,6 @@ final class RecorderViewModel: ObservableObject {
         let repository = AppModel.shared.history()
         try? await repository.deleteLocal(activityId: item.activityId)
         deviceActivities = (try? await repository.deviceData()) ?? []
-        refreshHistory()
     }
 
     func start(sport: Sport) {
@@ -229,7 +227,6 @@ final class RecorderViewModel: ObservableObject {
         guard recorder.currentState == .preparing else { return }
         recorder.cancel()
         tracker.stop()
-        refreshHistory()
     }
 
     func resolveRecoveryResume() {
@@ -244,7 +241,6 @@ final class RecorderViewModel: ObservableObject {
             export(activityId: completed.activity.activityId, diagnostics: completed.activity.diagnostics)
         }
         pendingRecovery = nil
-        refreshHistory()
     }
 
     func resolveRecoveryFinish() {
@@ -282,7 +278,6 @@ final class RecorderViewModel: ObservableObject {
         }
         self.diagnostics = diagnostics
         writeDiagnosticsJson(activityId: activityId, diagnostics: diagnostics)
-        refreshHistory()
     }
 
     private func writeDiagnosticsJson(activityId: String, diagnostics: DiagnosticsReport) {
@@ -304,31 +299,6 @@ final class RecorderViewModel: ObservableObject {
             powerSaverOn: KotlinBoolean(bool: ProcessInfo.processInfo.isLowPowerModeEnabled),
             batteryOptimisationExempt: nil
         )
-    }
-
-    /// Reloads the list of stored activities (newest first). The sync status of each is a small file read.
-    func refreshHistory() {
-        let store = self.store
-        DispatchQueue.global(qos: .utility).async {
-            let statuses = SyncStatusStore(store: store)
-            let formatter = DateFormatter()
-            formatter.dateStyle = .medium
-            formatter.timeStyle = .short
-            let rows = store.list()
-                .sorted { $0.startedAtMs > $1.startedAtMs }
-                .prefix(20)
-                .map { metadata in
-                    HistoryRow(
-                        id: metadata.activityId,
-                        title: "\(metadata.sport.name) \(formatter.string(from: Date(timeIntervalSince1970: Double(metadata.startedAtMs) / 1000)))",
-                        state: store.lastStateOf(activityId: metadata.activityId).map { "\($0)" } ?? "?",
-                        sync: "\(statuses.statusOf(activityId: metadata.activityId).state)"
-                    )
-                }
-            DispatchQueue.main.async { [weak self] in
-                self?.history = Array(rows)
-            }
-        }
     }
 
     /// Writes the GPX and the diagnostics of a stored activity next to each other (not in `tmp`, which the system
