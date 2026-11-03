@@ -2,27 +2,24 @@ package dev.averyn.backend.profile
 
 import dev.averyn.api.UserProfile
 import dev.averyn.backend.activities.PER_USER
+import dev.averyn.backend.activities.owner
 import dev.averyn.backend.activities.perUserRateLimit
-import dev.averyn.backend.auth.AccountDeletedException
 import dev.averyn.backend.auth.OIDC_AUTH
-import dev.averyn.backend.auth.userIdFor
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
-import io.ktor.server.application.ApplicationCall
 import io.ktor.server.auth.authenticate
-import io.ktor.server.auth.jwt.JWTPrincipal
-import io.ktor.server.auth.principal
 import io.ktor.server.plugins.ratelimit.rateLimit
-import io.ktor.server.request.receiveText
+import io.ktor.server.request.receiveChannel
 import io.ktor.server.response.respond
 import io.ktor.server.routing.get
 import io.ktor.server.routing.put
 import io.ktor.server.routing.routing
+import io.ktor.utils.io.readRemaining
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.io.readByteArray
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
-import java.util.UUID
 import javax.sql.DataSource
 
 /** A profile body larger than this is not a profile (it has two fields). */
@@ -48,9 +45,11 @@ fun Application.profile(
 
                 put("/v1/profile") {
                     val owner = call.owner(db) ?: return@put
-                    val body = call.receiveText()
+                    // At most one byte past the limit is read: a body without a Content-Length is not read to its end.
+                    val bytes = call.receiveChannel().readRemaining(MAX_PROFILE_BYTES + 1L).readByteArray()
+                    val body = bytes.decodeToString()
                     val parsed =
-                        if (body.length > MAX_PROFILE_BYTES) {
+                        if (bytes.size > MAX_PROFILE_BYTES) {
                             null
                         } else {
                             try {
@@ -72,16 +71,5 @@ fun Application.profile(
                 }
             }
         }
-    }
-}
-
-/** The caller's Averyn user id, or null after answering 403 because the account was deleted (ADR-0017). */
-private suspend fun ApplicationCall.owner(db: DataSource): UUID? {
-    val principal = checkNotNull(principal<JWTPrincipal>())
-    return try {
-        withContext(Dispatchers.IO) { db.userIdFor(principal) }
-    } catch (e: AccountDeletedException) {
-        respond(HttpStatusCode.Forbidden, mapOf("error" to "account deleted"))
-        null
     }
 }

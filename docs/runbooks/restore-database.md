@@ -6,7 +6,7 @@
 
 ## Steps
 
-The script `infrastructure/compose/restore.sh <backup directory>` runs steps 1 to 5 (from `infrastructure/compose`); step 6, the repeated deletions, is always yours.
+The script `infrastructure/compose/restore.sh <backup directory>` runs steps 1 to 5 (from `infrastructure/compose`); step 6, the repeated deletions, is always yours. The script refuses to unpack over a volume that already has data (two states of the instance would be mixed): restore onto a new host, or set `RESTORE_FORCE=1` when you mean to overwrite. It exits non-zero if the database does not become healthy or the dump does not load cleanly (only the "already exists" errors for the roles the image creates are expected); `backup.sh` likewise refuses a dump that `pg_dumpall` did not finish.
 
 1. Put the configuration back: `cp "$B/.env" .`, and `cp "$B/seaweedfs-s3.local.json" .` if the backup has it.
 2. Create the containers and empty volumes without starting anything: `dc up --no-start`.
