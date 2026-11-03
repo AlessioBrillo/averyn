@@ -89,7 +89,7 @@ internal fun HistorySection(
         snapshot = repository.refresh(accessToken)
         deviceData = repository.deviceData()
         // The unit system of the profile, remembered on the device for the next time without a connection.
-        app.units = repository.refreshProfile(accessToken).units
+        app.units = repository.syncProfile(accessToken).units
     }
 
     LaunchedEffect(refreshKey) {

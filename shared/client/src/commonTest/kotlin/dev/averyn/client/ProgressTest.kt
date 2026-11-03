@@ -45,6 +45,36 @@ class ProgressTest {
     }
 
     @Test
+    fun anActivityWithoutNumbersOrDateIsNotInTheTotals() {
+        val real = item("2026-10-27T10:00:00Z")
+        val recording =
+            real.copy(clientActivityId = "r", source = HistorySource.LOCAL, localEstimate = false, distanceM = 0.0)
+        val undated = real.copy(clientActivityId = "u", startedAtMs = 0)
+
+        val weeks = progressTotals(listOf(real, recording, undated), ProgressPeriod.WEEK, utc)
+
+        assertEquals(1, weeks.single().activities)
+        assertEquals(5_000.0, weeks.single().distanceM)
+        // The one being recorded is still a day of the calendar; the one without a date is on none.
+        assertEquals(mapOf(CivilDate(2026, 10, 27) to 2), activityDays(listOf(real, recording, undated), utc))
+    }
+
+    @Test
+    fun theClocksChangingDoesNotMoveARunToAnotherWeek() {
+        // Europe/Rome: summer time (UTC+2) ends on Sunday 2026-10-25 at 01:00 UTC, then it is UTC+1.
+        val rome: (Long) -> Long = { instant ->
+            if (instant < isoInstantToEpochMillis("2026-10-25T01:00:00Z")!!) 2 * hour else hour
+        }
+        val beforeTheChange = item("2026-10-24T22:30:00Z") // 00:30 on Sunday the 25th, local
+        val afterTheChange = item("2026-10-25T22:30:00Z") // 23:30 on Sunday the 25th, local; UTC+2 would say Monday
+
+        val weeks = progressTotals(listOf(beforeTheChange, afterTheChange), ProgressPeriod.WEEK, rome)
+
+        assertEquals(listOf(CivilDate(2026, 10, 19)), weeks.map { it.start })
+        assertEquals(2, weeks.single().activities)
+    }
+
+    @Test
     fun aMonthIsTheCalendarMonthAndEmptyOnesAreAbsent() {
         val items = listOf(item("2026-10-31T10:00:00Z"), item("2026-11-01T10:00:00Z"), item("2026-12-15T10:00:00Z"))
 
