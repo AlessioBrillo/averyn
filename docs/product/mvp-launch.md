@@ -8,7 +8,7 @@ Legend: ✅ in place · 🟡 partly · ⬜ not started · 🔒 needs something o
 
 | Area | State | Missing | Estimate | Evidence that closes it |
 |---|---|---|---|---|
-| Device validation | 🟡 protocol ready, **0 of 48 scenarios run** | builds on the test devices; S1–S28 and the launch rows on ≥ 2 Android and ≥ 2 iPhone with a reference strap; the fixes the campaign finds; `distance-v2` from the data | 3–4 weeks, in parallel | Filled rows in the [device matrix](../testing/device-matrix.md) |
+| Device validation | 🟡 protocol ready, **0 of 50 scenarios run** | builds on the test devices; S1–S28 and the launch rows on ≥ 2 Android and ≥ 2 iPhone with a reference strap; the fixes the campaign finds; `distance-v2` from the data | 3–4 weeks, in parallel | Filled rows in the [device matrix](../testing/device-matrix.md) |
 | Experience: recording | ⬜ the main screen of the Android app is a server field and a column of buttons | design system and mockups; a readable recording screen; voice cues | 3 weeks with the summary | S44, S47 |
 | Experience: summary | 🟡 detail, splits, curves, map exist | a summary right after the activity; the share card | in the same 3 weeks | S43 |
 | Experience: history and progress | 🟡 list, offline copy, records exist; the totals and the calendar are computed in `shared/client` (not shown by any app yet) | the screens for them, a clearer list | 2 weeks | S45 |
