@@ -69,6 +69,8 @@ An activity with fewer than two accepted samples has no split at all.
 |---|---|---|
 | splits-v1 | 2026-10-20 | Initial: 1 km (5 km for a ride), interpolated boundaries, partial last split, moving time |
 
+Correction, 2026-11-02 (no new version: the method is unchanged, an input was wrong). After a reboot the replay moved the GPS samples onto the continuous clock but not the heart-rate readings, so the average heart rate per split of an activity with a reboot was assigned to the wrong splits. Readings are now moved with the same offset. An analysis computed before this date for such an activity is wrong in that field only; recomputing it gives the right one. No activity recorded in the field was affected (the device campaign has not started).
+
 ## Reliability level
 
 Derived-reliable, as far as the distance it is built on is.

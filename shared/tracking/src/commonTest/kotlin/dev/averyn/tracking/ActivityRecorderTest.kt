@@ -8,7 +8,6 @@ import dev.averyn.domain.StateEvent
 import dev.averyn.sensors.HR_ALGORITHM_VERSION
 import dev.averyn.sensors.HeartRateSample
 import kotlinx.io.files.Path
-import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -17,18 +16,18 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class ActivityRecorderTest {
-    private lateinit var dir: java.nio.file.Path
+    private lateinit var dir: Path
     private lateinit var store: ActivityStore
 
     @BeforeTest
     fun setUp() {
-        dir = createTempDirectory("averyn-recorder-test")
-        store = ActivityStore(Path(dir.toString()))
+        dir = createTestDir("averyn-recorder-test")
+        store = ActivityStore(dir)
     }
 
     @AfterTest
     fun tearDown() {
-        dir.toFile().deleteRecursively()
+        dir.deleteRecursively()
     }
 
     private fun sample(

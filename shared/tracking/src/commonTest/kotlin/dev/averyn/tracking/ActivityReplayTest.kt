@@ -5,8 +5,6 @@ import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Reason
 import dev.averyn.domain.Sport
 import kotlinx.io.files.Path
-import java.io.File
-import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -16,18 +14,18 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
 class ActivityReplayTest {
-    private lateinit var dir: java.nio.file.Path
+    private lateinit var dir: Path
     private lateinit var store: ActivityStore
 
     @BeforeTest
     fun setUp() {
-        dir = createTempDirectory("averyn-replay-test")
-        store = ActivityStore(Path(dir.toString()))
+        dir = createTestDir("averyn-replay-test")
+        store = ActivityStore(dir)
     }
 
     @AfterTest
     fun tearDown() {
-        dir.toFile().deleteRecursively()
+        dir.deleteRecursively()
     }
 
     private val step = 100.0 / 111_195.08 // ~100 m of latitude
@@ -84,7 +82,7 @@ class ActivityReplayTest {
     @Test
     fun replayNeverWritesToTheStore() {
         recordFinishedActivity(ActivityRecorder(store), "a1")
-        val file = File(dir.toFile(), "a1.jsonl")
+        val file = Path(dir, "a1.jsonl")
         val before = file.readBytes()
 
         replay(store, "a1")
@@ -95,7 +93,7 @@ class ActivityReplayTest {
     @Test
     fun aTruncatedLastLineIsCountedNotGuessedAt() {
         recordFinishedActivity(ActivityRecorder(store), "a1")
-        File(dir.toFile(), "a1.jsonl").appendText("SAMPLE {\"timeMs\":99")
+        Path(dir, "a1.jsonl").appendText("SAMPLE {\"timeMs\":99")
 
         val replayed = replay(store, "a1")
 

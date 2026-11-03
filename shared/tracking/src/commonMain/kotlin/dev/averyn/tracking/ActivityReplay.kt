@@ -171,7 +171,7 @@ fun replay(
             is ActivityRecord.HeartRate -> {
                 // Heart-rate records don't affect GPS state/metrics; they're reported to the caller
                 // (backend computes hr-v1 from them, same as GPS samples from onMeteredSample).
-                onHeartRate(record.sample, lastState)
+                onHeartRate(record.sample.onClock(offsetMs), lastState)
                 // The metric of the activity (hr-v2) counts the samples of the recording state only.
                 if (lastState == ActivityState.RECORDING) heartRate.onSample(record.sample.bpm)
                 hasHeartRate = true
@@ -234,5 +234,8 @@ fun ActivityStore.diagnosticsOf(activityId: String): DiagnosticsReport? {
 }
 
 /** [this] with its monotonic time moved onto the continuous clock; the same instance when nothing to add. */
+internal fun HeartRateSample.onClock(offsetMs: Long): HeartRateSample =
+    if (offsetMs == 0L) this else copy(elapsedRealtimeMs = elapsedRealtimeMs + offsetMs)
+
 internal fun LocationSample.onClock(offsetMs: Long): LocationSample =
     if (offsetMs == 0L) this else copy(elapsedRealtimeMs = elapsedRealtimeMs + offsetMs)
