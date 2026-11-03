@@ -224,6 +224,8 @@ internal fun HistorySection(
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(stringResource(R.string.history))
+        // A server that does not fit the app is said where the list is, not only under Account (S27).
+        compatibilityText(resources, app.auth.compatibility())?.let { Text(it) }
         snapshot?.let { current ->
             if (current.fromCache) {
                 Text(

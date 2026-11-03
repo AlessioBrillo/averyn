@@ -443,6 +443,8 @@ private fun AccountSection(app: AverynApplication) {
             }) { Text(stringResource(R.string.sync_now)) }
         }
         compatibilityText(resources, compatibility)?.let { Text(it) }
+        // The build under test is named in every row of the device matrix: it is read here, not guessed.
+        Text(stringResource(R.string.build_id, BuildConfig.VERSION_NAME, BuildConfig.COMMIT_ID))
         if (cacheSize.isNotEmpty()) {
             Text(cacheSize)
             Button(onClick = {
@@ -638,7 +640,7 @@ private fun ProfileSection(
 }
 
 /** The warning of a version that does not fit (TDD-0011): it never stops the app from working. */
-private fun compatibilityText(
+internal fun compatibilityText(
     resources: android.content.res.Resources,
     compatibility: ClientCompatibility,
 ): String? =
@@ -740,19 +742,39 @@ private fun sportName(sport: Sport): String =
 /** TDD-0001 F8: the aggregate report, for filing a docs/testing/device-matrix.md row after a test run. */
 @Composable
 private fun DiagnosticsSummary(diagnostics: DiagnosticsReport) {
-    Text("Quality: ${diagnostics.quality.grade} (${diagnostics.quality.algorithmVersion})")
-    Text("Samples: ${diagnostics.recordingSamples}/${diagnostics.totalSamples}, losses: ${diagnostics.recordLosses}")
-    Text("Longest gap: ${diagnostics.quality.longestGapMs / 1000} s")
-    val accuracy = diagnostics.quality.accuracyWithin20mPercent
-    Text(if (accuracy == null) "Accuracy ≤ 20 m: not measured" else "Accuracy ≤ 20 m: %.0f%%".format(accuracy))
-    val drain = diagnostics.batteryDrainPercentPerHour
+    Text(stringResource(R.string.diag_quality, "${diagnostics.quality.grade}", diagnostics.quality.algorithmVersion))
     Text(
-        "Battery: ${diagnostics.batteryStartPercent ?: "—"}% → ${diagnostics.batteryEndPercent ?: "—"}%" +
-            (drain?.let { " (%.1f%%/h)".format(it) } ?: ""),
+        stringResource(
+            R.string.diag_samples,
+            diagnostics.recordingSamples,
+            diagnostics.totalSamples,
+            "${diagnostics.recordLosses}",
+        ),
+    )
+    Text(stringResource(R.string.diag_longest_gap, diagnostics.quality.longestGapMs / 1000))
+    val accuracy = diagnostics.quality.accuracyWithin20mPercent
+    Text(
+        if (accuracy == null) {
+            stringResource(R.string.diag_accuracy_none)
+        } else {
+            stringResource(R.string.diag_accuracy, accuracy)
+        },
+    )
+    val drain = diagnostics.batteryDrainPercentPerHour
+    val start = diagnostics.batteryStartPercent?.toString() ?: "—"
+    val end = diagnostics.batteryEndPercent?.toString() ?: "—"
+    Text(
+        if (drain == null) {
+            stringResource(R.string.diag_battery, start, end)
+        } else {
+            stringResource(R.string.diag_battery_rate, start, end, drain)
+        },
     )
     diagnostics.recoveryGaps.forEach { gap ->
-        val length = gap.gapMs?.let { "${it / 1000} s" } ?: "open"
-        Text("Recovered: gap $length" + if (gap.rebootDetected) " (reboot)" else "")
+        val length = gap.gapMs?.let { "${it / 1000} s" } ?: stringResource(R.string.diag_gap_open)
+        Text(
+            stringResource(if (gap.rebootDetected) R.string.diag_recovered_reboot else R.string.diag_recovered, length),
+        )
     }
 }
 
