@@ -2,6 +2,7 @@ package dev.averyn.tracking
 
 import dev.averyn.domain.ActivityState
 import dev.averyn.domain.LocationSample
+import dev.averyn.domain.Reason
 import kotlinx.io.Sink
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
@@ -42,6 +43,7 @@ fun writeGpx(
     val assessor = QualityAssessor()
     var inSegment = false
     var recording = false
+    var offsetMs = 0L
     var droppedRecordCount = 0
 
     fun closeSegmentIfOpen() {
@@ -52,12 +54,14 @@ fun writeGpx(
     store.forEachRecord(activityId, onLoss = { droppedRecordCount++ }) { record ->
         when (record) {
             is ActivityRecord.Event -> {
+                if (record.event.reason == Reason.RECOVERED) offsetMs = record.event.clockOffsetMs
                 recording = record.event.state == ActivityState.RECORDING
                 if (!recording) closeSegmentIfOpen()
             }
             is ActivityRecord.Sample -> {
                 if (!recording) return@forEachRecord
-                val flags = assessor.assess(record.sample)
+                // The quality rules compare monotonic times: after a reboot they need the continuous clock.
+                val flags = assessor.assess(record.sample.onClock(offsetMs))
                 val include = content == GpxContent.RAW || flags.none { it.excludesFromDistance }
                 if (include) {
                     if (!inSegment) {

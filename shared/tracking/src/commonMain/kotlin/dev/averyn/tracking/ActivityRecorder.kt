@@ -304,10 +304,13 @@ class ActivityRecorder(
         timeMs: Long,
         reason: Reason = Reason.USER,
     ) {
-        state = state.transitionTo(ActivityState.PAUSED)
+        // The event is written before the state changes: a full disk throws here and leaves the recorder as it was
+        // (the caller can retry) instead of in a state the file does not know.
+        val next = state.transitionTo(ActivityState.PAUSED)
+        logEvent(elapsedRealtimeMs, timeMs, ActivityState.PAUSED, reason)
+        state = next
         metrics.onPause(effective(elapsedRealtimeMs))
         trackLastKnown(elapsedRealtimeMs, timeMs)
-        logEvent(elapsedRealtimeMs, timeMs, ActivityState.PAUSED, reason)
         emit()
     }
 
@@ -315,10 +318,11 @@ class ActivityRecorder(
         elapsedRealtimeMs: Long,
         timeMs: Long,
     ) {
-        state = state.transitionTo(ActivityState.RECORDING)
+        val next = state.transitionTo(ActivityState.RECORDING)
+        logEvent(elapsedRealtimeMs, timeMs, ActivityState.RECORDING, Reason.USER)
+        state = next
         metrics.onResume(effective(elapsedRealtimeMs))
         trackLastKnown(elapsedRealtimeMs, timeMs)
-        logEvent(elapsedRealtimeMs, timeMs, ActivityState.RECORDING, Reason.USER)
         emit()
     }
 
@@ -327,15 +331,20 @@ class ActivityRecorder(
         elapsedRealtimeMs: Long,
         timeMs: Long,
     ): CompletedActivity {
-        state = state.transitionTo(ActivityState.STOPPING)
+        val stopping = state.transitionTo(ActivityState.STOPPING)
         logEvent(elapsedRealtimeMs, timeMs, ActivityState.STOPPING, Reason.USER)
+        state = stopping
         metrics.finish(effective(elapsedRealtimeMs))
         trackLastKnown(elapsedRealtimeMs, timeMs)
-        state = state.transitionTo(ActivityState.COMPLETED)
+        // The counts of a reason repeated fewer than ten times since the last write are still only in memory:
+        // the history reads them from the file, so they go there before the activity is closed.
+        if (droppedInputs.isNotEmpty()) persistDroppedInputs()
+        val completed = state.transitionTo(ActivityState.COMPLETED)
         logEvent(elapsedRealtimeMs, timeMs, ActivityState.COMPLETED, Reason.USER)
-        val completed = buildCompletedActivity()
+        state = completed
+        val result = buildCompletedActivity()
         emit()
-        return completed
+        return result
     }
 
     fun fail(
@@ -343,9 +352,10 @@ class ActivityRecorder(
         timeMs: Long,
         reason: Reason,
     ) {
-        state = state.transitionTo(ActivityState.FAILED)
-        trackLastKnown(elapsedRealtimeMs, timeMs)
+        val next = state.transitionTo(ActivityState.FAILED)
         logEvent(elapsedRealtimeMs, timeMs, ActivityState.FAILED, reason)
+        state = next
+        trackLastKnown(elapsedRealtimeMs, timeMs)
         emit()
         // ponytail: no DiagnosticsReport for a FAILED activity (there's no CompletedActivity to attach it to)
         // even though all its counters exist here. A fail-time report is only needed once the history/detail
