@@ -39,7 +39,7 @@ class ReplayResult internal constructor(
     val clockOffsetMs: Long,
     internal val recoveryGaps: RecoveryGapTracker,
     val timeline: List<TimelineEvent>,
-    /** True when at least one `HR ` record was found (diagnostics stamps `hr-v1`). */
+    /** True when at least one `HR ` record was found (diagnostics stamps the heart-rate algorithm version). */
     val hasHeartRate: Boolean = false,
     /**
      * The heart-rate metric of the activity so far (`hr-v2`): the samples of the recording state only.
@@ -170,7 +170,7 @@ fun replay(
             }
             is ActivityRecord.HeartRate -> {
                 // Heart-rate records don't affect GPS state/metrics; they're reported to the caller
-                // (backend computes hr-v1 from them, same as GPS samples from onMeteredSample).
+                // (backend computes the heart-rate metric from them, same as GPS samples from onMeteredSample).
                 onHeartRate(record.sample.onClock(offsetMs), lastState)
                 // The metric of the activity (hr-v2) counts the samples of the recording state only.
                 if (lastState == ActivityState.RECORDING) heartRate.onSample(record.sample.bpm)

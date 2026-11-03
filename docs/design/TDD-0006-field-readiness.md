@@ -125,7 +125,7 @@ See [ADR-0019](../adr/0019-crash-reporting-and-tester-builds.md). `versionCode` 
 - JWKS fetches get connect/read timeouts; the key lookup no longer holds a global lock across the network call.
 - `shared/sync`: 429 and 503 stop the pass and honour `Retry-After`; 403 and 410 are distinct permanent states (`ACCOUNT_DELETED`, `DELETED_ON_SERVER`); a running upload is not replaced by a new enqueue (`KEEP`).
 - Export validates every raw object exists before sending the first byte; a failure becomes a 5xx, never a 200 with a corrupt archive.
-- The upload → list → track → export path is covered against real PostGIS and SeaweedFS by the backend tests (Testcontainers, a stub identity provider). An end-to-end job against the real Zitadel on the Compose stack is **not built** (Q3).
+- The upload → list → track → export path is covered against real PostGIS and SeaweedFS by the backend tests (Testcontainers, a stub identity provider). The end-to-end job against the real Zitadel on the Compose stack exists since 2026-10-26: the "Signed-in round trip" step of the compose smoke test of `.github/workflows/ci.yml` mints a real token, then runs upload → list → track → export, and the restore drill after it (Q3, closed).
 
 ## 6. Test strategy
 
@@ -154,5 +154,5 @@ Seven stacked PRs, merged bottom first (docs → tracking → Android → iOS �
 |---|---|---|---|
 | Q1 | Does auto-resume after a swipe-kill behave the same on aggressive OEMs (Xiaomi, OnePlus)? | Matrix rows + guidance text | Open — needs devices |
 | Q2 | Final public name and store listing | ADR (supersedes interim part of 0008) | Open — before any public release |
-| Q3 | End-to-end CI job with real Zitadel tokens (machine-user token → `PUT` → list → track → export) | CI job | Open — needs a minting recipe that is stable in CI; the Compose smoke tests only assert `401`s today |
+| Q3 | End-to-end CI job with real Zitadel tokens (machine-user token → `PUT` → list → track → export) | CI job | Closed 2026-10-26 — the "Signed-in round trip" step of the compose smoke test (`.github/workflows/ci.yml`) |
 | Q4 | Real-device campaign S1–S14 on ≥ 2 Android and ≥ 2 iOS devices | Rows in the device matrix | Open — the exit criteria of MVP-0 and MVP-1 |
