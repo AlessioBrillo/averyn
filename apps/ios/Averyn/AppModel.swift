@@ -45,6 +45,8 @@ final class AppModel {
     /// Android watchdog). The background location session keeps this run loop alive.
     private var consentTimer: Timer?
     private static let consentRefreshInterval: TimeInterval = 2 * 60
+    /// True while the strap session of this activity runs, so that `startHeartRate`, called on every fix, starts it once.
+    private var heartRateActive = false
 
     private init() {
         let dir = FileManager.default
@@ -84,6 +86,7 @@ final class AppModel {
         // listeners (e.g. RecorderViewModel) are called after the internal logic.
         recorder.listener = { [weak self] snapshot in
             if snapshot.state.isTerminal {
+                Task { @MainActor in self?.heartRateActive = false }
                 Task { try? await self?.heartRate.stop() }
                 Task { @MainActor in self?.stopConsentRefresh() }
             }
@@ -105,11 +108,13 @@ final class AppModel {
         refreshConsents()
     }
 
-    /// Starts the heart-rate adapter once there is an activity to feed. Called from LocationTracker
-    /// when the first GPS fix arrives (recorder enters RECORDING). Best-effort: a missing strap
-    /// never stops GPS tracking.
+    /// Starts the heart-rate adapter once there is an activity to feed. Called from LocationTracker on the fixes of
+    /// a RECORDING activity: the first one, and also the first one after a recovery, which is RECORDING without
+    /// ever passing through PREPARING (the Android service does the same). Best-effort: a missing strap never
+    /// stops GPS tracking.
     private func startHeartRate() {
-        guard let activityId = recorder.currentActivityId else { return }
+        guard !heartRateActive, let activityId = recorder.currentActivityId else { return }
+        heartRateActive = true
         startConsentRefresh()
         heartRate.onSample = { [weak self] sample in
             self?.feedHeartRate(sample)
@@ -163,7 +168,11 @@ final class AppModel {
     private func startConsentRefresh() {
         consentTimer?.invalidate()
         consentTimer = Timer.scheduledTimer(withTimeInterval: Self.consentRefreshInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refreshConsents() }
+            Task { @MainActor in
+                self?.refreshConsents()
+                // A strap switched on after the start is looked for again (the first scan gives up after a few seconds).
+                self?.heartRate.searchAgainIfNeverFound()
+            }
         }
     }
 
