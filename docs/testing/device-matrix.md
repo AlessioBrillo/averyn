@@ -18,7 +18,7 @@ OS version · device model/vendor · battery state · signal quality · app stat
 
 ## Launch exit criteria
 
-The public launch ([roadmap](../product/roadmap.md#mvp-l-launch)) needs, on ≥ 2 Android and ≥ 2 iOS devices: S1–S28 green, **and** the rows of every launch feature green: S32–S41 (profile, zones, map, imports, deletion, health platforms, language) and S42–S48 (privacy zones, share card, voice cues, progress, onboarding, accessibility). S29–S31 (Synapse) are needed only for the Synapse beta.
+The public launch ([roadmap](../product/roadmap.md#mvp-l-launch)) needs, on ≥ 2 Android and ≥ 2 iOS devices: S1–S28 green, **and** the rows of every launch feature green: S32–S41 (profile, zones, map, imports, deletion, health platforms, language) and S42–S48 (privacy zones, share card, voice cues, progress, onboarding, accessibility). S29–S31 and S49–S50 (Synapse) are needed only for the Synapse beta.
 
 ## Scenarios (each run records pass/fail + notes)
 
@@ -74,6 +74,8 @@ Setup common to all: fully charged unless the scenario says otherwise, precise l
 | S46 | First run | Install on a clean phone; open the app for the first time | The app can record without an account; the permissions are explained before they are asked; the location prompt is answered once and the choice is understood; pairing a strap or the band is optional and skippable |
 | S47 | Recording screen in the real world | Run outside in bright sun, then at night, with sweaty or gloved hands | The numbers are readable at arm's length; the pause and stop buttons are hit on the first try; the screen stays on only when the user asked for it |
 | S48 | Accessibility | Turn on the largest text, then TalkBack/VoiceOver; go through recording, summary and history | No text is cut off; every control has a spoken name; the order of reading is the order of the screen; the contrast of the numbers passes AA |
+| S49 | Synapse raw signals (L1R, beta; [ADR-0030](../adr/0030-synapse-contract-v2-1-and-raw-signals.md)) | With `signal_quality` granted but **not** `raw_signals`, record ≥ 10 min with the band; then grant `raw_signals`, record again and open the signal view; then revoke `raw_signals` mid-activity | Without the scope the app never subscribes to the research service; with it, ECG and PPG draw as continuous lines with units from the contract, a sentinel is a gap and never a flat zero, every lost stretch has a marker with its reason; revoking stops the stream at once, deletes the raw file and leaves a tombstone; no diagnostic wording appears anywhere |
+| S50 | The band's clock and the signal timeline | Connect a band that was just powered on, record ≥ 10 min, take it out of range for 30 s and back, then compare the ECG peaks with the reference strap's beats | The band received the time at connection; the out-of-range stretch is a marked loss, not a stretch of interpolated line; the peaks sit within 1 s of the strap's beats over the whole recording (the 32-bit device clock wraps every 71 min and must not shift the timeline) |
 
 ### Recovery loss (S5/S6)
 

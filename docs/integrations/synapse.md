@@ -11,7 +11,7 @@ Level L0 needs no code. Level L1 is scheduled in the [roadmap](../product/roadma
 | What it is | The free app (iOS, Android, web) and the cloud | A band that talks BLE, plus a research SDK |
 | Owns | Accounts, consent, activities, the only system of record | The device, its firmware, the byte-level contract |
 | Pays for | The managed cloud, from donations and from the margin of the bands sold ([business model](../product/business-model.md)) | The band, sold at a price that includes that margin |
-| Never does | Call the Synapse data-plane API, subscribe to the raw research streams | Run a consumer cloud or hold user accounts; the provisioning path to a cloud in the firmware is not used by the product |
+| Never does | Call the Synapse data-plane API. It subscribes to the raw research streams only with the `raw_signals` consent ([ADR-0030](../adr/0030-synapse-contract-v2-1-and-raw-signals.md)) | Run a consumer cloud or hold user accounts; the provisioning path to a cloud in the firmware is not used by the product |
 
 Data path: band → BLE → phone (Averyn) → sync → Averyn cloud. Nothing else. The pages and calls that the Synapse repository's own interface document once assumed (an HTTP pull by Averyn, `/synapse/*` pages) are dropped: that document is rewritten in the device repository ([#72](https://github.com/AlessioBrillo/averyn/issues/72)).
 
@@ -31,6 +31,8 @@ The contract is owned by the device repository (`SYNAPSE-24`): `contracts/gatt_v
 | Golden vectors | `feature_frame_v1_vectors.json`, same folder: frame bytes → expected values, 9 of them (every field present; what the current firmware sends; everything not available; a wrapping counter and a negative temperature; out-of-range values; a longer frame; an unknown version; a cut frame; nothing). Generated with Python's `struct` from the packed layout of `synapse_feature_stream_t`: the device SDK decodes only the raw research streams, so there is no decoder there to take vectors from |
 
 **How a contract change travels.** (1) A pull request in the device repository changes `contracts/` and bumps the version, regenerates the vectors with the SDK encoder and updates its own checks; (2) a pull request here updates the vendored copy, the sha256 in the test and the parser, with the vectors as tests; (3) neither merges alone — the second is opened against the first and both are merged the same day. Until the vectors come from the SDK encoder, the ones here are generated from the packed struct and are labelled as such. A frame whose version this parser does not know is counted as a loss and skipped, never interpreted (ADR-0014).
+
+**Next pin (ADR-0030, proposed).** The device repository corrected its consumer contract v2 before anyone pinned it (contract **2.1**: `motion_artifact` kept, one definition of `flags`, a sentinel for `stress_level` and `sport_type`, a unit and a scale per field, a display unit per raw stream, `set_time`) and published `contracts/raw_frame_v1.json` with vectors for raw frames. Averyn re-pins to `gatt_v2.json` 2.1 and `raw_frame_v1.json` in the pull request that adds their parser, together with the device repository; until then the pin above is the one in force. The raw streams are shown in Averyn only (level L1R, scope `raw_signals`); the device repository ships no viewer.
 
 ### 1b. What is in place
 

@@ -32,6 +32,8 @@ struct ContentView: View {
             }
             .padding()
         }
+        // Pull down to read the history again (the server and the files of this device): S24, S26.
+        .refreshable { await viewModel.refreshAccountHistory() }
         .alert(
             "Interrupted activity found",
             isPresented: .constant(viewModel.pendingRecovery != nil),
@@ -88,7 +90,11 @@ struct ContentView: View {
             }
             if let snapshot = viewModel.historySnapshot {
                 if snapshot.fromCache {
-                    Text("Offline copy — the server could not be reached.")
+                    if let copiedAt = snapshot.cachedAtMs?.int64Value {
+                        Text(tr("Offline copy of %@ — the server could not be reached.", formatDate(copiedAt)))
+                    } else {
+                        Text("Offline copy — the server could not be reached.")
+                    }
                 }
                 if snapshot.needsLogin {
                     Text("Sign in to read the activities of the account.")
@@ -162,7 +168,11 @@ struct ContentView: View {
                 }
             }
             if detail.fromCache {
-                Text("Offline copy")
+                if let copiedAt = detail.cachedAtMs?.int64Value {
+                    Text(tr("Offline copy of %@", formatDate(copiedAt)))
+                } else {
+                    Text("Offline copy")
+                }
             }
         }
     }
@@ -347,10 +357,13 @@ private struct AccountSection: View {
     @State private var cacheSize: String = ""
     @State private var confirmingDelete = false
     @State private var deleteWord = ""
+    /// What the user is typing; it becomes the server of the app only when committed (see `AuthManager.serverURL`).
+    @State private var serverField = ""
 
     var body: some View {
         VStack(spacing: 8) {
-            TextField("Server URL", text: $auth.serverURL)
+            TextField("Server URL", text: $serverField)
+                .onSubmit { auth.serverURL = serverField }
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(.URL)
@@ -360,6 +373,7 @@ private struct AccountSection: View {
                     Button("Sign out") { auth.signOut() }
                 } else {
                     Button("Sign in") {
+                        auth.serverURL = serverField
                         Task {
                             do {
                                 try await auth.signIn()
@@ -371,7 +385,10 @@ private struct AccountSection: View {
                         }
                     }
                 }
-                Button("Sync now") { Task { await sync.syncNow() } }
+                Button("Sync now") {
+                    auth.serverURL = serverField
+                    Task { await sync.syncNow() }
+                }
             }
             if let warning = compatibilityText(compatibility) {
                 Text(warning)
@@ -438,6 +455,7 @@ private struct AccountSection: View {
                 try? await Task.sleep(for: .seconds(3))
             }
         }
+        .onAppear { serverField = auth.serverURL }
     }
 
     /// What the copy of the server occupies on this device.

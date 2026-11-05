@@ -51,6 +51,7 @@ import dev.averyn.api.ClientCompatibility
 import dev.averyn.api.UnitSystem
 import dev.averyn.api.UserProfile
 import dev.averyn.api.parseMaxHr
+import dev.averyn.client.UnitFormat
 import dev.averyn.domain.ActivityState
 import dev.averyn.domain.Sport
 import dev.averyn.sync.SyncStatusStore
@@ -66,7 +67,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -99,13 +99,12 @@ private fun RecordScreen(app: AverynApplication) {
     val scope = rememberCoroutineScope()
 
     DisposableEffect(recorder) {
-        recorder.listener = { snapshot = it }
-        onDispose { recorder.listener = null }
+        val remove = app.addRecorderListener { snapshot = it }
+        onDispose { remove() }
     }
 
-    // Only one recovery at a time: two (the launch and a tap on the dialog) would replay the same file twice and
-    // log a second RECOVERED event.
-    val recoveryInFlight = remember { AtomicBoolean(false) }
+    // Only one recovery at a time, for the screen and for the service restarted by the system (see the field).
+    val recoveryInFlight = app.recoveryInFlight
 
     /** Recovers [metadata] into the app's recorder; [finishNow] closes it at its last known activity time.
      * The recover() replay is IO-bound (whole stored file), so it runs on IO; the UI state and the notification
@@ -154,7 +153,17 @@ private fun RecordScreen(app: AverynApplication) {
     // TDD-0001 F4 / TDD-0006 §5.1: an interruption is resumed by itself when it is recent and precise location is
     // granted (the service normally got there first); anything else is put to the user.
     LaunchedEffect(Unit) {
-        if (recorder.currentState != ActivityState.IDLE) return@LaunchedEffect
+        if (recorder.currentState != ActivityState.IDLE) {
+            // The process was recreated and the service got there first (a sticky restart runs in the background,
+            // where location may be withheld): the screen is in the foreground now, so the service is started again
+            // from here. It is a no-op for a service that already runs, and it registers the location updates anew.
+            if (recorder.currentState in
+                listOf(ActivityState.PREPARING, ActivityState.RECORDING, ActivityState.PAUSED)
+            ) {
+                context.startForegroundService(Intent(context, TrackingService::class.java))
+            }
+            return@LaunchedEffect
+        }
         val (elapsedMs, timeMs) = now()
         val decision =
             withContext(Dispatchers.IO) { app.store.resumeDecision(timeMs, hasPreciseLocation(context)) }
@@ -184,6 +193,42 @@ private fun RecordScreen(app: AverynApplication) {
         }
     }
 
+    // "Allow all the time" (Android 10+) is what lets a recording the system killed come back by itself (S5, S6).
+    // It is asked once per launch, after the precise location and with an explanation first; refusing it never
+    // blocks a recording (the interrupted-activity notification is the fallback).
+    var backgroundAsked by remember { mutableStateOf(false) }
+    var backgroundExplain by remember { mutableStateOf(false) }
+    val backgroundLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+            if (recorder.currentState == ActivityState.IDLE) startRecording(context, app, pendingSport)
+        }
+
+    /** The step before every start: the background permission once, then the recording. */
+    fun startOrAskBackground() {
+        val granted =
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+        if (backgroundLocationWanted(Build.VERSION.SDK_INT, hasPreciseLocation(context), granted) && !backgroundAsked) {
+            backgroundAsked = true
+            backgroundExplain = true
+        } else {
+            startRecording(context, app, pendingSport)
+        }
+    }
+
+    if (backgroundExplain) {
+        BackgroundLocationDialog(
+            onAllow = {
+                backgroundExplain = false
+                backgroundLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            },
+            onSkip = {
+                backgroundExplain = false
+                if (recorder.currentState == ActivityState.IDLE) startRecording(context, app, pendingSport)
+            },
+        )
+    }
+
     /** Completes an in-flight start/resume after the location grant; never starts a second activity
      * on top of one that is already PAUSED/RECORDING (that would throw IllegalStateException). */
     val permissionLauncher =
@@ -197,7 +242,7 @@ private fun RecordScreen(app: AverynApplication) {
                 return@rememberLauncherForActivityResult
             }
             when (recorder.currentState) {
-                ActivityState.IDLE -> startRecording(context, app, pendingSport)
+                ActivityState.IDLE -> startOrAskBackground()
                 ActivityState.PAUSED -> {
                     val (e, t) = now()
                     recorder.resume(e, t)
@@ -216,7 +261,7 @@ private fun RecordScreen(app: AverynApplication) {
     val optionalLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             // Refused or not, the recording goes on (GPS only without the strap).
-            if (recorder.currentState == ActivityState.IDLE) startRecording(context, app, pendingSport)
+            if (recorder.currentState == ActivityState.IDLE) startOrAskBackground()
         }
 
     /** Fine + coarse go together (Android 12+ ignores a fine-only request); notifications only where they exist. */
@@ -268,7 +313,7 @@ private fun RecordScreen(app: AverynApplication) {
             notice?.let { Text(it) }
             recoveryWarning?.let { Text(it) }
             permissionMessage?.let { Text(it) }
-            LiveMetrics(snapshot)
+            LiveMetrics(snapshot, UnitFormat(app.units))
             Controls(
                 snapshot = snapshot,
                 onStart = { sport ->
@@ -285,7 +330,7 @@ private fun RecordScreen(app: AverynApplication) {
                             }
                         optionalAsked = true
                         if (missing.isEmpty()) {
-                            startRecording(context, app, sport)
+                            startOrAskBackground()
                         } else {
                             optionalLauncher.launch(missing.toTypedArray())
                         }
@@ -687,11 +732,14 @@ private fun latestSyncText(
 }
 
 @Composable
-private fun LiveMetrics(snapshot: LiveSnapshot) {
+private fun LiveMetrics(
+    snapshot: LiveSnapshot,
+    format: UnitFormat,
+) {
     Text(stringResource(R.string.live_state, snapshot.state))
-    Text(stringResource(R.string.live_distance, snapshot.metrics.distanceM))
+    Text(stringResource(R.string.live_distance, format.distance(snapshot.metrics.distanceM)))
     Text(stringResource(R.string.live_elapsed, snapshot.metrics.elapsedMs / 1000.0))
-    Text(stringResource(R.string.live_pace, snapshot.metrics.paceSecPerKm?.let { "%.0f s/km".format(it) } ?: "—"))
+    Text(stringResource(R.string.live_pace, snapshot.metrics.paceSecPerKm?.let { format.pace(it) } ?: "—"))
     Text(stringResource(R.string.live_quality, snapshot.quality.grade))
 }
 
@@ -790,6 +838,20 @@ private fun RecoveryDialog(
         text = { Text(stringResource(R.string.recovery_text, metadata.sport)) },
         confirmButton = { TextButton(onClick = onResume) { Text(stringResource(R.string.resume)) } },
         dismissButton = { TextButton(onClick = onFinish) { Text(stringResource(R.string.finish_now)) } },
+    )
+}
+
+@Composable
+private fun BackgroundLocationDialog(
+    onAllow: () -> Unit,
+    onSkip: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onSkip,
+        title = { Text(stringResource(R.string.background_location_title)) },
+        text = { Text(stringResource(R.string.background_location_text)) },
+        confirmButton = { TextButton(onClick = onAllow) { Text(stringResource(R.string.background_location_allow)) } },
+        dismissButton = { TextButton(onClick = onSkip) { Text(stringResource(R.string.background_location_skip)) } },
     )
 }
 

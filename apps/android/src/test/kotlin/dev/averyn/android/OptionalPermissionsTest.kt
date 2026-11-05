@@ -20,4 +20,13 @@ class OptionalPermissionsTest {
         )
         assertEquals(emptyList(), optionalPermissionsMissing(34) { true })
     }
+
+    @Test
+    fun backgroundLocationIsAskedOnlyWhereItExistsAfterThePreciseOneAndWhenMissing() {
+        assertEquals(false, backgroundLocationWanted(28, hasPreciseLocation = true, backgroundGranted = false))
+        assertEquals(false, backgroundLocationWanted(34, hasPreciseLocation = false, backgroundGranted = false))
+        assertEquals(false, backgroundLocationWanted(34, hasPreciseLocation = true, backgroundGranted = true))
+        assertEquals(true, backgroundLocationWanted(29, hasPreciseLocation = true, backgroundGranted = false))
+        assertEquals(true, backgroundLocationWanted(34, hasPreciseLocation = true, backgroundGranted = false))
+    }
 }

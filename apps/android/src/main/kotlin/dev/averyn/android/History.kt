@@ -186,8 +186,16 @@ internal fun HistorySection(
                 HealthConnectAvailability.UPDATE_NEEDED ->
                     message = resources.getString(R.string.health_update_needed)
                 HealthConnectAvailability.AVAILABLE -> {
-                    val granted = HealthConnectClient.getOrCreate(context).permissionController.getGrantedPermissions()
-                    if (granted.containsAll(HealthConnectExporter.PERMISSIONS)) {
+                    // The provider can fail at the call (it is another app): say so instead of crashing the screen.
+                    val granted =
+                        try {
+                            HealthConnectClient.getOrCreate(context).permissionController.getGrantedPermissions()
+                        } catch (e: Exception) {
+                            null
+                        }
+                    if (granted == null) {
+                        message = resources.getString(R.string.health_not_available)
+                    } else if (granted.containsAll(HealthConnectExporter.PERMISSIONS)) {
                         saveToHealth(activityId)
                     } else {
                         healthPending = activityId

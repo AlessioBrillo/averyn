@@ -61,6 +61,10 @@
     <string name="sync_deleted_on_server">eliminata sul server</string>
     <string name="resumed_notice">Registrazione ripresa dopo un\'interruzione</string>
     <string name="precise_location_needed">Per registrare serve la posizione precisa. Scegli «Precisa» quando richiesto, oppure consentila nelle impostazioni dell\'app.</string>
+    <string name="background_location_title">Continua a registrare se l\'app si chiude</string>
+    <string name="background_location_text">Se il telefono chiude l\'app o si riavvia durante un\'attività, Averyn può riprendere la registrazione da solo solo se la posizione è consentita sempre. Nella schermata successiva scegli «Consenti sempre». La posizione resta su questo telefono e viene usata solo mentre un\'attività è in registrazione. Puoi saltare: la registrazione funziona comunque e riceverai una notifica per riprenderla.</string>
+    <string name="background_location_allow">Continua</string>
+    <string name="background_location_skip">Non ora</string>
     <string name="battery_guidance">L\'ottimizzazione della batteria può interrompere una registrazione lunga. Imposta Averyn su senza restrizioni / non ottimizzata.</string>
     <string name="battery_settings">Impostazioni batteria</string>
     <string name="server_url">URL del server</string>
@@ -100,7 +104,7 @@
     <string name="sync_recording">Sincronizzazione: %1$s (in registrazione)</string>
     <string name="sync_state">Sincronizzazione: %1$s</string>
     <string name="live_state">Stato: %1$s</string>
-    <string name="live_distance">Distanza: %1$.0f m</string>
+    <string name="live_distance">Distanza: %1$s</string>
     <string name="live_elapsed">Trascorso: %1$.0f s</string>
     <string name="live_pace">Passo: %1$s</string>
     <string name="live_quality">Qualità GPS: %1$s</string>
