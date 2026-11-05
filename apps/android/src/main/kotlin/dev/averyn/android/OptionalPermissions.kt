@@ -19,3 +19,13 @@ internal fun optionalPermissionsMissing(
             add(Manifest.permission.BLUETOOTH_CONNECT)
         }
     }.filterNot(isGranted)
+
+/**
+ * Whether "Allow all the time" is worth asking now: only where it exists (Android 10+), only once the precise location
+ * is there (Android 11+ sends the user to Settings and refuses the two in one request), and only if it is not granted.
+ */
+internal fun backgroundLocationWanted(
+    sdk: Int,
+    hasPreciseLocation: Boolean,
+    backgroundGranted: Boolean,
+): Boolean = sdk >= Build.VERSION_CODES.Q && hasPreciseLocation && !backgroundGranted
