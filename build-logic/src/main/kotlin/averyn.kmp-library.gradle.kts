@@ -19,3 +19,8 @@ kotlin {
 }
 
 tasks.withType<Test>().configureEach { useJUnitPlatform() }
+
+// The message of a failed test, not only its class: a Kotlin/Native failure is otherwise a bare exception name.
+tasks.withType<org.gradle.api.tasks.testing.AbstractTestTask>().configureEach {
+    testLogging.exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+}

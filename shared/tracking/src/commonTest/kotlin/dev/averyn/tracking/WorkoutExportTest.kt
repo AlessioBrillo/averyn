@@ -5,7 +5,6 @@ import dev.averyn.domain.Sport
 import dev.averyn.sensors.HeartRateSample
 import kotlinx.io.files.Path
 import kotlinx.io.readString
-import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -16,18 +15,18 @@ import kotlin.test.assertTrue
 
 /** The workout a health platform is given (TDD-0014): what is in it and what is deliberately not. */
 class WorkoutExportTest {
-    private lateinit var dir: java.nio.file.Path
+    private lateinit var dir: Path
     private lateinit var store: ActivityStore
 
     @BeforeTest
     fun setUp() {
-        dir = createTempDirectory("averyn-workout-test")
-        store = ActivityStore(Path(dir.toString()))
+        dir = createTestDir("averyn-workout-test")
+        store = ActivityStore(dir)
     }
 
     @AfterTest
     fun tearDown() {
-        dir.toFile().deleteRecursively()
+        dir.deleteRecursively()
     }
 
     private val step = 100.0 / 111_195.08

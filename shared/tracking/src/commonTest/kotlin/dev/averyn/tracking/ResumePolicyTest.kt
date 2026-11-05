@@ -6,7 +6,6 @@ import dev.averyn.domain.Reason
 import dev.averyn.domain.Sport
 import dev.averyn.domain.StateEvent
 import kotlinx.io.files.Path
-import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -14,18 +13,18 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class ResumePolicyTest {
-    private lateinit var dir: java.nio.file.Path
+    private lateinit var dir: Path
     private lateinit var store: ActivityStore
 
     @BeforeTest
     fun setUp() {
-        dir = createTempDirectory("averyn-resume-test")
-        store = ActivityStore(Path(dir.toString()))
+        dir = createTestDir("averyn-resume-test")
+        store = ActivityStore(dir)
     }
 
     @AfterTest
     fun tearDown() {
-        dir.toFile().deleteRecursively()
+        dir.deleteRecursively()
     }
 
     private val wallBase = 1_000_000L
