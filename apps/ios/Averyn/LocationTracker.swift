@@ -36,6 +36,13 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
         manager.authorizationStatus == .authorizedAlways && manager.accuracyAuthorization == .fullAccuracy
     }
 
+    /// Fixes can arrive now: some location permission and the precise one (Android's `hasPreciseLocation`).
+    var canRecord: Bool {
+        let status = manager.authorizationStatus
+        return (status == .authorizedAlways || status == .authorizedWhenInUse)
+            && manager.accuracyAuthorization == .fullAccuracy
+    }
+
     /// A short, fixed vocabulary for the diagnostics report (never free text).
     var permissionLabel: String {
         let precise = manager.accuracyAuthorization == .fullAccuracy
@@ -106,6 +113,10 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
         for location in locations {
             if recorder.currentState == .preparing {
                 recorder.gpsReady(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs())
+            }
+            // The strap starts on the fixes of a RECORDING activity, once (`AppModel` ignores the repeats): also
+            // after a recovery, which is RECORDING without ever passing through PREPARING.
+            if recorder.currentState == .recording {
                 onGpsReady?()
             }
             // Always forward the fix: ActivityRecorder.onSample stores it in every non-terminal state (F5)

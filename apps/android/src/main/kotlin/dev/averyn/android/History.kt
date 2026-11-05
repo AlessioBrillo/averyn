@@ -89,7 +89,7 @@ internal fun HistorySection(
         snapshot = repository.refresh(accessToken)
         deviceData = repository.deviceData()
         // The unit system of the profile, remembered on the device for the next time without a connection.
-        app.units = repository.refreshProfile(accessToken).units
+        app.units = repository.syncProfile(accessToken).units
     }
 
     LaunchedEffect(refreshKey) {
@@ -186,8 +186,16 @@ internal fun HistorySection(
                 HealthConnectAvailability.UPDATE_NEEDED ->
                     message = resources.getString(R.string.health_update_needed)
                 HealthConnectAvailability.AVAILABLE -> {
-                    val granted = HealthConnectClient.getOrCreate(context).permissionController.getGrantedPermissions()
-                    if (granted.containsAll(HealthConnectExporter.PERMISSIONS)) {
+                    // The provider can fail at the call (it is another app): say so instead of crashing the screen.
+                    val granted =
+                        try {
+                            HealthConnectClient.getOrCreate(context).permissionController.getGrantedPermissions()
+                        } catch (e: Exception) {
+                            null
+                        }
+                    if (granted == null) {
+                        message = resources.getString(R.string.health_not_available)
+                    } else if (granted.containsAll(HealthConnectExporter.PERMISSIONS)) {
                         saveToHealth(activityId)
                     } else {
                         healthPending = activityId
@@ -224,6 +232,8 @@ internal fun HistorySection(
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(stringResource(R.string.history))
+        // A server that does not fit the app is said where the list is, not only under Account (S27).
+        compatibilityText(resources, app.auth.compatibility())?.let { Text(it) }
         snapshot?.let { current ->
             if (current.fromCache) {
                 Text(

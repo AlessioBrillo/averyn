@@ -46,6 +46,7 @@ fun progressTotals(
 ): List<PeriodTotals> =
     items
         .filter { sport == null || it.sport == sport }
+        .filter { it.countsInTotals() }
         .groupBy { periodStart(localDay(it.startedAtMs, offsetMsAt), period) }
         .map { (start, group) ->
             PeriodTotals(
@@ -61,7 +62,16 @@ fun progressTotals(
 fun activityDays(
     items: List<HistoryItem>,
     offsetMsAt: (Long) -> Long,
-): Map<CivilDate, Int> = items.groupingBy { localDay(it.startedAtMs, offsetMsAt) }.eachCount()
+): Map<CivilDate, Int> =
+    items.filter { it.startedAtMs != 0L }.groupingBy { localDay(it.startedAtMs, offsetMsAt) }.eachCount()
+
+/**
+ * An activity with no date (it did not parse and reads as the epoch: it would land in 1970) or whose numbers are
+ * not there yet (a file on this device still recording, or not summarized) is not in the totals: it would add an
+ * activity and zero metres. One without numbers is still a day on the calendar if it has a date.
+ */
+private fun HistoryItem.countsInTotals(): Boolean =
+    startedAtMs != 0L && (source != HistorySource.LOCAL || localEstimate)
 
 private const val DAY_MS = 86_400_000L
 
