@@ -70,7 +70,7 @@ Optional third-party sensor integration. The rules are [ADR-0010](../adr/0010-ec
 
 ## MVP-0 and MVP-1 gates still open
 
-Real-device runs (device matrix S1–S28) take priority over any new feature. [TDD-0006](../design/TDD-0006-field-readiness.md) fixed the defects an audit found on 2026-10-15; what is left is the campaign itself, the tester distribution ([ADR-0019](../adr/0019-crash-reporting-and-tester-builds.md)) and an end-to-end CI job against the real identity provider (TDD-0006 Q3, Q4).
+Real-device runs (device matrix S1–S28) take priority over any new feature. [TDD-0006](../design/TDD-0006-field-readiness.md) fixed the defects an audit found on 2026-10-15; what is left is the campaign itself, the tester distribution ([ADR-0019](../adr/0019-crash-reporting-and-tester-builds.md)). The end-to-end CI job against the real identity provider exists (the signed-in round trip and the restore drill of `.github/workflows/ci.yml`, TDD-0006 Q3); Q4 is the campaign.
 
 MVP-0 work order, from [report §22](reference-report-v0.1.md): requirements → sample model → iOS adapter → Android adapter → local storage → pause/resume/recovery → base metrics → fixtures and tests → real-device validation. Spec: [TDD-0001](../design/TDD-0001-tracking-engine.md).
 

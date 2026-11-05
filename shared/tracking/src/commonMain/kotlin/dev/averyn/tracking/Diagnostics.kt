@@ -66,7 +66,7 @@ data class AlgorithmVersions(
     val time: String,
     val speed: String,
     val quality: String,
-    /** `hr-v1` when heart-rate samples were recorded, null otherwise. */
+    /** The heart-rate algorithm version (`hr-v2`) when heart-rate samples were recorded, null otherwise. */
     val heartRate: String? = null,
 )
 
