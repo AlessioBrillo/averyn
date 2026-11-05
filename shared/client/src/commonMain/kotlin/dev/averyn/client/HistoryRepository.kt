@@ -40,6 +40,9 @@ class HistoryRepository(
     private val nowMs: () -> Long = { currentTimeMillis() },
 ) {
     companion object {
+        /** The most pages [refreshAll] reads (50 activities each): 10,000 activities, then it says there is more. */
+        const val MAX_PAGES = 200
+
         /**
          * The repository the apps use: the cache lives in its own directory (never in the store of the
          * activities), and the client talks to one server.
@@ -114,6 +117,43 @@ class HistoryRepository(
             val savedAt = nowMs()
             cache.writeSummaries(merged, page.nextCursor, savedAt)
             snapshot(serverItems = merged, nextCursor = page.nextCursor, fromCache = false, cachedAtMs = savedAt)
+        }
+
+    /**
+     * Reads every page of the list and keeps the whole history in the cache: what the progress totals and the calendar
+     * count (S45), which the first page alone would understate. When the walk reaches the end the cache is exactly what
+     * the server has: an activity deleted there leaves the copy. When it stops half way (a failure, or [MAX_PAGES]) the
+     * pages read are merged into what was cached and the cursor says there is more.
+     */
+    suspend fun refreshAll(accessToken: String?): HistorySnapshot =
+        withContext(Dispatchers.Default) {
+            val cached = cache.readSummaries()
+            if (accessToken.isNullOrBlank()) return@withContext refresh(accessToken)
+            val read = mutableListOf<ActivitySummary>()
+            var cursor: String? = null
+            var pages = 0
+            do {
+                val result = client.listActivities(accessToken, cursor, AverynClient.DEFAULT_PAGE_SIZE)
+                val page = result.value
+                if (page == null) {
+                    val failure = result.failure
+                    return@withContext snapshot(
+                        serverItems = mergeCachedSummaries(cached?.items.orEmpty(), read),
+                        nextCursor = cached?.nextCursor,
+                        fromCache = true,
+                        cachedAtMs = cached?.savedAtMs,
+                        needsLogin = failure?.kind == ApiFailureKind.UNAUTHORIZED,
+                        failure = failure,
+                    )
+                }
+                read += page.items
+                cursor = page.nextCursor
+                pages++
+            } while (cursor != null && pages < MAX_PAGES)
+            val items = if (cursor == null) read else mergeCachedSummaries(cached?.items.orEmpty(), read)
+            val savedAt = nowMs()
+            cache.writeSummaries(items, cursor, savedAt)
+            snapshot(serverItems = items, nextCursor = cursor, fromCache = false, cachedAtMs = savedAt)
         }
 
     /** Reads the next page of the list and keeps it in the cache. */
@@ -314,7 +354,13 @@ class HistoryRepository(
                     failure = ApiFailure(ApiFailureKind.UNEXPECTED, status = 422),
                 )
             }
-            localProfile?.write(StoredProfile(profile, unsynced = true))
+            if (localProfile?.write(StoredProfile(profile, unsynced = true)) == false) {
+                return@withContext ProfileSnapshot(
+                    units = localProfile?.read()?.profile?.units ?: UnitSystem.METRIC,
+                    fromCache = true,
+                    failure = ApiFailure(ApiFailureKind.UNEXPECTED),
+                )
+            }
             if (accessToken.isNullOrBlank()) {
                 return@withContext ProfileSnapshot(
                     profile,
@@ -335,7 +381,9 @@ class HistoryRepository(
     suspend fun syncProfile(accessToken: String?): ProfileSnapshot =
         withContext(Dispatchers.Default) {
             if (accessToken.isNullOrBlank()) {
-                val profile = localProfile?.read()?.profile ?: UserProfile()
+                val profile =
+                    localProfile?.takeIf { it.exists() }?.read()?.profile
+                        ?: UserProfile(cache.readUnits() ?: UnitSystem.METRIC, null)
                 return@withContext ProfileSnapshot(profile, profile.units, fromCache = true)
             }
             syncProfileNow(accessToken)
@@ -353,46 +401,16 @@ class HistoryRepository(
         if (server == null) {
             return ProfileSnapshot(local.profile, local.profile.units, fromCache = true, failure = result.failure)
         }
+        // The user can edit while the call is in flight: the answer is older than that edit, so it must not replace it.
+        // The edit stays marked as unsynced and goes up with the next sync.
+        val now = localProfile?.read()
+        if (now != null && now != local) {
+            return ProfileSnapshot(now.profile, now.profile.units, fromCache = true)
+        }
         localProfile?.write(StoredProfile(server))
         cache.writeUnits(server.units)
         return ProfileSnapshot(server, server.units)
     }
-
-    /**
-     * Reads the profile from the server (TDD-0012). The unit system is remembered, so that the numbers are written
-     * the same way without a connection; the maximum heart rate is not kept on the device.
-     */
-    suspend fun refreshProfile(accessToken: String?): ProfileSnapshot =
-        withContext(Dispatchers.Default) {
-            val cached = cache.readUnits() ?: UnitSystem.METRIC
-            if (accessToken.isNullOrBlank()) return@withContext ProfileSnapshot(units = cached, fromCache = true)
-            val result = client.profile(accessToken)
-            val profile = result.value
-            if (profile == null) {
-                return@withContext ProfileSnapshot(units = cached, fromCache = true, failure = result.failure)
-            }
-            cache.writeUnits(profile.units)
-            ProfileSnapshot(profile = profile, units = profile.units)
-        }
-
-    /** Saves the profile (TDD-0012). Only what the server stored is kept: a refused profile changes nothing here. */
-    suspend fun saveProfile(
-        accessToken: String,
-        profile: UserProfile,
-    ): ProfileSnapshot =
-        withContext(Dispatchers.Default) {
-            val result = client.saveProfile(accessToken, profile)
-            val stored = result.value
-            if (stored == null) {
-                return@withContext ProfileSnapshot(
-                    units = cache.readUnits() ?: UnitSystem.METRIC,
-                    fromCache = true,
-                    failure = result.failure,
-                )
-            }
-            cache.writeUnits(stored.units)
-            ProfileSnapshot(profile = stored, units = stored.units)
-        }
 
     /**
      * Deletes the account on the server. When it is gone the copy of the server on this device goes too; the

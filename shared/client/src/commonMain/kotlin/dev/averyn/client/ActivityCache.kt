@@ -25,8 +25,8 @@ const val DEFAULT_MAX_CACHED_DETAILS = 10
 /** How much the cache may occupy on the disk. */
 const val DEFAULT_MAX_CACHE_BYTES = 50L * 1024 * 1024
 
-/** How many summaries of the list the cache keeps. */
-const val DEFAULT_MAX_CACHED_SUMMARIES = 500
+/** How many summaries of the list the cache keeps: the whole history of the progress totals (a summary is ~0.7 kB). */
+const val DEFAULT_MAX_CACHED_SUMMARIES = 5000
 
 /** The summaries of the list the client has seen, with the cursor of the next page. */
 @Serializable
