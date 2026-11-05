@@ -39,7 +39,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicBoolean
 
 private const val NOTIFICATION_CHANNEL_ID = "tracking"
 private const val NOTIFICATION_ID = 1
@@ -82,7 +81,7 @@ class TrackingService : Service() {
         Executors.newSingleThreadExecutor { r ->
             Thread(r, "TrackingService-recovery").apply { isDaemon = true }
         }
-    private val recovering = AtomicBoolean(false)
+    private var removeRecorderListener: (() -> Unit)? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
     // Watchdog: if RECORDING but no fix arrives for too long, surface it instead of staying silent (S5).
@@ -108,6 +107,11 @@ class TrackingService : Service() {
                 recorder.currentState == ActivityState.PREPARING
             ) {
                 app.refreshConsents()
+            }
+            // A strap that was switched on after the start, or was out of range for the first scan, is looked for
+            // again: start() does nothing while a strap is connected, and scans for a few seconds otherwise.
+            if (hrActive && recorder.currentState == ActivityState.RECORDING) {
+                hrScope.launch { hrAdapter.start(recorder.currentActivityId ?: "") }
             }
             watchdogHandler.postDelayed(watchdogRunnable, WATCHDOG_CHECK_INTERVAL_MS)
         }
@@ -167,11 +171,10 @@ class TrackingService : Service() {
         locationManager = getSystemService(LocationManager::class.java)
         createNotificationChannel()
         // Stop the HR sensor when the activity reaches a terminal state (stop/fail initiated from the UI).
-        val previousListener = recorder.listener
-        recorder.listener = { snapshot ->
-            if (snapshot.state.isTerminal) stopHr()
-            previousListener?.invoke(snapshot)
-        }
+        removeRecorderListener =
+            (application as AverynApplication).addRecorderListener { snapshot ->
+                if (snapshot.state.isTerminal) stopHr()
+            }
     }
 
     /**
@@ -234,7 +237,8 @@ class TrackingService : Service() {
             return START_STICKY
         }
         // System-initiated restart (sticky, boot): look for an interrupted activity off the main thread.
-        if (recovering.getAndSet(true)) return START_STICKY // a recovery is already in flight
+        // A recovery is already in flight (the screen's): it starts this service again when it is done.
+        if (app.recoveryInFlight.getAndSet(true)) return START_STICKY
         recoveryExecutor.execute {
             try {
                 val hasActivity = hasActivityToRecord()
@@ -244,7 +248,7 @@ class TrackingService : Service() {
                 }
                 mainHandler.post { startLocationUpdates() }
             } finally {
-                recovering.set(false)
+                app.recoveryInFlight.set(false)
             }
         }
         return START_STICKY
@@ -281,6 +285,7 @@ class TrackingService : Service() {
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onDestroy() {
+        removeRecorderListener?.invoke()
         locationManager.removeUpdates(listener)
         watchdogHandler.removeCallbacks(watchdogRunnable)
         cancelGpsLostNotification(this)
