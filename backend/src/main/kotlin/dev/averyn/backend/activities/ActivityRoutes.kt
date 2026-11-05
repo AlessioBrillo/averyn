@@ -7,6 +7,8 @@ import dev.averyn.backend.auth.OIDC_AUTH
 import dev.averyn.backend.auth.userIdFor
 import dev.averyn.backend.consent.ConsentScope
 import dev.averyn.backend.consent.ConsentStore
+import dev.averyn.backend.privacy.PrivacyZoneStore
+import dev.averyn.backend.privacy.hideZonesIn
 import dev.averyn.backend.profile.ProfileStore
 import dev.averyn.backend.storage.RawObjectStore
 import io.ktor.http.ContentDisposition
@@ -110,6 +112,7 @@ fun Application.activities(
     userData: UserData = UserData(db, raw, analysisService = analysisService),
     recordStore: PersonalRecordStore = PersonalRecordStore(db),
     profileStore: ProfileStore = ProfileStore(db),
+    zoneStore: PrivacyZoneStore = PrivacyZoneStore(db),
 ) {
     val ingest = ActivityIngest(db, raw, quotaBytes)
     perUserRateLimit(requestsPerMinute)
@@ -311,8 +314,11 @@ fun Application.activities(
                             ?: return@get call.respond(HttpStatusCode.BadRequest, errorBody("malformed activity id"))
                     val owner = call.owner(db) ?: return@get
                     val feature =
-                        withContext(Dispatchers.IO) { ingest.trackGeoJson(owner, id) }
-                            ?: return@get call.respond(HttpStatusCode.NotFound, errorBody("not found"))
+                        withContext(Dispatchers.IO) {
+                            // The track as it is shown: the privacy zones of the owner cut out of it (TDD-0016).
+                            // The recorded samples, the raw file and the export are not touched.
+                            ingest.trackGeoJson(owner, id)?.let { hideZonesIn(it, zoneStore.get(owner)) }
+                        } ?: return@get call.respond(HttpStatusCode.NotFound, errorBody("not found"))
                     call.respondText(feature, GEO_JSON)
                 }
 

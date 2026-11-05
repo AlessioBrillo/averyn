@@ -11,6 +11,7 @@ import dev.averyn.backend.auth.auth
 import dev.averyn.backend.consent.ConsentScope
 import dev.averyn.backend.consent.consent
 import dev.averyn.backend.imports.imports
+import dev.averyn.backend.privacy.privacyZones
 import dev.averyn.backend.profile.profile
 import dev.averyn.backend.storage.RawObjectStore
 import io.ktor.serialization.kotlinx.json.json
@@ -80,6 +81,7 @@ fun Application.module() {
     )
     imports(db, raw, quotaBytes = quotaBytes)
     profile(db)
+    privacyZones(db)
 }
 
 /**

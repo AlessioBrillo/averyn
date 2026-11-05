@@ -1,6 +1,9 @@
 package dev.averyn.client
 
+import dev.averyn.analysis.hidingZones
 import dev.averyn.api.ActivitySummary
+import dev.averyn.api.PrivacyZone
+import dev.averyn.api.PrivacyZones
 import dev.averyn.api.UnitSystem
 import dev.averyn.api.UserProfile
 import dev.averyn.sync.SyncState
@@ -37,6 +40,7 @@ class HistoryRepository(
     val client: ActivityReader,
     private val statuses: SyncStatusStore = SyncStatusStore(store),
     private val localProfile: LocalProfileStore? = null,
+    private val localZones: LocalZonesStore? = null,
     private val nowMs: () -> Long = { currentTimeMillis() },
 ) {
     companion object {
@@ -67,6 +71,7 @@ class HistoryRepository(
                 cache = ActivityCache(Path(cacheDirectory), server, nowMs = nowMs),
                 client = AverynClient.create(server),
                 localProfile = LocalProfileStore(profileDirectory),
+                localZones = LocalZonesStore(profileDirectory),
                 nowMs = nowMs,
             )
         }
@@ -152,7 +157,7 @@ class HistoryRepository(
     /** One activity, as it was cached the last time it was opened. */
     suspend fun cachedDetail(serverId: String): DetailSnapshot? =
         withContext(Dispatchers.Default) {
-            cache.readDetail(serverId)?.toDetailSnapshot(fromCache = true)
+            cache.readDetail(serverId)?.toDetailSnapshot(zones = shownZones(), fromCache = true)
         }
 
     /**
@@ -169,7 +174,7 @@ class HistoryRepository(
             val cached = cache.readDetail(serverId)
             if (accessToken.isNullOrBlank()) {
                 val failure = ApiFailure(ApiFailureKind.UNAUTHORIZED)
-                return@withContext cached?.toDetailSnapshot(fromCache = true, failure = failure)
+                return@withContext cached?.toDetailSnapshot(zones = shownZones(), fromCache = true, failure = failure)
                     ?: DetailSnapshot(failure = failure)
             }
             val summaryResult = client.activity(accessToken, serverId)
@@ -182,7 +187,7 @@ class HistoryRepository(
                     cache.removeSummary(serverId)
                     return@withContext DetailSnapshot(deletedOnServer = true, failure = failure)
                 }
-                return@withContext cached?.toDetailSnapshot(fromCache = true, failure = failure)
+                return@withContext cached?.toDetailSnapshot(zones = shownZones(), fromCache = true, failure = failure)
                     ?: DetailSnapshot(failure = failure)
             }
             val trackResult = client.track(accessToken, serverId)
@@ -197,7 +202,7 @@ class HistoryRepository(
                     analysisFetchedAtMs = cached?.analysisFetchedAtMs,
                 )
             cache.writeDetail(detail)
-            detail.toDetailSnapshot(fromCache = false)
+            detail.toDetailSnapshot(zones = shownZones(), fromCache = false)
         }
 
     /**
@@ -215,7 +220,7 @@ class HistoryRepository(
                 cache.readDetail(serverId)
                     ?: return@withContext DetailSnapshot(failure = ApiFailure(ApiFailureKind.NOT_FOUND))
             if (accessToken.isNullOrBlank()) {
-                return@withContext cached.toDetailSnapshot(fromCache = true)
+                return@withContext cached.toDetailSnapshot(zones = shownZones(), fromCache = true)
             }
             val result = client.analysis(accessToken, serverId)
             val failure = result.failure
@@ -240,7 +245,7 @@ class HistoryRepository(
                     failure?.kind == ApiFailureKind.BUSY -> AnalysisState.COMPUTING
                     else -> AnalysisState.UNAVAILABLE
                 }
-            updated.toDetailSnapshot(fromCache = false, analysisState = state, failure = failure)
+            updated.toDetailSnapshot(zones = shownZones(), fromCache = false, analysisState = state, failure = failure)
         }
 
     /** The activities stored on this device, with their files and their state. */
@@ -291,6 +296,77 @@ class HistoryRepository(
                 ?.profile
                 ?.units ?: cache.readUnits() ?: UnitSystem.METRIC
         }
+
+    /** The zones this phone hides, read from the file each time: a change made a moment ago counts at once. */
+    private fun shownZones(): List<PrivacyZone> =
+        localZones
+            ?.read()
+            ?.zones
+            ?.zones
+            .orEmpty()
+
+    /** The privacy zones as this phone has them, with no account and no network. */
+    suspend fun privacyZones(): PrivacyZones = withContext(Dispatchers.Default) { PrivacyZones(shownZones()) }
+
+    /**
+     * Saves the zones on the phone first, so they work with no account (and cover the very next map), then sends them
+     * when [accessToken] is there. Zones that are not valid ([PrivacyZones.problem]) change nothing. If the server
+     * cannot be reached they stay marked as unsynced and go up with the next [syncPrivacyZones].
+     */
+    suspend fun savePrivacyZones(
+        accessToken: String?,
+        zones: PrivacyZones,
+    ): ZonesSnapshot =
+        withContext(Dispatchers.Default) {
+            if (zones.problem() != null) {
+                return@withContext ZonesSnapshot(
+                    PrivacyZones(shownZones()),
+                    fromCache = true,
+                    failure = ApiFailure(ApiFailureKind.UNEXPECTED, status = 422),
+                )
+            }
+            if (localZones?.write(StoredZones(zones, unsynced = true)) == false) {
+                return@withContext ZonesSnapshot(
+                    PrivacyZones(shownZones()),
+                    fromCache = true,
+                    failure = ApiFailure(ApiFailureKind.UNEXPECTED),
+                )
+            }
+            if (accessToken.isNullOrBlank()) return@withContext ZonesSnapshot(zones, fromCache = true)
+            syncZonesNow(accessToken)
+        }
+
+    /**
+     * Brings the phone and the server together: zones changed here and not sent yet go up, otherwise the server's
+     * are taken. Without a token it only reads the phone's. The last change made wins (the same rule, and the same
+     * limit, as [syncProfile]).
+     */
+    suspend fun syncPrivacyZones(accessToken: String?): ZonesSnapshot =
+        withContext(Dispatchers.Default) {
+            if (accessToken.isNullOrBlank()) {
+                return@withContext ZonesSnapshot(
+                    PrivacyZones(shownZones()),
+                    fromCache = true,
+                )
+            }
+            syncZonesNow(accessToken)
+        }
+
+    private suspend fun syncZonesNow(accessToken: String): ZonesSnapshot {
+        val local = localZones?.read() ?: StoredZones()
+        val result =
+            if (local.unsynced) {
+                client.savePrivacyZones(accessToken, local.zones)
+            } else {
+                client.privacyZones(accessToken)
+            }
+        val server = result.value ?: return ZonesSnapshot(local.zones, fromCache = true, failure = result.failure)
+        // Edited while the call was on its way: the answer is older than that edit, so it must not replace it.
+        val now = localZones?.read()
+        if (now != null && now != local) return ZonesSnapshot(now.zones, fromCache = true)
+        localZones?.write(StoredZones(server))
+        return ZonesSnapshot(server)
+    }
 
     /** The profile as this phone has it, with no account and no network: units and maximum heart rate. */
     suspend fun localProfile(): UserProfile =
@@ -482,6 +558,7 @@ internal fun mergeCachedSummaries(
 
 /** One cached activity, as the detail screen shows it. */
 private fun CachedActivityDetail.toDetailSnapshot(
+    zones: List<PrivacyZone>,
     fromCache: Boolean,
     analysisState: AnalysisState? = null,
     failure: ApiFailure? = null,
@@ -493,7 +570,9 @@ private fun CachedActivityDetail.toDetailSnapshot(
         startedAtMs = isoInstantToEpochMillis(summary.startedAt) ?: 0L,
         summary = summary,
         analysis = analysis,
-        track = trackMapOf(track),
+        // The zones of this phone are applied again to a track the server already cut: a zone made offline, or after
+        // the copy was taken, must not show a point of it (TDD-0016).
+        track = trackMapOf(track?.hidingZones(zones)),
         analysisState = analysisState ?: if (analysis != null) AnalysisState.READY else AnalysisState.NOT_CACHED,
         fromCache = fromCache,
         cachedAtMs = savedAtMs,

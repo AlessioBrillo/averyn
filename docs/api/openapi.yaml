@@ -152,7 +152,7 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
-          description: A GeoJSON Feature; geometry is null when fewer than two samples counted towards the distance
+          description: A GeoJSON Feature, with the owner's privacy zones cut out (TDD-0016: a hidden stretch breaks the line, the file and the export keep every sample); geometry is null when fewer than two samples counted towards the distance or every point is inside a zone
           content:
             application/geo+json:
               schema:
@@ -420,6 +420,36 @@ paths:
         "401": { description: Missing or invalid token }
         "403": { description: The account was deleted }
         "422": { description: Not a valid profile (unknown unit system, maximum heart rate out of 100–230); nothing was stored }
+  /v1/privacy-zones:
+    get:
+      summary: The caller's privacy zones, places hidden on every map and card (TDD-0016)
+      description: An account that never saved any has none. A zone is a circle; the centre is usually a home, so it is Restricted data.
+      security: [{ oidc: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PrivacyZones" }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+    put:
+      summary: Replace the caller's privacy zones as a whole (TDD-0016)
+      security: [{ oidc: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PrivacyZones" }
+      responses:
+        "200":
+          description: Stored; the body is the stored list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PrivacyZones" }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "422": { description: "Not a valid list (more than 10 zones, a radius outside 50–2000 m, a coordinate out of range, a label over 40 characters, a body over 4 kB); nothing was stored. The answer never repeats a coordinate" }
   /v1/me:
     delete:
       summary: Delete all of the caller's data held by Averyn (idempotent; the identity at the IdP is not touched, ADR-0017)
@@ -435,7 +465,7 @@ paths:
         Entries: raw/{clientActivityId}.jsonl (byte-for-byte), original/{clientActivityId}.gpx or .fit (the file an
         imported activity was imported from), rr/{clientActivityId}.rr.jsonl (the heart-rate sidecar),
         gpx/{clientActivityId}.gpx, analysis/{clientActivityId}.json (the splits, the elevation, the series
-        and the best efforts of the activity, TDD-0009 and TDD-0010), profile.json, consents.json, records.json (the personal
+        and the best efforts of the activity, TDD-0009 and TDD-0010), profile.json, privacy-zones.json (TDD-0016), consents.json, records.json (the personal
         records of the account, TDD-0010) and activities.json (summaries and skipped-line counts, written
         last). Streamed.
       security: [{ oidc: [] }]
@@ -759,6 +789,18 @@ components:
       properties:
         units: { type: string, enum: [metric, imperial], default: metric }
         maxHrBpm: { type: [integer, "null"], minimum: 100, maximum: 230, default: null }
+    PrivacyZone:
+      type: object
+      required: [latitude, longitude, radiusM]
+      properties:
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+        radiusM: { type: integer, minimum: 50, maximum: 2000 }
+        label: { type: [string, "null"], maxLength: 40, description: A name for the user's own list; never drawn on a map }
+    PrivacyZones:
+      type: object
+      properties:
+        zones: { type: array, maxItems: 10, items: { $ref: "#/components/schemas/PrivacyZone" }, default: [] }
     ConsentGrant:
       type: object
       required: [scope, grantedAt, revokedAt]
