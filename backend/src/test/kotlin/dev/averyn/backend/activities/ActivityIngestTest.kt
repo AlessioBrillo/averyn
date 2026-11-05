@@ -3,6 +3,8 @@ package dev.averyn.backend.activities
 import com.auth0.jwt.JWT
 import dev.averyn.api.ActivityPage
 import dev.averyn.api.ActivitySummary
+import dev.averyn.api.PrivacyZone
+import dev.averyn.api.PrivacyZones
 import dev.averyn.backend.TestStack
 import dev.averyn.backend.auth.TestIssuer
 import dev.averyn.backend.auth.auth
@@ -10,6 +12,7 @@ import dev.averyn.backend.auth.userIdFor
 import dev.averyn.backend.consent.ConsentScope
 import dev.averyn.backend.consent.consent
 import dev.averyn.backend.content
+import dev.averyn.backend.privacy.PrivacyZoneStore
 import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Reason
 import dev.averyn.domain.Sport
@@ -444,6 +447,35 @@ class ActivityIngestTest {
         }
 
     @Test
+    fun theTrackShownLeavesOutThePrivacyZonesOfItsOwnerAndTheFileKeepsEverySample() =
+        app {
+            val rec = record()
+            val created = upload(rec.id, rec.bytes, token = alice).summary()
+            val owner = db.userIdFor(JWTPrincipal(JWT.decode(alice)))
+
+            suspend fun lines() =
+                json
+                    .parseToJsonElement(get("/v1/activities/${created.id}/track") { bearerAuth(alice) }.bodyAsText())
+                    .jsonObject
+                    .getValue("geometry")
+                    .jsonObject
+                    .getValue("coordinates")
+                    .jsonArray
+            assertEquals(listOf(3, 3), lines().map { it.jsonArray.size })
+
+            // The run starts at (0, 8) and goes north 100 m a step: 150 m around the start hides the first two
+            // points, which leaves one point of the first line (not a line) and the whole second line.
+            PrivacyZoneStore(db).put(owner, PrivacyZones(listOf(PrivacyZone(0.0, 8.0, 150))))
+            assertEquals(listOf(3), lines().map { it.jsonArray.size })
+
+            // The zone is a view: with it gone the same activity shows its whole track again, and the stored
+            // bytes of the upload never changed.
+            PrivacyZoneStore(db).put(owner, PrivacyZones())
+            assertEquals(listOf(3, 3), lines().map { it.jsonArray.size })
+            assertContentEquals(rec.bytes, raw.get(scalar("SELECT raw_object_key FROM activities") as String))
+        }
+
+    @Test
     fun anActivityWithoutATrackYieldsANullGeometry() =
         app {
             val rec = record()
@@ -600,8 +632,8 @@ class ActivityIngestTest {
             assertEquals("application/zip", response.contentType()?.withoutParameters().toString())
             assertTrue(response.headers[HttpHeaders.ContentDisposition]!!.contains("averyn-export.zip"))
             val files = unzip(response.readRawBytes())
-            // 2 raw + 2 gpx + 2 analysis + profile.json + consents.json + records.json + activities.json
-            assertEquals(10, files.size, files.keys.toString())
+            // 2 raw + 2 gpx + 2 analysis + profile.json + privacy-zones.json + consents.json + records.json + activities.json
+            assertEquals(11, files.size, files.keys.toString())
             for (rec in listOf(a, b)) {
                 assertContentEquals(rec.bytes, files.getValue("raw/${rec.id}.jsonl"))
                 val gpx = String(files.getValue("gpx/${rec.id}.gpx"))

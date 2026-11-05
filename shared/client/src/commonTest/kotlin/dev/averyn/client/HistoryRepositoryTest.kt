@@ -5,6 +5,8 @@ import dev.averyn.api.ActivityPage
 import dev.averyn.api.ActivitySummary
 import dev.averyn.api.ClientConfig
 import dev.averyn.api.ConsentGrant
+import dev.averyn.api.PrivacyZone
+import dev.averyn.api.PrivacyZones
 import dev.averyn.api.Track
 import dev.averyn.api.TrackGeometry
 import dev.averyn.api.UnitSystem
@@ -45,6 +47,7 @@ class HistoryRepositoryTest {
                 client = reader,
                 statuses = statuses,
                 localProfile = LocalProfileStore(Path(dir, "profile").toString()),
+                localZones = LocalZonesStore(Path(dir, "profile").toString()),
                 nowMs = { 1_000 },
             )
     }
@@ -358,6 +361,109 @@ class HistoryRepositoryTest {
             assertEquals(1, repository.loadCached().items.size)
         }
 
+    private val home = PrivacyZone(45.4, 9.1, 200, "Home")
+
+    @Test
+    fun `a zone made on the phone hides the start of a track at once and works with no account`() =
+        runTest {
+            reader.activity = summary("s1")
+            // 0.001 degrees of latitude are about 111 m: the first two points are inside 200 m of the zone.
+            reader.track =
+                Track(
+                    geometry =
+                        TrackGeometry(
+                            coordinates = listOf(List(5) { listOf(9.1, 45.4 + it * 0.001) }),
+                        ),
+                )
+            assertEquals(45.4, assertNotNull(repository.refreshDetail("s1", "token").track).minLatitude)
+
+            val saved = repository.savePrivacyZones(null, PrivacyZones(listOf(home)))
+
+            assertTrue(saved.fromCache)
+            assertEquals(PrivacyZones(listOf(home)), repository.privacyZones())
+            // The copy taken before the zone existed is shown with the zone applied.
+            assertEquals(45.402, assertNotNull(repository.cachedDetail("s1")?.track).minLatitude, 1e-9)
+            assertEquals(45.402, assertNotNull(repository.refreshDetail("s1", "token").track).minLatitude, 1e-9)
+        }
+
+    @Test
+    fun `zones that are not valid change nothing and are not sent`() =
+        runTest {
+            repository.savePrivacyZones(null, PrivacyZones(listOf(home)))
+
+            val refused = repository.savePrivacyZones("token", PrivacyZones(listOf(home.copy(radiusM = 5))))
+
+            assertEquals(422, refused.failure?.status)
+            assertEquals(PrivacyZones(listOf(home)), refused.zones)
+            assertEquals(null, reader.savedZones)
+        }
+
+    @Test
+    fun `zones saved offline go up with the next sync and the server's are taken otherwise`() =
+        runTest {
+            repository.savePrivacyZones(null, PrivacyZones(listOf(home)))
+
+            val sent = repository.syncPrivacyZones("token")
+
+            assertEquals(PrivacyZones(listOf(home)), reader.savedZones)
+            assertEquals(false, sent.fromCache)
+            // Synced: the next sync reads the server's list instead, which another device may have changed.
+            reader.zones = PrivacyZones(listOf(home.copy(radiusM = 500)))
+            assertEquals(
+                500,
+                repository
+                    .syncPrivacyZones("token")
+                    .zones.zones
+                    .single()
+                    .radiusM,
+            )
+            assertEquals(
+                500,
+                repository
+                    .privacyZones()
+                    .zones
+                    .single()
+                    .radiusM,
+            )
+            // Offline, the phone's copy is what it has.
+            reader.failure = ApiFailure(ApiFailureKind.TRANSIENT)
+            val offline = repository.syncPrivacyZones("token")
+            assertTrue(offline.fromCache)
+            assertEquals(
+                500,
+                offline.zones.zones
+                    .single()
+                    .radiusM,
+            )
+        }
+
+    @Test
+    fun `a zone edited while the zones are being sent is not overwritten by the answer`() =
+        runTest {
+            repository.savePrivacyZones(null, PrivacyZones(listOf(home)))
+            reader.beforeSavingZones = {
+                LocalZonesStore(Path(dir, "profile").toString())
+                    .write(StoredZones(PrivacyZones(listOf(home.copy(radiusM = 300))), unsynced = true))
+            }
+
+            val answer = repository.syncPrivacyZones("token")
+
+            assertEquals(
+                300,
+                answer.zones.zones
+                    .single()
+                    .radiusM,
+            )
+            val kept = LocalZonesStore(Path(dir, "profile").toString()).read()
+            assertEquals(
+                300,
+                kept.zones.zones
+                    .single()
+                    .radiusM,
+            )
+            assertTrue(kept.unsynced, "the newer edit still has to go up")
+        }
+
     @Test
     fun `the progress sees the whole history and not only the first page`() =
         runTest {
@@ -421,6 +527,24 @@ class HistoryRepositoryTest {
         }
 
     private class FakeReader : ActivityReader {
+        var zones = PrivacyZones()
+        var savedZones: PrivacyZones? = null
+        var beforeSavingZones: (() -> Unit)? = null
+
+        override suspend fun privacyZones(accessToken: String): ApiResult<PrivacyZones> =
+            failure?.let { ApiResult(failure = it) } ?: ApiResult(zones)
+
+        override suspend fun savePrivacyZones(
+            accessToken: String,
+            zones: PrivacyZones,
+        ): ApiResult<PrivacyZones> {
+            failure?.let { return ApiResult(failure = it) }
+            beforeSavingZones?.invoke()
+            this.zones = zones
+            savedZones = zones
+            return ApiResult(zones)
+        }
+
         var page: ActivityPage = ActivityPage(emptyList(), null)
 
         /** When set, the page for a cursor (null is the first); the requests made are counted in [listCalls]. */

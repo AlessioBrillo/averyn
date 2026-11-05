@@ -2,6 +2,7 @@ package dev.averyn.client
 
 import dev.averyn.analysis.ActivityAnalysis
 import dev.averyn.api.ActivitySummary
+import dev.averyn.api.PrivacyZones
 import dev.averyn.api.UnitSystem
 import dev.averyn.api.UserProfile
 import dev.averyn.tracking.LocalActivitySummary
@@ -153,6 +154,14 @@ data class ProfileSnapshot(
     /** The unit system to write numbers in. */
     val units: UnitSystem = UnitSystem.METRIC,
     /** True when [units] comes from the cache and not from the server. */
+    val fromCache: Boolean = false,
+    val failure: ApiFailure? = null,
+)
+
+/** What the privacy zones are now, on the phone and with the server (TDD-0016). */
+data class ZonesSnapshot(
+    val zones: PrivacyZones = PrivacyZones(),
+    /** True when [zones] are the phone's own copy and not what the server answered. */
     val fromCache: Boolean = false,
     val failure: ApiFailure? = null,
 )

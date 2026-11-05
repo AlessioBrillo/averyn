@@ -5,6 +5,7 @@ import dev.averyn.api.ActivityPage
 import dev.averyn.api.ActivitySummary
 import dev.averyn.api.ClientConfig
 import dev.averyn.api.ConsentGrant
+import dev.averyn.api.PrivacyZones
 import dev.averyn.api.Track
 import dev.averyn.api.UserProfile
 
@@ -61,4 +62,13 @@ interface ActivityReader {
         accessToken: String,
         profile: UserProfile,
     ): ApiResult<UserProfile>
+
+    /** The privacy zones of the account (TDD-0016). */
+    suspend fun privacyZones(accessToken: String): ApiResult<PrivacyZones>
+
+    /** Replaces the privacy zones; the answer is what the server stored. A `422` means they were not valid. */
+    suspend fun savePrivacyZones(
+        accessToken: String,
+        zones: PrivacyZones,
+    ): ApiResult<PrivacyZones>
 }

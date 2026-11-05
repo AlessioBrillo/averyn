@@ -5,6 +5,7 @@ import dev.averyn.api.ActivityPage
 import dev.averyn.api.ActivitySummary
 import dev.averyn.api.ClientConfig
 import dev.averyn.api.ConsentGrant
+import dev.averyn.api.PrivacyZones
 import dev.averyn.api.Track
 import dev.averyn.api.UserProfile
 import io.ktor.client.HttpClient
@@ -108,6 +109,22 @@ class AverynClient(
     /** The profile of the account (TDD-0012). */
     override suspend fun profile(accessToken: String): ApiResult<UserProfile> =
         get(path = "/v1/profile", token = accessToken) { json.decodeFromString(UserProfile.serializer(), it) }
+
+    /** The privacy zones of the account (TDD-0016). */
+    override suspend fun privacyZones(accessToken: String): ApiResult<PrivacyZones> =
+        get(path = "/v1/privacy-zones", token = accessToken) { json.decodeFromString(PrivacyZones.serializer(), it) }
+
+    /** Replaces the privacy zones (TDD-0016): the server stores the list whole, so repeating the call is harmless. */
+    override suspend fun savePrivacyZones(
+        accessToken: String,
+        zones: PrivacyZones,
+    ): ApiResult<PrivacyZones> =
+        get(
+            path = "/v1/privacy-zones",
+            token = accessToken,
+            method = HttpMethod.Put,
+            body = json.encodeToString(PrivacyZones.serializer(), zones),
+        ) { json.decodeFromString(PrivacyZones.serializer(), it) }
 
     /** Deletes the account (ADR-0017): idempotent on the server, so a failed call can be repeated. */
     override suspend fun deleteAccount(accessToken: String): ApiResult<Unit> =
