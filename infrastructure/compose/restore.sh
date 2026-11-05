@@ -16,6 +16,17 @@ db_user="${db_user:-averyn}"
 
 cp "$B/.env" "$env_file"
 [ -f "$B/seaweedfs-s3.local.json" ] && cp "$B/seaweedfs-s3.local.json" .
+# Unpacking over a volume that has data would mix two states of the instance: restore onto an empty host, or say so.
+# Checked before the containers are created: creating them seeds a volume from the image (the storage one is never
+# empty after that), and a volume that does not exist yet is empty by definition.
+for v in storage-data idp-bootstrap oidc-config caddy-data; do
+  [ -f "$B/$v.tgz" ] || continue
+  docker volume inspect "averyn_$v" >/dev/null 2>&1 || continue
+  if [ -n "$(docker run --rm -v "averyn_$v:/v:ro" alpine ls -A /v)" ] && [ "${RESTORE_FORCE:-}" != 1 ]; then
+    echo "volume averyn_$v is not empty: restore onto a new host, or RESTORE_FORCE=1 to overwrite it" >&2
+    exit 1
+  fi
+done
 dc up --no-start
 for v in storage-data idp-bootstrap oidc-config caddy-data; do
   [ -f "$B/$v.tgz" ] || continue
@@ -26,7 +37,15 @@ for _ in $(seq 1 60); do
   [ "$(dc ps --format '{{.Health}}' db)" = healthy ] && break
   sleep 2
 done
-# A few "already exists" errors for the roles the image created itself are expected.
-gunzip -c "$B/db.sql.gz" | dc exec -T db psql -q -U "$db_user" -d postgres >/dev/null
+[ "$(dc ps --format '{{.Health}}' db)" = healthy ] || { echo "the database did not become healthy in 2 minutes" >&2; exit 1; }
+# "already exists" errors for the roles the image created itself are expected; any other error is a failed restore.
+err=$(mktemp)
+gunzip -c "$B/db.sql.gz" | dc exec -T db psql -q -U "$db_user" -d postgres >/dev/null 2>"$err" || { cat "$err" >&2; rm -f "$err"; exit 1; }
+if grep 'ERROR:' "$err" | grep -v 'already exists' >&2; then
+  echo "the dump did not load cleanly (errors above)" >&2
+  rm -f "$err"
+  exit 1
+fi
+rm -f "$err"
 dc up -d --wait
 echo "restored from $B; now repeat the deletions made since (runbook step 6)"

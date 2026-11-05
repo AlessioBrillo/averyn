@@ -6,8 +6,10 @@ on:
     branches: [main]
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer push to a PR makes the older run pointless. On main every merge is a commit that must be checked (a red
+  # main stops everything): each gets its own group, so none is cancelled by the next merge.
+  group: ci-${{ github.ref }}${{ github.ref == 'refs/heads/main' && format('-{0}', github.sha) || '' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -29,6 +31,7 @@ jobs:
               - 'build-logic/**'
               - 'gradle/**'
               - '*.gradle.kts'
+              - 'gradle.properties'
               - '.github/workflows/ci.yml'
 
   jvm:
