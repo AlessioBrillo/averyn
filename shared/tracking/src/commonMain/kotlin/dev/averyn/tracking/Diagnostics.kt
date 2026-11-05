@@ -70,7 +70,14 @@ data class AlgorithmVersions(
     val heartRate: String? = null,
 )
 
-/** Why the recorder did not use an input it was handed (F5: counted, never silent). */
+/**
+ * Why the recorder did not use an input it was handed (F5: counted, never silent).
+ *
+ * `@Serializable` on purpose: the store keeps a `Map<DroppedInputReason, Int>` and looks its serializer up at the top of
+ * `ActivityStore.kt`. Without the annotation Kotlin/Native could not resolve it, the initializer of that file threw,
+ * and no `ActivityStore` could be built on iOS (found by running the store tests on the simulator).
+ */
+@Serializable
 enum class DroppedInputReason {
     /** A fix arrived while no activity existed (e.g. a service restarted before recovery). */
     NO_ACTIVE_ACTIVITY,

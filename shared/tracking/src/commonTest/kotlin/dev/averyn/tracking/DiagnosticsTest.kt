@@ -7,7 +7,6 @@ import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.writeString
-import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -16,18 +15,18 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class DiagnosticsTest {
-    private lateinit var dir: java.nio.file.Path
+    private lateinit var dir: Path
     private lateinit var store: ActivityStore
 
     @BeforeTest
     fun setUp() {
-        dir = createTempDirectory("averyn-diagnostics-test")
-        store = ActivityStore(Path(dir.toString()))
+        dir = createTestDir("averyn-diagnostics-test")
+        store = ActivityStore(dir)
     }
 
     @AfterTest
     fun tearDown() {
-        dir.toFile().deleteRecursively()
+        dir.deleteRecursively()
     }
 
     private fun sample(
@@ -68,7 +67,7 @@ class DiagnosticsTest {
         original.gpsReady(0, 0)
         original.onSample(sample(0, 0.0))
         // Simulate a kill mid-write: an incomplete trailing SAMPLE line (same technique as ActivityStoreTest).
-        val path = Path(dir.toString(), "a1.jsonl")
+        val path = Path(dir, "a1.jsonl")
         SystemFileSystem.sink(path, append = true).buffered().use { it.writeString("SAMPLE {\"timeMs\":1,\"elapsedRe") }
 
         val fresh = ActivityRecorder(store)

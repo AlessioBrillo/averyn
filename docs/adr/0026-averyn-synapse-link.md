@@ -3,6 +3,7 @@
 - **Status:** accepted (2026-10-29, with the corrections below made before acceptance)
 - **Date:** 2026-10-25
 - **Deciders:** @AlessioBrillo
+- **Amended by:** [ADR-0030](0030-synapse-contract-v2-1-and-raw-signals.md) (proposed): contract 2.1 and the raw-signal level L1R replace the line "the raw research service is never subscribed to by Averyn"; the rest stands.
 
 ## Context and problem
 

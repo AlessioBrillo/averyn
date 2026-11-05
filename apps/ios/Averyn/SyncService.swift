@@ -66,6 +66,10 @@ final class SyncService: ObservableObject {
     }
 
     func refreshStatus() {
+        // While an activity records, reading its whole file every few seconds is work for nobody: the sync status is
+        // not news until it ends (the Android screen reads the live state instead).
+        let live = AppModel.shared.recorder.currentState
+        if live == .preparing || live == .recording || live == .paused { return }
         guard let latest = store.list().max(by: { $0.startedAtMs < $1.startedAtMs }) else {
             statusText = tr("Sync: no activities yet")
             return
