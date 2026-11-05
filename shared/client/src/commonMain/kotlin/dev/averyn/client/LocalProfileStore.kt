@@ -1,6 +1,7 @@
 package dev.averyn.client
 
 import dev.averyn.api.UserProfile
+import kotlinx.io.IOException
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
@@ -40,15 +41,23 @@ class LocalProfileStore(
         }
     }
 
-    /** Written through a temporary file, so a kill half way leaves the previous profile. */
-    fun write(stored: StoredProfile) {
-        val parent = path.parent ?: return
-        if (!SystemFileSystem.exists(parent)) SystemFileSystem.createDirectories(parent)
-        val temp = Path(parent, "$FILE.tmp")
-        SystemFileSystem.sink(temp, append = false).buffered().use {
-            it.writeString(json.encodeToString(StoredProfile.serializer(), stored))
+    /**
+     * Written through a temporary file, so a kill half way leaves the previous profile. False when it could not be
+     * written (disk full): like the other files next to an activity it is a result to report, not a crash.
+     */
+    fun write(stored: StoredProfile): Boolean {
+        val parent = path.parent ?: return false
+        return try {
+            if (!SystemFileSystem.exists(parent)) SystemFileSystem.createDirectories(parent)
+            val temp = Path(parent, "$FILE.tmp")
+            SystemFileSystem.sink(temp, append = false).buffered().use {
+                it.writeString(json.encodeToString(StoredProfile.serializer(), stored))
+            }
+            SystemFileSystem.atomicMove(temp, path)
+            true
+        } catch (e: IOException) {
+            false
         }
-        SystemFileSystem.atomicMove(temp, path)
     }
 
     companion object {

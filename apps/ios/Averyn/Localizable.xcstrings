@@ -61,6 +61,26 @@
         }
       }
     },
+    "Offline copy of %@ — the server could not be reached.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copia offline del %@ — il server non è raggiungibile."
+          }
+        }
+      }
+    },
+    "Offline copy of %@": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copia offline del %@"
+          }
+        }
+      }
+    },
     "Offline copy — the server could not be reached.": {
       "localizations": {
         "it": {
@@ -1067,6 +1087,116 @@
           "stringUnit": {
             "state": "translated",
             "value": "La posizione precisa è stata disattivata: l'attività è in pausa. Attiva la posizione precisa per continuare."
+          }
+        }
+      }
+    },
+    "Quality: %@ (%@)": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qualità: %@ (%@)"
+          }
+        }
+      }
+    },
+    "Samples: %@/%@, losses: %@": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Campioni: %@/%@, perdite: %@"
+          }
+        }
+      }
+    },
+    "Longest gap: %@ s": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interruzione più lunga: %@ s"
+          }
+        }
+      }
+    },
+    "Accuracy ≤ 20 m: %@": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Precisione ≤ 20 m: %@"
+          }
+        }
+      }
+    },
+    "Accuracy ≤ 20 m: not measured": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Precisione ≤ 20 m: non misurata"
+          }
+        }
+      }
+    },
+    "Battery: %@ → %@": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Batteria: %@ → %@"
+          }
+        }
+      }
+    },
+    "Battery: %@ → %@ (%@/h)": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Batteria: %@ → %@ (%@/h)"
+          }
+        }
+      }
+    },
+    "Recovered: gap %@": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recuperata: interruzione di %@"
+          }
+        }
+      }
+    },
+    "Recovered: gap %@ (reboot)": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recuperata: interruzione di %@ (riavvio)"
+          }
+        }
+      }
+    },
+    "open": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "aperta"
+          }
+        }
+      }
+    },
+    "Averyn %@ (%@)": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Averyn %@ (%@)"
           }
         }
       }

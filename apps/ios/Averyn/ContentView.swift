@@ -32,6 +32,8 @@ struct ContentView: View {
             }
             .padding()
         }
+        // Pull down to read the history again (the server and the files of this device): S24, S26.
+        .refreshable { await viewModel.refreshAccountHistory() }
         .alert(
             "Interrupted activity found",
             isPresented: .constant(viewModel.pendingRecovery != nil),
@@ -56,21 +58,24 @@ struct ContentView: View {
     /// TDD-0001 F8: the aggregate report, for filing a docs/testing/device-matrix.md row after a test run.
     private func diagnosticsSummary(_ diagnostics: DiagnosticsReport) -> some View {
         VStack {
-            Text("Quality: \(diagnostics.quality.grade) (\(diagnostics.quality.algorithmVersion))")
-            Text("Samples: \(diagnostics.recordingSamples)/\(diagnostics.totalSamples), losses: \(diagnostics.recordLosses)")
-            Text("Longest gap: \(diagnostics.quality.longestGapMs / 1000) s")
+            Text(tr("Quality: %@ (%@)", "\(diagnostics.quality.grade)", diagnostics.quality.algorithmVersion))
+            Text(tr("Samples: %@/%@, losses: %@", "\(diagnostics.recordingSamples)", "\(diagnostics.totalSamples)", "\(diagnostics.recordLosses)"))
+            Text(tr("Longest gap: %@ s", "\(diagnostics.quality.longestGapMs / 1000)"))
             if let accuracy = diagnostics.quality.accuracyWithin20mPercent {
-                Text(String(format: "Accuracy ≤ 20 m: %.0f%%", accuracy.doubleValue))
+                Text(tr("Accuracy ≤ 20 m: %@", String(format: "%.0f%%", accuracy.doubleValue)))
             } else {
                 Text("Accuracy ≤ 20 m: not measured")
             }
             if let start = diagnostics.batteryStartPercent, let end = diagnostics.batteryEndPercent {
-                let drainText = diagnostics.batteryDrainPercentPerHour.map { String(format: " (%.1f%%/h)", $0.doubleValue) } ?? ""
-                Text("Battery: \(start.intValue)% → \(end.intValue)%\(drainText)")
+                if let drain = diagnostics.batteryDrainPercentPerHour {
+                    Text(tr("Battery: %@ → %@ (%@/h)", "\(start.intValue)%", "\(end.intValue)%", String(format: "%.1f%%", drain.doubleValue)))
+                } else {
+                    Text(tr("Battery: %@ → %@", "\(start.intValue)%", "\(end.intValue)%"))
+                }
             }
             ForEach(Array(diagnostics.recoveryGaps.enumerated()), id: \.offset) { _, gap in
-                let length = gap.gapMs.map { "\($0.int64Value / 1000) s" } ?? "open"
-                Text("Recovered: gap \(length)" + (gap.rebootDetected ? " (reboot)" : ""))
+                let length = gap.gapMs.map { "\($0.int64Value / 1000) s" } ?? tr("open")
+                Text(gap.rebootDetected ? tr("Recovered: gap %@ (reboot)", length) : tr("Recovered: gap %@", length))
             }
         }
     }
@@ -80,9 +85,16 @@ struct ContentView: View {
     private var historySection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("History")
+            if let warning = compatibilityText(AppModel.shared.auth.compatibility) {
+                Text(warning)
+            }
             if let snapshot = viewModel.historySnapshot {
                 if snapshot.fromCache {
-                    Text("Offline copy — the server could not be reached.")
+                    if let copiedAt = snapshot.cachedAtMs?.int64Value {
+                        Text(tr("Offline copy of %@ — the server could not be reached.", formatDate(copiedAt)))
+                    } else {
+                        Text("Offline copy — the server could not be reached.")
+                    }
                 }
                 if snapshot.needsLogin {
                     Text("Sign in to read the activities of the account.")
@@ -156,7 +168,11 @@ struct ContentView: View {
                 }
             }
             if detail.fromCache {
-                Text("Offline copy")
+                if let copiedAt = detail.cachedAtMs?.int64Value {
+                    Text(tr("Offline copy of %@", formatDate(copiedAt)))
+                } else {
+                    Text("Offline copy")
+                }
             }
         }
     }
@@ -341,10 +357,13 @@ private struct AccountSection: View {
     @State private var cacheSize: String = ""
     @State private var confirmingDelete = false
     @State private var deleteWord = ""
+    /// What the user is typing; it becomes the server of the app only when committed (see `AuthManager.serverURL`).
+    @State private var serverField = ""
 
     var body: some View {
         VStack(spacing: 8) {
-            TextField("Server URL", text: $auth.serverURL)
+            TextField("Server URL", text: $serverField)
+                .onSubmit { auth.serverURL = serverField }
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(.URL)
@@ -354,6 +373,7 @@ private struct AccountSection: View {
                     Button("Sign out") { auth.signOut() }
                 } else {
                     Button("Sign in") {
+                        auth.serverURL = serverField
                         Task {
                             do {
                                 try await auth.signIn()
@@ -365,11 +385,16 @@ private struct AccountSection: View {
                         }
                     }
                 }
-                Button("Sync now") { Task { await sync.syncNow() } }
+                Button("Sync now") {
+                    auth.serverURL = serverField
+                    Task { await sync.syncNow() }
+                }
             }
             if let warning = compatibilityText(compatibility) {
                 Text(warning)
             }
+            // The build under test is named in every row of the device matrix: it is read here, not guessed.
+            Text(tr("Averyn %@ (%@)", Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?", Bundle.main.infoDictionary?["AverynCommit"] as? String ?? "dev"))
             if !cacheSize.isEmpty {
                 Text(cacheSize)
                 Button("Delete the offline copy") {
@@ -430,22 +455,7 @@ private struct AccountSection: View {
                 try? await Task.sleep(for: .seconds(3))
             }
         }
-    }
-
-    /// The warning of a version that does not fit (TDD-0011): it never stops the app from working.
-    private func compatibilityText(_ compatibility: ClientCompatibility) -> String? {
-        switch compatibility {
-        case .ok:
-            return nil
-        case .appTooOld:
-            return tr("This server is newer than the app: update the app to use everything it offers.")
-        case .appBelowMinimum:
-            return tr("This server needs a newer app: update the app.")
-        case .serverTooOld:
-            return tr("This server is older than the app: some features may be missing.")
-        default:
-            return nil
-        }
+        .onAppear { serverField = auth.serverURL }
     }
 
     /// What the copy of the server occupies on this device.
@@ -598,4 +608,20 @@ private func formatDuration(_ ms: Int64) -> String {
     return hours > 0
         ? String(format: "%d:%02d:%02d", hours, minutes, seconds)
         : String(format: "%d:%02d", minutes, seconds)
+}
+
+/// The warning of a version that does not fit (TDD-0011): it never stops the app from working.
+private func compatibilityText(_ compatibility: ClientCompatibility) -> String? {
+    switch compatibility {
+    case .ok:
+        return nil
+    case .appTooOld:
+        return tr("This server is newer than the app: update the app to use everything it offers.")
+    case .appBelowMinimum:
+        return tr("This server needs a newer app: update the app.")
+    case .serverTooOld:
+        return tr("This server is older than the app: some features may be missing.")
+    default:
+        return nil
+    }
 }

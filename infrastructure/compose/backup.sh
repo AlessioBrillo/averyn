@@ -21,7 +21,11 @@ db_user="${db_user:-averyn}"
 trap 'dc up -d >/dev/null 2>&1 || true' EXIT
 
 dc stop web backend
-dc exec -T db pg_dumpall -U "$db_user" | gzip > "$B/db.sql.gz"
+# POSIX sh has no pipefail: a pg_dumpall that dies half way would leave a valid, truncated gzip behind. The dump goes
+# to a file first and its exit status is checked; only then it is compressed.
+dc exec -T db pg_dumpall -U "$db_user" > "$B/db.sql" || { echo "pg_dumpall failed: no backup" >&2; rm -f "$B/db.sql"; exit 1; }
+grep -q 'PostgreSQL database cluster dump complete' "$B/db.sql" || { echo "the dump is truncated: no backup" >&2; rm -f "$B/db.sql"; exit 1; }
+gzip -f "$B/db.sql"
 dc stop storage
 for v in storage-data idp-bootstrap oidc-config caddy-data; do
   docker volume inspect "averyn_$v" >/dev/null 2>&1 || continue # caddy-data exists in TLS mode only

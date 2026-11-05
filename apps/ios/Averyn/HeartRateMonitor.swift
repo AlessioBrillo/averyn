@@ -87,6 +87,13 @@ final class HeartRateMonitor: NSObject, @unchecked Sendable, SensorAdapter, CBCe
         connectOrScan()
     }
 
+    /// A strap switched on after the start: scans again when none was ever found (a scan costs battery, so it is
+    /// only asked for now and then, from outside). A strap that was connected before has its own reconnect.
+    func searchAgainIfNeverFound() {
+        guard running, lastIdentifier == nil, peripheral == nil else { return }
+        connectOrScan()
+    }
+
     private func end() {
         running = false
         retryWork?.cancel()

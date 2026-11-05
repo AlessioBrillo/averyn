@@ -13,7 +13,7 @@ Seconds.
 
 ## Formula / method
 
-`time-v1`: elapsed time is `lastSampleElapsedRealtimeMs - firstSampleElapsedRealtimeMs`, using the monotonic clock (never wall-clock `timeMs`, which can jump). Paused time is the sum of intervals between a `PAUSED` `StateEvent` and the following `RECORDING` (resume) event. Within non-paused time, a leg between two consecutive accepted samples counts as **stationary** if its implied speed is `< 0.5 m/s`, otherwise **moving**. This is a per-leg classification applied at metric time (TDD-0001 §5.6) — the samples themselves are never dropped or altered by it.
+`time-v1`: elapsed time is `lastElapsedRealtimeMs - firstSampleElapsedRealtimeMs`, using the monotonic clock (never wall-clock `timeMs`, which can jump). The last point is the later of the last sample and the last `PAUSED`, `RECORDING` (resume) or stop event, so a pause at the end of a run is part of the elapsed time (and of the paused time), not cut off at the last fix. Paused time is the sum of intervals between a `PAUSED` `StateEvent` and the following `RECORDING` (resume) event. Within non-paused time, a leg between two consecutive accepted samples counts as **stationary** if its implied speed is `< 0.5 m/s`, otherwise **moving**. This is a per-leg classification applied at metric time (TDD-0001 §5.6) — the samples themselves are never dropped or altered by it.
 
 ## Required inputs
 
@@ -34,6 +34,7 @@ The same rule covers the gap of an interrupted and recovered activity (kill, reb
 | Version | Date | Change |
 |---|---|---|
 | time-v1 | 2026-09-27 | Initial: 0.5 m/s stationary threshold, gaps counted as stationary |
+| time-v1 | 2026-11-02 | Clarification, no behavior change: the formula said the elapsed time ends at the last sample; the code (and `splits.md`) end it at the last sample or the last pause, resume or stop event, which is what the numbers on the screens have always been. No data existed outside development |
 | time-v1 | 2026-10-15 | Clarification, no behavior change: the text said gaps are always stationary; the implementation and the formula above classify a gap by its implied speed. Recovery across reboot and replay equivalence fixed in code ([TDD-0006](../design/TDD-0006-field-readiness.md)); no data existed outside development, so no new version |
 
 ## Reliability level

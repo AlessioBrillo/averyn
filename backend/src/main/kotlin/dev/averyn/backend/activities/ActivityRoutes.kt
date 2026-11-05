@@ -275,7 +275,16 @@ fun Application.activities(
                                 // The old sidecar is not the one the row points at anymore: it goes, or it would
                                 // stay in the store forever with no way to delete it.
                                 previous?.first?.takeIf { it != key }?.let { old ->
-                                    runCatching { raw.delete(old) }
+                                    try {
+                                        raw.delete(old)
+                                    } catch (e: Exception) {
+                                        // Not fatal for the upload, but not silent: an orphan costs storage and, in
+                                        // the end, a coordinate file nobody can reach. The class only: no key, no path.
+                                        exportLog.warn(
+                                            "could not delete a replaced sidecar: {}",
+                                            e.javaClass.simpleName,
+                                        )
+                                    }
                                 }
                                 call.respond(HttpStatusCode.Created)
                             } finally {
