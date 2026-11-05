@@ -24,8 +24,19 @@ final class AuthManager: ObservableObject {
     private static let privacyUrlKey = "serverPrivacyPolicyUrl"
     private static let termsUrlKey = "serverTermsUrl"
 
+    /// The server of this app. Set only when the user commits it (the field keeps its own buffer): another server
+    /// is another account, so a session of the old one ends here, and its token is never sent to the new address.
     @Published var serverURL: String {
-        didSet { UserDefaults.standard.set(serverURL, forKey: Self.serverKey) }
+        didSet {
+            if isSignedIn, Self.normalized(oldValue) != Self.normalized(serverURL) { signOut() }
+            UserDefaults.standard.set(serverURL, forKey: Self.serverKey)
+        }
+    }
+
+    private static func normalized(_ raw: String) -> String {
+        var url = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        while url.hasSuffix("/") { url.removeLast() }
+        return url
     }
 
     @Published private(set) var isSignedIn: Bool
@@ -42,8 +53,7 @@ final class AuthManager: ObservableObject {
 
     /// The server URL as typed, trimmed and without trailing slashes; nil if empty.
     var normalizedServerURL: String? {
-        var url = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        while url.hasSuffix("/") { url.removeLast() }
+        let url = Self.normalized(serverURL)
         return url.isEmpty ? nil : url
     }
 

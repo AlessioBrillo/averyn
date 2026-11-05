@@ -61,6 +61,26 @@
         }
       }
     },
+    "Offline copy of %@ — the server could not be reached.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copia offline del %@ — il server non è raggiungibile."
+          }
+        }
+      }
+    },
+    "Offline copy of %@": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copia offline del %@"
+          }
+        }
+      }
+    },
     "Offline copy — the server could not be reached.": {
       "localizations": {
         "it": {
