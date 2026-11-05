@@ -42,7 +42,7 @@ iOS cannot be built on Windows; CI (macOS runner) verifies it. The Docker backen
 
 ## CI gate
 
-The pipelines are two and they do not cover the same things: `.woodpecker/ci.yml` runs the JVM, backend and Android steps; `.github/workflows/ci.yml` also runs the iOS build and tests, the compose smoke tests, the signed-in round trip and the restore drill. **A change is merge-ready when Woodpecker (or `ci-local`) is green and, for anything that touches iOS, shared code, compose or the backend contract, the GitHub checks are green too.** Neither alone is the gate (this replaces the older wording that called only Woodpecker the gate).
+The pipelines are two and they do not cover the same things: `.woodpecker/ci.yml` runs the JVM, backend, Android, web and docs steps; `.github/workflows/ci.yml` also runs the iOS build and tests, the compose smoke tests, the signed-in round trip and the restore drill. **A change is merge-ready when Woodpecker (or `ci-local`) is green and, for anything that touches iOS, shared code, compose or the backend contract, the GitHub checks are green too.** Neither alone is the gate (this replaces the older wording that called only Woodpecker the gate).
 
 - **Local, no server:** `ci-local` from the repo root (Docker running). Exit 0 = green.
   Never run `woodpecker-cli exec` directly on the checkout: it bind-mounts the repo and

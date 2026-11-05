@@ -34,7 +34,7 @@ minimum do not change between the two versions.
 
 ## Minimum quality requirements
 
-The frame parser rejects a `bpm` outside 0..300 and an RR outside 1..3000 ms and reports each as `ParseResult.Invalid`: the rest of the frame is kept and the value is never thrown or silently lost. The caller passes only records stored by the adapter; a `bpm` of 0 is stored ("no reading") and a value above 240 that the parser accepted is counted by the metric as an artifact (`artifacts` in the analysis), not dropped. See `rr-quality-v1` for RR-side artifacts.
+The frame parser rejects a `bpm` outside 0..300 and an RR outside 1..3000 ms and reports each as `ParseResult.Invalid`: the rest of the frame is kept and the value is never thrown or silently lost. The caller passes only records stored by the adapter; a `bpm` of 0 is stored ("no reading"), and the metric counts it, like a value above 240 that the parser accepted, as an artifact (`artifacts` in the analysis): it is outside 1..240, so it is in no average, maximum or minimum, and it is not dropped. See `rr-quality-v1` for RR-side artifacts.
 
 The RR unit on the wire is 1/1024 s; the parser stores milliseconds (`(raw * 1000 + 512) / 1024`). The RR sidecar's own `formatVersion` is 2 for milliseconds; a sidecar without the field (written before 2026-10-30) is 1, holds the raw unit as if it were milliseconds, and is read as it was written, never converted.
 
@@ -48,6 +48,7 @@ A signal gap becomes missing samples in coverage/dropouts, exactly like a GPS ga
 |---|---|---|
 | hr-v1 | 2026-10-18 | Initial: avg/max/min, coverage, dropouts, no interpolation |
 | hr-v2 | 2026-10-20 | The coverage is over the recording time, the pauses excluded. The average, the maximum and the minimum do not change. |
+| hr-v2 | 2026-11-02 | Clarification, no behavior change: a `bpm` of 0 is an artifact (outside 1..240), as the code has always counted it; the text said it was "stored" only. |
 
 ## Reliability level
 

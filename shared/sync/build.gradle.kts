@@ -15,6 +15,9 @@ kotlin {
         // The engine is picked up from the classpath by HttpClient(): OkHttp on Android, Darwin on iOS.
         androidMain.dependencies { implementation(libs.ktor.client.okhttp) }
         iosMain.dependencies { implementation(libs.ktor.client.darwin) }
-        jvmTest.dependencies { implementation(libs.ktor.client.mock) }
+        commonTest.dependencies {
+            implementation(libs.ktor.client.mock)
+            implementation(libs.kotlinx.coroutines.test)
+        }
     }
 }

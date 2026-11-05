@@ -10,6 +10,8 @@ import dev.averyn.android.BuildConfig
 import dev.averyn.api.Api
 import dev.averyn.api.ClientCompatibility
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import net.openid.appauth.AppAuthConfiguration
 import net.openid.appauth.AuthState
@@ -85,7 +87,11 @@ class AuthManager(
     var serverUrl: String?
         get() = prefs.getString(KEY_SERVER_URL, null)
         set(value) {
-            prefs.edit { putString(KEY_SERVER_URL, value?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() }) }
+            val normalized = value?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() }
+            // Another server is another account: the old server's token must never be sent to the new one, and
+            // its copy on the phone is not the new server's history.
+            if (state != null && normalized != serverUrl) signOut()
+            prefs.edit { putString(KEY_SERVER_URL, normalized) }
         }
 
     val isSignedIn: Boolean get() = state?.isAuthorized == true
@@ -137,23 +143,28 @@ class AuthManager(
      * IdP refused the refresh token (then the session is dropped: sign in again). Throws on transient trouble
      * such as no network: the caller retries later.
      */
-    suspend fun freshAccessToken(): String? {
-        val current = state ?: return null
-        return try {
-            val token =
-                suspendCoroutine<String> { cont ->
-                    current.performActionWithFreshTokens(service) { accessToken, _, error ->
-                        cont.finish(accessToken, error, "no access token")
+    suspend fun freshAccessToken(): String? =
+        // One refresh at a time: the consent refresh, the sync worker and the screens ask together, and a refresh
+        // token the IdP rotates is valid once. The second caller waits and then reads the state the first one left.
+        tokenLock.withLock {
+            val current = state ?: return@withLock null
+            try {
+                val token =
+                    suspendCoroutine<String> { cont ->
+                        current.performActionWithFreshTokens(service) { accessToken, _, error ->
+                            cont.finish(accessToken, error, "no access token")
+                        }
                     }
-                }
-            persist(current) // a refresh changes the stored tokens
-            token
-        } catch (e: AuthorizationException) {
-            if (e.type != AuthorizationException.TYPE_OAUTH_TOKEN_ERROR) throw e
-            signOut()
-            null
+                persist(current) // a refresh changes the stored tokens
+                token
+            } catch (e: AuthorizationException) {
+                if (e.type != AuthorizationException.TYPE_OAUTH_TOKEN_ERROR) throw e
+                signOut()
+                null
+            }
         }
-    }
+
+    private val tokenLock = Mutex()
 
     /** Forgets the session on this device. (The IdP session in the browser is not ended: ponytail, add end_session.) */
     fun signOut() {

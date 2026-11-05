@@ -14,9 +14,8 @@ import dev.averyn.domain.Sport
 import dev.averyn.sync.SyncStatusStore
 import dev.averyn.tracking.ActivityRecorder
 import dev.averyn.tracking.ActivityStore
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import kotlinx.io.files.Path
-import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -27,7 +26,7 @@ import kotlin.test.assertTrue
 
 /** The history of the account: the server, the cache and the device (TDD-0011). */
 class HistoryRepositoryTest {
-    private lateinit var dir: java.nio.file.Path
+    private lateinit var dir: Path
     private lateinit var store: ActivityStore
     private lateinit var statuses: SyncStatusStore
     private lateinit var reader: FakeReader
@@ -35,24 +34,24 @@ class HistoryRepositoryTest {
 
     @BeforeTest
     fun setUp() {
-        dir = createTempDirectory("averyn-history-test")
-        store = ActivityStore(Path(dir.toString()))
+        dir = createTestDir("averyn-history-test")
+        store = ActivityStore(dir)
         statuses = SyncStatusStore(store)
         reader = FakeReader()
         repository =
             HistoryRepository(
                 store = store,
-                cache = ActivityCache(Path(dir.toString(), "cache"), "https://server.example", nowMs = { 1_000 }),
+                cache = ActivityCache(Path(dir, "cache"), "https://server.example", nowMs = { 1_000 }),
                 client = reader,
                 statuses = statuses,
-                localProfile = LocalProfileStore(Path(dir.toString(), "profile").toString()),
+                localProfile = LocalProfileStore(Path(dir, "profile").toString()),
                 nowMs = { 1_000 },
             )
     }
 
     @AfterTest
     fun tearDown() {
-        dir.toFile().deleteRecursively()
+        dir.deleteRecursively()
     }
 
     private fun summary(
@@ -97,7 +96,7 @@ class HistoryRepositoryTest {
 
     @Test
     fun `the list of the server is shown and cached`() =
-        runBlocking {
+        runTest {
             reader.page = ActivityPage(listOf(summary("s1")), null)
             val snapshot = repository.refresh("token")
             assertEquals(1, snapshot.items.size)
@@ -113,7 +112,7 @@ class HistoryRepositoryTest {
 
     @Test
     fun `an activity of the device that is not on the server yet is in the list`() =
-        runBlocking {
+        runTest {
             localActivity("local1")
             reader.page = ActivityPage(emptyList(), null)
             val snapshot = repository.refresh("token")
@@ -129,8 +128,8 @@ class HistoryRepositoryTest {
         }
 
     @Test
-    fun `an activity the server deleted is not in the list any more, but its file stays`() =
-        runBlocking {
+    fun `an activity the server deleted is not in the list any more but its file stays`() =
+        runTest {
             localActivity("local1")
             statuses.write("local1", dev.averyn.sync.SyncStatus(dev.averyn.sync.SyncState.READY))
             reader.page = ActivityPage(emptyList(), null)
@@ -144,7 +143,7 @@ class HistoryRepositoryTest {
 
     @Test
     fun `an activity that is on the server is one row`() =
-        runBlocking {
+        runTest {
             localActivity("local1")
             statuses.write("local1", dev.averyn.sync.SyncStatus(dev.averyn.sync.SyncState.READY))
             reader.page = ActivityPage(listOf(summary("s1", clientId = "local1")), null)
@@ -155,7 +154,7 @@ class HistoryRepositoryTest {
 
     @Test
     fun `an activity refused by the server as deleted is not in the list`() =
-        runBlocking {
+        runTest {
             localActivity("local1")
             statuses.write(
                 "local1",
@@ -169,7 +168,7 @@ class HistoryRepositoryTest {
 
     @Test
     fun `the list asks to sign in again when the token is refused`() =
-        runBlocking {
+        runTest {
             reader.failure = ApiFailure(ApiFailureKind.UNAUTHORIZED, status = 401)
             val snapshot = repository.refresh("token")
             assertTrue(snapshot.needsLogin)
@@ -177,7 +176,7 @@ class HistoryRepositoryTest {
 
     @Test
     fun `a detail is read from the server and kept in the cache`() =
-        runBlocking {
+        runTest {
             reader.page = ActivityPage(listOf(summary("s1")), null)
             reader.activity = summary("s1")
             repository.refresh("token")
@@ -193,7 +192,7 @@ class HistoryRepositoryTest {
 
     @Test
     fun `an activity the server does not have any more is removed from the cache`() =
-        runBlocking {
+        runTest {
             reader.activity = summary("s1")
             repository.refreshDetail("s1", "token")
             reader.failure = ApiFailure(ApiFailureKind.NOT_FOUND, status = 404)
@@ -203,8 +202,8 @@ class HistoryRepositoryTest {
         }
 
     @Test
-    fun `the analysis in progress is a state, not a failure`() =
-        runBlocking {
+    fun `the analysis in progress is a state and not a failure`() =
+        runTest {
             reader.activity = summary("s1")
             repository.refreshDetail("s1", "token")
             reader.failure = ApiFailure(ApiFailureKind.BUSY, status = 503, retryAfterSeconds = 5)
@@ -215,7 +214,7 @@ class HistoryRepositoryTest {
 
     @Test
     fun `the analysis is shown when the server has it`() =
-        runBlocking {
+        runTest {
             reader.activity = summary("s1")
             repository.refreshDetail("s1", "token")
             reader.analysis = analysis()
@@ -226,7 +225,7 @@ class HistoryRepositoryTest {
 
     @Test
     fun `deleting an activity on the device removes its files`() =
-        runBlocking {
+        runTest {
             localActivity("local1")
             repository.deleteLocal("local1")
             assertTrue(store.list().isEmpty())
@@ -236,7 +235,7 @@ class HistoryRepositoryTest {
 
     @Test
     fun `the copy of the server can be thrown away`() =
-        runBlocking {
+        runTest {
             reader.activity = summary("s1")
             repository.refreshDetail("s1", "token")
             repository.clearCache()
@@ -261,17 +260,17 @@ class HistoryRepositoryTest {
     /** The server, as the tests want it. */
     @Test
     fun `the unit system of the profile is remembered for the next time without a connection`() =
-        runBlocking {
+        runTest {
             assertEquals(UnitSystem.METRIC, repository.cachedUnits())
             reader.profile = UserProfile(UnitSystem.IMPERIAL, 187)
 
-            val online = repository.refreshProfile("token")
+            val online = repository.syncProfile("token")
 
             assertEquals(UserProfile(UnitSystem.IMPERIAL, 187), online.profile)
             assertEquals(UnitSystem.IMPERIAL, online.units)
             reader.failure = ApiFailure(ApiFailureKind.TRANSIENT)
-            val offline = repository.refreshProfile("token")
-            assertNull(offline.profile)
+            val offline = repository.syncProfile("token")
+            assertEquals(UserProfile(UnitSystem.IMPERIAL, 187), offline.profile) // the phone's own copy
             assertTrue(offline.fromCache)
             assertEquals(UnitSystem.IMPERIAL, offline.units)
             assertEquals(UnitSystem.IMPERIAL, repository.cachedUnits())
@@ -279,25 +278,25 @@ class HistoryRepositoryTest {
 
     @Test
     fun `without a token the profile is not asked for and the cached units are used`() =
-        runBlocking {
+        runTest {
             reader.profile = UserProfile(UnitSystem.IMPERIAL, 187)
-            repository.refreshProfile("token")
+            repository.syncProfile("token")
 
-            val snapshot = repository.refreshProfile(null)
+            val snapshot = repository.syncProfile(null)
 
-            assertNull(snapshot.profile)
+            assertEquals(UserProfile(UnitSystem.IMPERIAL, 187), snapshot.profile)
             assertEquals(UnitSystem.IMPERIAL, snapshot.units)
         }
 
     @Test
     fun `a saved profile changes the units and a refused one changes nothing`() =
-        runBlocking {
-            val saved = repository.saveProfile("token", UserProfile(UnitSystem.IMPERIAL, 190))
+        runTest {
+            val saved = repository.saveProfileLocalFirst("token", UserProfile(UnitSystem.IMPERIAL, 190))
             assertEquals(UserProfile(UnitSystem.IMPERIAL, 190), saved.profile)
             assertEquals(UnitSystem.IMPERIAL, repository.cachedUnits())
 
-            reader.failure = ApiFailure(ApiFailureKind.UNEXPECTED, status = 422)
-            val refused = repository.saveProfile("token", UserProfile(UnitSystem.METRIC, 99))
+            // A maximum of 99 is refused on the phone, before any call: nothing changes, the server is not asked.
+            val refused = repository.saveProfileLocalFirst("token", UserProfile(UnitSystem.METRIC, 99))
 
             assertNull(refused.profile)
             assertEquals(422, refused.failure?.status)
@@ -306,8 +305,8 @@ class HistoryRepositoryTest {
         }
 
     @Test
-    fun `an opened activity carries the map of its track, also from the copy`() =
-        runBlocking {
+    fun `an opened activity carries the map of its track also from the copy`() =
+        runTest {
             reader.activity = summary("s1")
             reader.track =
                 Track(geometry = TrackGeometry(coordinates = listOf(listOf(listOf(9.1, 45.4), listOf(9.2, 45.5)))))
@@ -323,7 +322,7 @@ class HistoryRepositoryTest {
 
     @Test
     fun `an activity without a track has no map`() =
-        runBlocking {
+        runTest {
             reader.activity = summary("s1")
             reader.track = null
 
@@ -332,7 +331,7 @@ class HistoryRepositoryTest {
 
     @Test
     fun `deleting the account clears the copy of the server and keeps the recordings on the device`() =
-        runBlocking {
+        runTest {
             reader.page = ActivityPage(listOf(summary("s1")), null)
             repository.refresh("token")
             assertEquals(1, repository.loadCached().items.size)
@@ -346,7 +345,7 @@ class HistoryRepositoryTest {
 
     @Test
     fun `a failed deletion leaves the copy where it is so the user can try again`() =
-        runBlocking {
+        runTest {
             reader.page = ActivityPage(listOf(summary("s1")), null)
             repository.refresh("token")
             reader.failure = ApiFailure(ApiFailureKind.TRANSIENT)
@@ -359,8 +358,74 @@ class HistoryRepositoryTest {
             assertEquals(1, repository.loadCached().items.size)
         }
 
+    @Test
+    fun `the progress sees the whole history and not only the first page`() =
+        runTest {
+            reader.pages =
+                mapOf(
+                    null to ActivityPage(listOf(summary("s1", startedAt = "2026-03-03T09:00:00Z")), "c2"),
+                    "c2" to ActivityPage(listOf(summary("s2", startedAt = "2026-02-02T09:00:00Z")), "c3"),
+                    "c3" to ActivityPage(listOf(summary("s3", startedAt = "2026-01-01T09:00:00Z")), null),
+                )
+
+            val snapshot = repository.refreshAll("token")
+
+            assertEquals(listOf("s1", "s2", "s3"), snapshot.items.mapNotNull { it.serverId })
+            assertEquals(null, snapshot.nextCursor)
+            assertEquals(3, reader.listCalls)
+            assertEquals(3, repository.loadCached().items.size)
+            val months = progressTotals(snapshot.items, ProgressPeriod.MONTH, offsetMsAt = { 0L })
+            assertEquals(3, months.size)
+        }
+
+    @Test
+    fun `a full read drops what the server deleted and a failed one keeps what was cached`() =
+        runTest {
+            reader.pages =
+                mapOf(
+                    null to
+                        ActivityPage(
+                            listOf(summary("s1"), summary("s2", startedAt = "2026-01-30T09:00:00Z")),
+                            null,
+                        ),
+                )
+            repository.refreshAll("token")
+            assertEquals(2, repository.loadCached().items.size)
+
+            reader.pages = mapOf(null to ActivityPage(listOf(summary("s1")), null)) // s2 was deleted on the web
+            assertEquals(listOf("s1"), repository.refreshAll("token").items.mapNotNull { it.serverId })
+
+            reader.failure = ApiFailure(ApiFailureKind.TRANSIENT)
+            val failed = repository.refreshAll("token")
+            assertTrue(failed.fromCache)
+            assertEquals(listOf("s1"), failed.items.mapNotNull { it.serverId })
+        }
+
+    @Test
+    fun `an edit made while the profile is being sent is not overwritten by the answer`() =
+        runTest {
+            reader.profile = UserProfile(UnitSystem.METRIC, 180)
+            repository.saveProfileLocalFirst(null, UserProfile(UnitSystem.IMPERIAL, 190)) // unsynced, no account yet
+            // The user edits again while the call of the first sync is on its way.
+            reader.beforeSavingProfile = {
+                LocalProfileStore(Path(dir, "profile").toString())
+                    .write(StoredProfile(UserProfile(UnitSystem.METRIC, 175), unsynced = true))
+            }
+
+            val answer = repository.syncProfile("token")
+
+            assertEquals(UserProfile(UnitSystem.METRIC, 175), answer.profile)
+            val kept = LocalProfileStore(Path(dir, "profile").toString()).read()
+            assertEquals(UserProfile(UnitSystem.METRIC, 175), kept.profile)
+            assertTrue(kept.unsynced, "the newer edit still has to go up")
+        }
+
     private class FakeReader : ActivityReader {
         var page: ActivityPage = ActivityPage(emptyList(), null)
+
+        /** When set, the page for a cursor (null is the first); the requests made are counted in [listCalls]. */
+        var pages: Map<String?, ActivityPage>? = null
+        var listCalls = 0
         var activity: ActivitySummary? = null
         var analysis: ActivityAnalysis? = null
         var track: Track? = null
@@ -372,7 +437,11 @@ class HistoryRepositoryTest {
             accessToken: String,
             cursor: String?,
             limit: Int,
-        ): ApiResult<ActivityPage> = failure?.let { ApiResult(failure = it) } ?: ApiResult(page)
+        ): ApiResult<ActivityPage> {
+            listCalls++
+            failure?.let { return ApiResult(failure = it) }
+            return ApiResult(pages?.get(cursor) ?: page)
+        }
 
         override suspend fun activity(
             accessToken: String,
@@ -408,6 +477,7 @@ class HistoryRepositoryTest {
         }
 
         var savedProfile: UserProfile? = null
+        var beforeSavingProfile: (() -> Unit)? = null
 
         override suspend fun profile(accessToken: String): ApiResult<UserProfile> =
             failure?.let { ApiResult(failure = it) } ?: ApiResult(profile)
@@ -417,6 +487,7 @@ class HistoryRepositoryTest {
             profile: UserProfile,
         ): ApiResult<UserProfile> {
             failure?.let { return ApiResult(failure = it) }
+            beforeSavingProfile?.invoke()
             this.profile = profile
             savedProfile = profile
             return ApiResult(profile)

@@ -28,7 +28,7 @@ private const val JUMP_MIN_DISTANCE_M = 500.0
 private const val ALTITUDE_SPIKE_SPEED_MPS = 10.0
 
 /**
- * Incremental, stateful `quality-v1` assessment (docs/metrics/gps-quality.md). Call [assess] once per raw
+ * Incremental, stateful assessment (`quality-v2`, see [QUALITY_ALGORITHM_VERSION]) (docs/metrics/gps-quality.md). Call [assess] once per raw
  * sample, in arrival order; it never mutates or drops the sample (TDD-0001 F5), only reports flags.
  */
 class QualityAssessor {

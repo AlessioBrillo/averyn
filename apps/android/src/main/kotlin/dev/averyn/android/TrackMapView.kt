@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -122,7 +123,7 @@ internal fun TrackMapView(
         factory = { mapView },
         modifier = Modifier.fillMaxWidth().height(240.dp),
     )
-    if (offline) Text("The base map is not available offline; the track is.")
+    if (offline) Text(stringResource(R.string.map_offline_note))
 }
 
 private fun fitCamera(

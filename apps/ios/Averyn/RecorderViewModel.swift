@@ -65,7 +65,15 @@ final class RecorderViewModel: ObservableObject {
         }
 
         AppModel.shared.addRecorderListener { [weak self] newSnapshot in
-            DispatchQueue.main.async { self?.snapshot = newSnapshot }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                // An activity that has just ended is on this device now: its row, and the raw file to export, appear
+                // without waiting for the next launch.
+                if newSnapshot.state.isTerminal && !self.snapshot.state.isTerminal {
+                    Task { await self.reloadDeviceActivities() }
+                }
+                self.snapshot = newSnapshot
+            }
         }
         tracker.onIssue = { [weak self] message in
             DispatchQueue.main.async { self?.notice = message }
@@ -90,6 +98,11 @@ final class RecorderViewModel: ObservableObject {
             historySnapshot = refreshed
         }
         deviceActivities = (try? await repository.deviceData()) ?? []
+    }
+
+    /// The activities recorded on this device, read again (an activity just ended or was recovered).
+    func reloadDeviceActivities() async {
+        deviceActivities = (try? await AppModel.shared.history().deviceData()) ?? []
     }
 
     /// Reads the profile (TDD-0012): the one on the phone at once, then, with a session, brought in step with the
@@ -218,6 +231,11 @@ final class RecorderViewModel: ObservableObject {
 
     func resume() {
         guard recorder.currentState == .paused else { return }
+        // After a downgrade the activity would record low-accuracy fixes as if they were good: say what to do instead.
+        guard tracker.canRecord else {
+            notice = tr("Precise location was turned off: the activity is paused. Turn Precise Location on to continue.")
+            return
+        }
         recorder.resume(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs())
     }
 
@@ -235,39 +253,56 @@ final class RecorderViewModel: ObservableObject {
         tracker.stop()
     }
 
+    /// The replay of a long activity (a 3 h file is ~10k lines, read more than once) must not freeze the screen, so
+    /// `recover` runs off the main thread. The recorder is single-threaded, and nothing else touches it meanwhile: the
+    /// dialog that led here is gone, the recorder is idle, and a second tap finds `pendingRecovery` already nil.
     func resolveRecoveryResume() {
         guard let metadata = pendingRecovery else { return }
-        let result = recorder.recover(activityId: metadata.activityId, nowElapsedRealtimeMs: nowElapsedRealtimeMs(), nowTimeMs: nowTimeMs())
-        if let resumed = result as? RecoveryResult.Resumed {
-            snapshot = resumed.snapshot
-            recoveryWarning = droppedRecordWarning(resumed.droppedRecordCount)
-            tracker.start()
-        } else if let completed = result as? RecoveryResult.Completed {
-            recoveryWarning = droppedRecordWarning(completed.droppedRecordCount)
-            export(activityId: completed.activity.activityId, diagnostics: completed.activity.diagnostics)
-        }
         pendingRecovery = nil
+        let recorder = self.recorder
+        let elapsedMs = nowElapsedRealtimeMs()
+        let timeMs = nowTimeMs()
+        Task {
+            let result = await Task.detached(priority: .userInitiated) {
+                recorder.recover(activityId: metadata.activityId, nowElapsedRealtimeMs: elapsedMs, nowTimeMs: timeMs)
+            }.value
+            if let resumed = result as? RecoveryResult.Resumed {
+                snapshot = resumed.snapshot
+                recoveryWarning = droppedRecordWarning(resumed.droppedRecordCount)
+                tracker.start()
+            } else if let completed = result as? RecoveryResult.Completed {
+                recoveryWarning = droppedRecordWarning(completed.droppedRecordCount)
+                export(activityId: completed.activity.activityId, diagnostics: completed.activity.diagnostics)
+            }
+        }
     }
 
     func resolveRecoveryFinish() {
         guard let metadata = pendingRecovery else { return }
-        let result = recorder.recover(activityId: metadata.activityId, nowElapsedRealtimeMs: nowElapsedRealtimeMs(), nowTimeMs: nowTimeMs())
-        if result is RecoveryResult.Resumed {
-            // The last known activity time, not "now": the app can be reopened long after the kill, and
-            // stopping at wall-clock now would count that whole gap as moving time.
-            let completed = recorder.stop(
-                elapsedRealtimeMs: recorder.lastKnownElapsedRealtimeMs,
-                timeMs: recorder.lastKnownTimeMs
-            )
-            if let resumed = result as? RecoveryResult.Resumed {
-                recoveryWarning = droppedRecordWarning(resumed.droppedRecordCount)
-            }
-            export(activityId: completed.activityId, diagnostics: completed.diagnostics)
-        } else if let completed = result as? RecoveryResult.Completed {
-            recoveryWarning = droppedRecordWarning(completed.droppedRecordCount)
-            export(activityId: completed.activity.activityId, diagnostics: completed.activity.diagnostics)
-        }
         pendingRecovery = nil
+        let recorder = self.recorder
+        let elapsedMs = nowElapsedRealtimeMs()
+        let timeMs = nowTimeMs()
+        Task {
+            let (result, closed) = await Task.detached(priority: .userInitiated) { () -> (RecoveryResult, CompletedActivity?) in
+                let result = recorder.recover(activityId: metadata.activityId, nowElapsedRealtimeMs: elapsedMs, nowTimeMs: timeMs)
+                guard result is RecoveryResult.Resumed else { return (result, nil) }
+                // The last known activity time, not "now": the app can be reopened long after the kill, and
+                // stopping at wall-clock now would count that whole gap as moving time.
+                let completed = recorder.stop(
+                    elapsedRealtimeMs: recorder.lastKnownElapsedRealtimeMs,
+                    timeMs: recorder.lastKnownTimeMs
+                )
+                return (result, completed)
+            }.value
+            if let completed = closed, let resumed = result as? RecoveryResult.Resumed {
+                recoveryWarning = droppedRecordWarning(resumed.droppedRecordCount)
+                export(activityId: completed.activityId, diagnostics: completed.diagnostics)
+            } else if let completed = result as? RecoveryResult.Completed {
+                recoveryWarning = droppedRecordWarning(completed.droppedRecordCount)
+                export(activityId: completed.activity.activityId, diagnostics: completed.activity.diagnostics)
+            }
+        }
     }
 
     /// Called whenever an activity ends (stop, or finishing a recovered one): export it and queue its upload.

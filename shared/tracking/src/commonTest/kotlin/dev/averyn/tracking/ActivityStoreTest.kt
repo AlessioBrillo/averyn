@@ -11,7 +11,6 @@ import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.writeString
-import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -20,18 +19,18 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ActivityStoreTest {
-    private lateinit var dir: java.nio.file.Path
+    private lateinit var dir: Path
     private lateinit var store: ActivityStore
 
     @BeforeTest
     fun setUp() {
-        dir = createTempDirectory("averyn-activity-store-test")
-        store = ActivityStore(Path(dir.toString()))
+        dir = createTestDir("averyn-activity-store-test")
+        store = ActivityStore(dir)
     }
 
     @AfterTest
     fun tearDown() {
-        dir.toFile().deleteRecursively()
+        dir.deleteRecursively()
     }
 
     private fun sample(elapsedMs: Long) = LocationSample(elapsedMs, elapsedMs, 45.0, 9.0, 5.0)
@@ -44,7 +43,7 @@ class ActivityStoreTest {
         repeat(50) { store.appendSample("a1", sample(100L + it)) }
         store.appendEvent("a1", StateEvent(200, 200, ActivityState.PAUSED, Reason.USER))
         repeat(5) { store.appendSample("a1", sample(300L + it)) }
-        val path = Path(dir.toString(), "a1.jsonl")
+        val path = Path(dir, "a1.jsonl")
         SystemFileSystem.sink(path, append = true).buffered().use { it.writeString("EVENT {\"elapsedRe") }
 
         assertEquals(ActivityState.PAUSED, store.lastStateOf("a1"))
@@ -79,7 +78,7 @@ class ActivityStoreTest {
         store.create(ActivityMetadata("a1", Sport.RUN, 0))
         store.appendSample("a1", sample(0))
         // Simulate a kill mid-write: append a syntactically incomplete SAMPLE line with no trailing newline.
-        val path = Path(dir.toString(), "a1.jsonl")
+        val path = Path(dir, "a1.jsonl")
         SystemFileSystem.sink(path, append = true).buffered().use { it.writeString("SAMPLE {\"timeMs\":1,\"elapsedRe") }
 
         val records = mutableListOf<ActivityRecord>()
@@ -94,7 +93,7 @@ class ActivityStoreTest {
     fun aCompleteLineThatBreaksTheModelIsAnInvalidValueNotATruncatedLine() {
         store.create(ActivityMetadata("a1", Sport.RUN, 0))
         store.appendSample("a1", sample(0))
-        val path = Path(dir.toString(), "a1.jsonl")
+        val path = Path(dir, "a1.jsonl")
         SystemFileSystem.sink(path, append = true).buffered().use {
             // Complete JSON, newline included: a latitude of 123 and a heart rate of 500 are not places or beats.
             it.writeString(
@@ -133,7 +132,7 @@ class ActivityStoreTest {
         store.create(ActivityMetadata("a1", Sport.RUN, 0))
         // No "batteryPercent" key: what a pre-diagnostics-v1 app wrote. ignoreUnknownKeys handles new fields
         // added later; the default value here must handle an *older* file missing a newer field.
-        val path = Path(dir.toString(), "a1.jsonl")
+        val path = Path(dir, "a1.jsonl")
         SystemFileSystem.sink(path, append = true).buffered().use {
             it.writeString(
                 "EVENT {\"elapsedRealtimeMs\":0,\"timeMs\":0,\"state\":\"RECORDING\",\"reason\":\"GPS_READY\"}\n",
@@ -190,7 +189,7 @@ class ActivityStoreTest {
     @Test
     fun unknownRecordKindIsCountedAsLossNotACrash() {
         store.create(ActivityMetadata("a1", Sport.RUN, 0))
-        val path = Path(dir.toString(), "a1.jsonl")
+        val path = Path(dir, "a1.jsonl")
         SystemFileSystem.sink(path, append = true).buffered().use {
             it.writeString("HR {\"bogus\":true}\n") // not a valid HeartRateSample JSON
         }
@@ -221,7 +220,7 @@ class ActivityStoreTest {
         store.createRrMetadata(ActivityMetadata("a1", Sport.RUN, 0))
         store.appendRrInterval("a1", RrInterval(1000, 1000, 857))
         // Complete JSON that breaks the model, then a line cut in the middle, then a good one.
-        val path = dir.resolve("a1.rr.jsonl").toFile()
+        val path = Path(dir, "a1.rr.jsonl")
         path.appendText("RR {\"timeMs\":2000,\"elapsedRealtimeMs\":2000,\"rrMs\":0}\n")
         path.appendText("RR {\"timeMs\":3000,\"elapsedRealtim")
         path.appendText("\nRR {\"timeMs\":4000,\"elapsedRealtimeMs\":4000,\"rrMs\":900}\n")

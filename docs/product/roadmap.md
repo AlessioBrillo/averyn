@@ -66,11 +66,11 @@ Optional third-party sensor integration. The rules are [ADR-0010](../adr/0010-ec
 | L1 | Feature frame v1 from the consumer service (SQI, motion artifact, stress class; RMSSD/SDNN once real) | pure parser in `shared/sensors` (**done**, with vectors generated from the packed struct), native adapters and a consent-gated sidecar (wait for a prototype and for the handoff in the Synapse repository) | MVP-L, beta, first on the cut line |
 | L2 | `synapse_*` FIT developer fields read by the FIT import as imported data | field mapping in the FIT decoder | With the FIT import if time allows, otherwise after launch |
 | L3 | Job/result plumbing to a stateless worker (HRV trends, daily stress) | queue and per-job credentials | After launch, after the DPIA covers it |
-| — | The research raw-stream service (ECG 500 Hz) | never | Averyn does not subscribe to it |
+| L1R | The research raw streams (ECG 500 Hz, PPG, IMU) shown as signals in Averyn, behind their own scope `raw_signals` ([ADR-0030](../adr/0030-synapse-contract-v2-1-and-raw-signals.md), proposed) | parser for contract 2.1 and raw frames, adapters, sidecar `<id>.synapse-raw.bin`, signal views on Android, iOS and web | After L1, with the same beta |
 
 ## MVP-0 and MVP-1 gates still open
 
-Real-device runs (device matrix S1–S28) take priority over any new feature. [TDD-0006](../design/TDD-0006-field-readiness.md) fixed the defects an audit found on 2026-10-15; what is left is the campaign itself, the tester distribution ([ADR-0019](../adr/0019-crash-reporting-and-tester-builds.md)) and an end-to-end CI job against the real identity provider (TDD-0006 Q3, Q4).
+Real-device runs (device matrix S1–S28) take priority over any new feature. [TDD-0006](../design/TDD-0006-field-readiness.md) fixed the defects an audit found on 2026-10-15; what is left is the campaign itself, the tester distribution ([ADR-0019](../adr/0019-crash-reporting-and-tester-builds.md)). The end-to-end CI job against the real identity provider exists (the signed-in round trip and the restore drill of `.github/workflows/ci.yml`, TDD-0006 Q3); Q4 is the campaign.
 
 MVP-0 work order, from [report §22](reference-report-v0.1.md): requirements → sample model → iOS adapter → Android adapter → local storage → pause/resume/recovery → base metrics → fixtures and tests → real-device validation. Spec: [TDD-0001](../design/TDD-0001-tracking-engine.md).
 

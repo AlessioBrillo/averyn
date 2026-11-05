@@ -11,7 +11,8 @@ private const val BPM_MAX = 240
 
 /**
  * Result of `hr-v2` over the heart-rate samples of one activity (docs/metrics/heart-rate.md).
- * No interpolation, no smoothing, no zones: zones need a user profile (deferred increment).
+ * No interpolation, no smoothing. The time in each zone is a separate metric (`hr-zones-v1`, shared/analysis), because
+ * it needs the maximum heart rate of the profile.
  */
 data class HeartRateSnapshot(
     val avgHrBpm: Int,
@@ -27,8 +28,8 @@ data class HeartRateSnapshot(
 
 /**
  * Incremental accumulator over `HR ` records recorded while the activity is `RECORDING`.
- * The caller feeds samples in arrival order and tells when the activity pauses/resumes
- * via [onPause]/[onResume]; samples received while paused are excluded from the metric.
+ * The caller feeds samples in arrival order and only the ones of the RECORDING state: a reading taken while the
+ * activity was paused is stored but not passed here, so it is not in the metric.
  */
 class HeartRateMetrics {
     private var values = mutableListOf<Int>()

@@ -115,7 +115,7 @@ class ActivityRecorder(
     private var batteryEndPercent: Int? = null
     private var batteryReadingCount = 0
 
-    /** True once at least one HR sample has been stored for this activity (diagnostics stamps hr-v1). */
+    /** True once at least one HR sample has been stored for this activity (diagnostics stamps the heart-rate algorithm version). */
     private var hrRecorded = false
 
     /**

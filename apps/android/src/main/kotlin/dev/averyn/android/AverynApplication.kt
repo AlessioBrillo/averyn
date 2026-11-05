@@ -16,6 +16,7 @@ import dev.averyn.sensors.RrInterval
 import dev.averyn.tracking.ActivityRecorder
 import dev.averyn.tracking.ActivityStore
 import dev.averyn.tracking.DroppedInputReason
+import dev.averyn.tracking.LiveSnapshot
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,12 +24,32 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.io.files.Path
 import java.io.File
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
 
 class AverynApplication : Application() {
     val auth: AuthManager by lazy { AuthManager(this) { clearServerCache() } }
     val store: ActivityStore by lazy { ActivityStore(Path(filesDir.absolutePath, "activities")) }
+
+    /** More than one reader of the recorder's state (the screen, the service): a single slot made one erase the other. */
+    private val recorderListeners = CopyOnWriteArrayList<(LiveSnapshot) -> Unit>()
+
+    /** Registers [listener]; the returned function removes it. */
+    fun addRecorderListener(listener: (LiveSnapshot) -> Unit): () -> Unit {
+        recorderListeners += listener
+        return { recorderListeners -= listener }
+    }
+
+    /**
+     * One recovery at a time for the whole process. The screen and the service (restarted by the system) can both
+     * find an interrupted activity at launch: two replays of the same file would log a second RECOVERED event, and
+     * the recorder is not thread-safe.
+     */
+    val recoveryInFlight = AtomicBoolean(false)
+
     val recorder: ActivityRecorder by lazy {
         ActivityRecorder(store).apply {
+            listener = { snapshot -> recorderListeners.forEach { it(snapshot) } }
             batteryPercent = {
                 val percent =
                     getSystemService(BatteryManager::class.java)
