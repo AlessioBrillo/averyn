@@ -152,7 +152,7 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
-          description: A GeoJSON Feature, with the owner's privacy zones cut out (TDD-0016: a hidden stretch breaks the line, the file and the export keep every sample); geometry is null when fewer than two samples counted towards the distance or every point is inside a zone
+          description: "A GeoJSON Feature, with the owner's privacy zones cut out (TDD-0016, a hidden stretch breaks the line; the file and the export keep every sample); geometry is null when fewer than two samples counted towards the distance or every point is inside a zone"
           content:
             application/geo+json:
               schema:
