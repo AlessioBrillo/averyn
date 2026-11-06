@@ -36,6 +36,20 @@ class ActivityRecorderTest {
     ) = LocationSample(elapsedMs, elapsedMs, lat, 0.0, 5.0)
 
     @Test
+    fun interruptFailsBeforeTheFirstFixPausesWhileRecordingAndIgnoresTheRest() {
+        val recorder = ActivityRecorder(store)
+        assertEquals(null, recorder.interrupt(0, 0, Reason.PROVIDER_DISABLED))
+        recorder.start("a1", Sport.RUN, 0, 0)
+        assertEquals(ActivityState.FAILED, recorder.interrupt(10, 10, Reason.PROVIDER_DISABLED))
+        assertEquals(null, recorder.interrupt(20, 20, Reason.PROVIDER_DISABLED))
+
+        recorder.start("a2", Sport.RUN, 100, 100)
+        recorder.gpsReady(110, 110)
+        assertEquals(ActivityState.PAUSED, recorder.interrupt(120, 120, Reason.PROVIDER_DISABLED))
+        assertEquals(null, recorder.interrupt(130, 130, Reason.PROVIDER_DISABLED))
+    }
+
+    @Test
     fun happyPathStartRecordPauseResumeStop() {
         val recorder = ActivityRecorder(store)
         recorder.start("a1", Sport.RUN, 0, 0)
