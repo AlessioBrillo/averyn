@@ -11,6 +11,7 @@ import dev.averyn.sync.SyncStatus
 import dev.averyn.sync.SyncStatusStore
 import dev.averyn.tracking.ActivityStore
 import dev.averyn.tracking.LocalActivitySummary
+import dev.averyn.tracking.SynapseSidecarKind
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.io.files.Path
@@ -317,7 +318,7 @@ class HistoryRepository(
 
     /**
      * Throws one activity off this device: the raw file, the local summary, the sync status and the
-     * heart-rate sidecar go with it. The server keeps what it has.
+     * heart-rate and band sidecars go with it. The server keeps what it has.
      */
     suspend fun deleteLocal(activityId: String) =
         withContext(Dispatchers.Default) {
@@ -325,6 +326,10 @@ class HistoryRepository(
             store.deleteRr(activityId)
             statuses.delete(activityId)
             statuses.deleteRr(activityId)
+            for (kind in SynapseSidecarKind.entries) {
+                store.deleteSynapse(activityId, kind)
+                statuses.deleteSynapse(activityId, kind)
+            }
         }
 
     /** The unit system as the device last knew it: the cached one, or metric. Never touches the network. */
