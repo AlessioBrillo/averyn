@@ -33,6 +33,6 @@ Format: [MADR](https://adr.github.io/madr/)-style, see [template](template.md). 
 | [0027](0027-managed-cloud-baseline.md) | Managed cloud baseline: one EU host, the self-host stack, off-site backups, self-hosted map tiles | proposed |
 | [0028](0028-consumer-launch-target.md) | The launch target: a free, privacy-first consumer app built around three moments, proved on devices first | accepted |
 | [0029](0029-upload-keeps-valid-lines.md) | An upload with unusable lines keeps the valid ones and counts the rest | accepted |
-| [0030](0030-synapse-contract-v2-1-and-raw-signals.md) | Synapse contract v2.1, and the raw signals shown only in Averyn (L1R, scope `raw_signals`) | proposed |
+| [0030](0030-synapse-contract-v2-1-and-raw-signals.md) | Synapse contract v2.2 (written as v2.1), and the raw signals shown only in Averyn (L1R, scope `raw_signals`) | accepted |
 
 Open decisions still without an ADR are tracked in [product/roadmap.md](../product/roadmap.md#open-decisions).
