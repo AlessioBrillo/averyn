@@ -22,6 +22,7 @@ Sports data reveals home, workplace, routines, schedule, physical condition and 
 6. **Telemetry:** off by default, opt-in, no location content ([ADR-0009](../adr/0009-observability-baseline.md)).
 7. **Never log** coordinates, tokens, or user-generated free text.
 8. **A copy on the device has a life of its own:** the copy of the server on the device is bounded, is excluded from the backup, ends with the session and can be deleted by the user at any time ([ADR-0025](../adr/0025-device-side-cache-of-server-activities.md)). It never holds a token, a raw file or an interval RR.
+9. **A band's sidecars are Health data, kept as received:** `signal_quality` covers the derived values, `stress_monitoring`, `rr_recording` and `hrv_analysis` cover single fields of them, and `raw_signals` (the raw ECG, pulse wave and motion, the most identifying stream a band has) has its own scope; none implies another. Revoking deletes what the scope covers (the whole sidecar, or the covered fields of the stored frames) and leaves a tombstone; the sidecars sit under the activity's prefix, so deleting the activity or the account removes them; they count toward the quota; only the owner reads them ([ADR-0030](../adr/0030-synapse-contract-v2-1-and-raw-signals.md)). They are not yet in the user export or covered by the DPIA: both are open items before any managed-cloud launch.
 
 ## To be written
 
