@@ -354,4 +354,19 @@ class SynapseRoutesTest {
                 }
             }
         }
+
+    @Test
+    fun everyScopeTheServerAcceptsHasARevocationRule() {
+        val hook = revocationHook(UserData(db, raw), SynapseStore(db, raw))
+        val owner = UUID.randomUUID()
+        db.connection.use { c ->
+            c.prepareStatement("INSERT INTO users (id, oidc_issuer, oidc_subject) VALUES (?, 'test', ?)").use {
+                it.setObject(1, owner)
+                it.setString(2, "scope-check")
+                it.executeUpdate()
+            }
+        }
+        for (scope in ConsentScope.ALL) hook(owner, scope) // none of them may be an unknown scope
+        assertTrue(runCatching { hook(owner, "not_a_scope") }.isFailure, "an unhandled scope fails loudly")
+    }
 }

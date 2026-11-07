@@ -6,7 +6,6 @@ import dev.averyn.sensors.SYNAPSE_STATUS_BYTES
 import dev.averyn.sensors.SynapseFrameResult
 import dev.averyn.sensors.SynapseSequenceTracker
 import dev.averyn.sensors.SynapseSequenceVerdict
-import dev.averyn.sensors.SynapseStress
 import dev.averyn.sensors.parseSynapseFeatureFrame
 import dev.averyn.sensors.readSynapseSidecar
 import kotlin.math.max
@@ -96,6 +95,3 @@ fun buildFeatures(
         gaps = gaps,
     )
 }
-
-/** The stress classes as the DTO names them. */
-internal val STRESS_NAMES = SynapseStress.entries.map { it.name.lowercase() }

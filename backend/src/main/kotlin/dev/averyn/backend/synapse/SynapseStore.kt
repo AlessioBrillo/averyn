@@ -166,7 +166,6 @@ class SynapseStore(
                         }
                     }
             }
-        rows.forEach { raw.delete(it.key) }
         db.connection.use { conn ->
             conn.autoCommit = false
             try {
@@ -194,6 +193,9 @@ class SynapseStore(
                 throw e
             }
         }
+        // After the commit: an object left behind by a crash is an orphan under the activity's prefix, which the
+        // activity's and the account's deletion remove; the reverse order left rows pointing at objects that were gone.
+        rows.forEach { raw.delete(it.key) }
         return rows.size
     }
 
@@ -295,5 +297,7 @@ fun revocationHook(
             ConsentScope.STRESS_MONITORING -> store.maskFeatures(owner, setOf(FeatureField.STRESS))
             ConsentScope.SIGNAL_QUALITY -> store.deleteKind(owner, SynapseKind.FEATURES)
             ConsentScope.RAW_SIGNALS -> store.deleteKind(owner, SynapseKind.RAW)
+            // A scope the server accepts (ConsentScope.ALL) and nothing here deletes for would revoke in name only.
+            else -> error("no revocation rule for consent scope '$scope'")
         }
     }
