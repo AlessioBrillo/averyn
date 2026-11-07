@@ -26,7 +26,7 @@ class SynapseContractPinTest {
             "gatt_v1.json" to "0c6b9e38fccbf5510ea82741ed5b40c2b2338ce08fe47a7e5655f75a6b0688a9",
             "gatt_v2.json" to "dfda3fa59c865a17be94d557a81f022171ef5c8b7c619d22b32341a393e8c342",
             "raw_frame_v1.json" to "1f1db14d6a3d916ef44c25e216d53bd6d4148b43a58699b37d480a3422f83553",
-            "consumer_v2_vectors.json" to "bd8a0a3f9924a05d43c1349b41d8ce692504d62d740a39feda91770560a99685",
+            "consumer_v2_vectors.json" to "f7f63046825a854d680bef4610dabcd99bd06086cc9e9c5506fe11befc5e2c1c",
             "raw_frame_vectors_v1.json" to "fc3b66f2701912ef7760e16fad5fd1dbdc182aedbf91df34b36d7b7488edc73a",
             "band_scenarios_v1.json" to "a5a600f134c6bcf540d0cd18e92482d93d22bdb5af2d9c38036985398a25b14f",
             "session_60s.expected.json" to "a6d333ee250dbb4acec0dd27316609cbc346c0a7cb3dcc36ddfc0c8c7a6dc118",

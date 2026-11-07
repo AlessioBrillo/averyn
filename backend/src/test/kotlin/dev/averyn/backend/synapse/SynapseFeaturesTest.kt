@@ -1,8 +1,10 @@
 package dev.averyn.backend.synapse
 
+import dev.averyn.sensors.SynapseConsents
 import dev.averyn.sensors.SynapseFrameResult
 import dev.averyn.sensors.SynapseStress
 import dev.averyn.sensors.encodeSynapseSidecarRecord
+import dev.averyn.sensors.maskSynapseFeatureFrame
 import dev.averyn.sensors.parseSynapseFeatureFrame
 import dev.averyn.sensors.readSynapseSidecar
 import kotlin.test.Test
@@ -136,5 +138,33 @@ class SynapseFeaturesTest {
         assertEquals(3, f.lostFrames)
         assertEquals(1, f.gaps.size)
         assertEquals(3, f.gaps.single().count)
+    }
+
+    @Test
+    fun theMaskTheClientAppliesBeforeWritingIsTheServersOwn() {
+        val foreign = fullFrame(3).also { it[0] = 3 }
+        val status = ByteArray(40).also { it[0] = 2 }
+        val frames = listOf(fullFrame(1), fullFrame(2), foreign, status)
+        val original = sidecar(*frames.toTypedArray())
+        for (bits in 0 until 8) {
+            val consents =
+                SynapseConsents(
+                    rrRecording = bits and 1 != 0,
+                    hrvAnalysis = bits and 2 != 0,
+                    signalQuality = true,
+                    stressMonitoring = bits and 4 != 0,
+                )
+            val server =
+                maskFeatureSidecar(
+                    original,
+                    buildSet {
+                        if (!consents.rrRecording) add(FeatureField.RR)
+                        if (!consents.hrvAnalysis) add(FeatureField.BAND_HRV)
+                        if (!consents.stressMonitoring) add(FeatureField.STRESS)
+                    },
+                )
+            val client = sidecar(*frames.map { maskSynapseFeatureFrame(it, consents) }.toTypedArray())
+            assertContentEquals(server, client, "consents $consents")
+        }
     }
 }
