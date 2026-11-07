@@ -339,6 +339,22 @@ class ActivityStore(
         return lastState
     }
 
+    /**
+     * An activity that failed before it recorded a single sample (no GPS fix, permission refused): there is
+     * nothing to upload and nothing to show. The file stays on the phone; only the list and the sync skip it.
+     */
+    fun isEmptyFailure(activityId: String): Boolean {
+        val path = pathFor(activityId)
+        if (!SystemFileSystem.exists(path)) return false
+        if (lastStateOf(activityId) != ActivityState.FAILED) return false
+        SystemFileSystem.source(path).buffered().use { source ->
+            while (true) {
+                val line = source.readLine() ?: return true
+                if (line.startsWith(SAMPLE_PREFIX)) return false
+            }
+        }
+    }
+
     /** Activities whose last EVENT left them RECORDING/PAUSED/STOPPING without a clean end (TDD-0001 F4). */
     fun interrupted(): List<ActivityMetadata> =
         list().filter { metadata ->

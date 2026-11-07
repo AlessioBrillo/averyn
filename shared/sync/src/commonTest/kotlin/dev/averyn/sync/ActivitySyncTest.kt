@@ -115,6 +115,21 @@ class ActivitySyncTest {
         }
 
     @Test
+    fun anActivityThatFailedBeforeAnySampleIsNeitherUploadedNorQueued() =
+        runTest {
+            val recorder = ActivityRecorder(store)
+            recorder.start("empty", Sport.RUN, 0, 1_000)
+            recorder.fail(1_000, 2_000, Reason.ERROR)
+            finishedActivity("failedWithData", fail = true)
+
+            val result = sync(created).syncPending("tok")
+
+            assertEquals(1, result.uploaded)
+            assertEquals("/v1/activities/failedWithData", requests.single().url.encodedPath)
+            assertEquals(SyncState.LOCAL_ONLY, statuses.statusOf("empty").state)
+        }
+
+    @Test
     fun aReadyActivityIsNeverUploadedAgain() =
         runTest {
             finishedActivity("a1")

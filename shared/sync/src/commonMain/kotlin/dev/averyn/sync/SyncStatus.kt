@@ -78,7 +78,7 @@ class SyncStatusStore(
 
     internal fun isFinished(activityId: String): Boolean {
         val last = store.lastStateOf(activityId)
-        return last == ActivityState.COMPLETED || last == ActivityState.FAILED
+        return last == ActivityState.COMPLETED || (last == ActivityState.FAILED && !store.isEmptyFailure(activityId))
     }
 
     fun write(

@@ -529,7 +529,7 @@ class HistoryRepository(
         )
 
     private fun localActivities(): List<LocalActivity> =
-        store.list().map { metadata ->
+        store.list().filterNot { store.isEmptyFailure(it.activityId) }.map { metadata ->
             val status = statuses.statusOf(metadata.activityId)
             LocalActivity(
                 activityId = metadata.activityId,
