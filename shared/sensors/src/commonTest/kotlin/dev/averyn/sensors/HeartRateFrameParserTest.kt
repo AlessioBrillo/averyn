@@ -20,8 +20,8 @@ class HeartRateFrameParserTest {
         flags =
             when (contactDetected) {
                 null -> flags or 0x00 // not supported
-                true -> flags or 0x02 // bit 1 = 1, bit 2 = 0 => contact detected
-                false -> flags or 0x04 // bit 1 = 0, bit 2 = 1 => contact not detected
+                true -> flags or 0x06 // bits 2:1 = 3 => supported, contact detected
+                false -> flags or 0x04 // bits 2:1 = 2 => supported, contact not detected
             }
         if (energyPresent) flags = flags or 0x08
         if (rrPresent) flags = flags or 0x10
@@ -118,12 +118,28 @@ class HeartRateFrameParserTest {
     }
 
     @Test
-    fun reportsIncompleteOnTruncatedRr() {
-        // flags + hr(uint8) + rr present + only 1 byte of the rr pair
-        val data = byteArrayOf(0x10, 70, 0x01)
+    fun anOddTrailingRrByteKeepsTheHeartRateAndIsCountedNotAskedAgain() {
+        // flags + hr(uint8) + rr present + one whole RR (1024 = 1000 ms) + a stray byte
+        val data = byteArrayOf(0x10, 70, 0x00, 0x04, 0x01)
         val (results, consumed) = parseHeartRateFrames(data, 0, 1000L, 2000L)
-        assertEquals(0, consumed)
-        assertTrue(results.any { it is ParseResult.Incomplete })
+
+        assertEquals(data.size, consumed, "the stray byte is consumed: nothing will complete a notification")
+        assertTrue(results.none { it is ParseResult.Incomplete })
+        assertTrue(results.any { it is ParseResult.Invalid })
+        val complete = results.filterIsInstance<ParseResult.Complete>().single()
+        assertEquals(70, complete.heartRate?.bpm)
+        assertEquals(listOf(1000), complete.rrIntervals.map { it.rrMs })
+    }
+
+    @Test
+    fun contactBitsFollowTheBluetoothSpecification() {
+        // bits 2:1 -> 0 and 1: feature not supported (no information); 2: not detected; 3: detected
+        val expected = mapOf(0 to null, 1 to null, 2 to false, 3 to true)
+        for ((bits, contact) in expected) {
+            val data = byteArrayOf((bits shl 1).toByte(), 80)
+            val complete = parseHeartRateFrames(data, 0, 1000L, 2000L).first.single() as ParseResult.Complete
+            assertEquals(contact, complete.heartRate?.contact, "contact bits $bits")
+        }
     }
 
     @Test

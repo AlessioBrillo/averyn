@@ -38,12 +38,13 @@ fun parseHeartRateFrames(
         val energyPresent = flags and 0x08 == 0x08
         val rrPresent = flags and 0x10 == 0x10
 
+        // Bluetooth HRS, Sensor Contact Status (bits 2:1): 0 and 1 = the feature is not supported (no information),
+        // 2 = supported but contact not detected, 3 = supported and detected.
         val contact: Boolean? =
             when (contactBits) {
-                0x00 -> null
-                0x01 -> true
                 0x02 -> false
-                else -> null // 0x03 reserved
+                0x03 -> true
+                else -> null
             }
 
         pos++ // flags
@@ -85,10 +86,13 @@ fun parseHeartRateFrames(
                 }
                 pos += 2
             }
-            // An odd trailing byte means a truncated last RR: don't consume it.
+            // An odd trailing byte is a fault of the notification, not a frame waiting for more bytes: a notification
+            // is self-contained and the loop above has already taken every whole pair, so nothing can complete it.
+            // Returning Incomplete threw the whole notification away (the adapters parse one at a time), heart rate
+            // included. Keep what is valid, count the stray byte, and consume it.
             if (pos < data.size) {
-                results += ParseResult.Incomplete(2)
-                return results to frameStart
+                invalid += ParseResult.Invalid("odd trailing byte in the RR list")
+                pos = data.size
             }
         }
 
