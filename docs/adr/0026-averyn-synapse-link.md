@@ -3,7 +3,7 @@
 - **Status:** accepted (2026-10-29, with the corrections below made before acceptance)
 - **Date:** 2026-10-25
 - **Deciders:** @AlessioBrillo
-- **Amended by:** [ADR-0030](0030-synapse-contract-v2-1-and-raw-signals.md) (proposed): contract 2.1 and the raw-signal level L1R replace the line "the raw research service is never subscribed to by Averyn"; the rest stands.
+- **Amended by:** [ADR-0030](0030-synapse-contract-v2-1-and-raw-signals.md) (accepted 2026-11-07): contract 2.1 and the raw-signal level L1R replace the line "the raw research service is never subscribed to by Averyn"; the rest stands.
 
 ## Context and problem
 
@@ -59,3 +59,5 @@ The raw research service (ECG/PPG/IMU samples) is never subscribed to by Averyn 
 ## Revisit when
 
 A second sensor vendor wants a vendor-specific channel (then the rules above become a general template), or L3 starts (job credentials and the DPIA extension need their own ADR).
+
+*Editorial note, 2026-11-07:* of the requests to the Synapse repository, the contract JSON with the layout and the size, and golden vectors from the SDK encoder, are done in contract 2.2 (see ADR-0030; the feature frame is 27 bytes, not 23). The real RR is carried by the v2 feature frame behind a flag that stays off until the bench run; it is still not sent in `0x2A37`.

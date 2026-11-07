@@ -1,7 +1,7 @@
-# ADR-0030: Synapse contract v2.1, and the raw signals shown only in Averyn (level L1R)
+# ADR-0030: Synapse contract v2.2 (written as v2.1), and the raw signals shown only in Averyn (level L1R)
 
-- **Status:** proposed (2026-11-02)
-- **Date:** 2026-11-02
+- **Status:** accepted (2026-11-07)
+- **Date:** 2026-11-02 (accepted 2026-11-07, with the amendments listed at the end)
 - **Deciders:** @AlessioBrillo
 - **Amends:** [ADR-0026](0026-averyn-synapse-link.md) (the line "the raw research service is never subscribed to by Averyn" and the table of levels). It does not touch ADR-0014's rule that Averyn never calls the Synapse data-plane API.
 
@@ -22,14 +22,14 @@ Two things changed after [ADR-0026](0026-averyn-synapse-link.md).
 
 **Option 2.**
 
-**Pin.** Averyn re-pins from GATT v1 to the device repository's `contracts/gatt_v2.json` **2.1**, and adds `contracts/raw_frame_v1.json` (the header, stream ids, sample formats and the rules of the raw frame). Both are vendored with their sha256 in a test, next to the golden vectors the device SDK generates (`consumer_v2.json` for the feature and status records, `raw_frame_v1.json` for raw frames, valid and invalid). v1 stays frozen in the device repository; an old band that only speaks v1 is read by the existing v1 parser. The pin changes with the parser, in the pull request that adds it (not in this one), and the two repositories merge together as in [synapse.md](../integrations/synapse.md).
+**Pin.** Averyn re-pins from GATT v1 to the device repository's `contracts/gatt_v2.json` **2.2**, and adds `contracts/raw_frame_v1.json` (the header, stream ids, sample formats and the rules of the raw frame). Both are vendored with their sha256 in a test, next to the golden vectors the device SDK generates (`consumer_v2.json` for the feature and status records, `raw_frame_v1.json` for raw frames, valid and invalid). v1 is retired: no v1 band was ever deployed, so Averyn drops its v1 parser and its v1 pin together with this change (the file stays in the device repository, byte-identical, for history). The pin changes with the parser, in the pull request that adds it (not in this one), and the two repositories merge together as in [synapse.md](../integrations/synapse.md).
 
 **Levels.**
 
 | Level | What | Consent scope |
 |---|---|---|
 | L0 | The band as a standard HR strap | none |
-| L1 | Feature v2.1 (HR, RR/RMSSD/SDNN once real, signal quality, motion level, motion artifact, battery, sensor health, stress class when present) and the Status record | `signal_quality`; `stress_monitoring` for the stress class; `hrv_analysis` for RR, RMSSD and SDNN |
+| L1 | Feature v2.1 (HR, RR/RMSSD/SDNN once real, signal quality, motion level, motion artifact, battery, sensor health, stress class when present) and the Status record | `signal_quality`; `stress_monitoring` for the stress class; `rr_recording` for the RR intervals, whichever characteristic carries them ([ADR-0021](0021-consent-health-data.md)); `hrv_analysis` for the band's own RMSSD and SDNN |
 | **L1R** | The raw research streams (ECG, PPG, IMU, power) shown as signals and stored for later | **`raw_signals` (new)** |
 | L2 | `synapse_*` FIT developer fields on import | none beyond the import |
 | L3 | Job/result plumbing to a worker | after launch, after the DPIA covers it |
@@ -38,9 +38,9 @@ Two things changed after [ADR-0026](0026-averyn-synapse-link.md).
 
 - **Its own scope, `raw_signals`**, separate and revocable ([ADR-0021](0021-consent-health-data.md)): server-authoritative, fail-closed on the device, re-read while the stream runs. Revoking stops the subscription at once, deletes the stored raw data and leaves a tombstone. Granting L1 consents never implies it.
 - **The adapter subscribes to the research service only while an activity is recording or the "live signals" screen is open**, and unsubscribes when both end. The control point `stop` gates the raw streams on the band when the screen closes in the middle of a recording.
-- **Storage is the frames as received** (`<id>.synapse-raw.bin`, each frame preceded by its length and the phone's monotonic reception time), append-only like the other sidecars ([ADR-0015](0015-local-activity-store.md), [ADR-0020](0020-sensor-raw-channels.md)). Averyn does not convert at write time: units, filtering and decimation are read-time functions of the contract, so a better filter never needs a re-recording. The server keeps the file verbatim and derives only decimated series ([ADR-0023](0023-activity-analysis-storage.md)).
-- **Time.** The axis is the phone's monotonic clock at reception. The device timestamp (low 32 bits of microseconds) is extended to 64 bits per stream with the wrap flag and is used only to place samples *within* a frame and to align streams; it never overrides the phone's clock. The phone sends `set_time` on every connection so the band's wall clock (which it does not have by itself) is right when it matters.
-- **Loss is data.** Per stream: a gap in `sequence`, the `dropped` count of each frame, a frame with an unknown version, stream or format, and the band's own loss counters from the Status record are all shown as markers on the signal with their reason, and counted in the activity's summary. A repeat or an older sequence is not a gap; a restart of the band is followed, not counted as thousands of lost frames.
+- **Storage is the frames as received** (`<id>.synapse-raw.bin`, each frame preceded by its length and the phone's monotonic reception time), append-only like the other sidecars ([ADR-0015](0015-local-activity-store.md), [ADR-0020](0020-sensor-raw-channels.md)). Averyn does not convert at write time: units, filtering and decimation are read-time functions of the contract, so a better filter never needs a re-recording. The server keeps the file verbatim and derives, once, at ingest, a min/max pyramid per stream and channel (a level is a factor of ten coarser than the one below; a window request returns the finest level that fits the screen, so a 500 Hz ECG can be zoomed to a single QRS and still be shown whole). The L1 values use the decimated series of [ADR-0023](0023-activity-analysis-storage.md).
+- **Time.** The axis is the phone's monotonic clock at reception. The device timestamp (low 32 bits of microseconds) is extended to 64 bits per stream with the wrap flag and is used only to place samples *within* a frame and to align streams; it never overrides the phone's clock. The device timestamp is the low 32 bits of a **microsecond** counter in raw frames (`timestamp_us`) and a 32-bit **millisecond** counter in the feature frame (`t_dev_ms`): they are not interchangeable. The phone sends `set_time` on every connection so the band's wall clock (which it does not have by itself) is right when it matters.
+- **Loss is data.** Per stream: a gap in `sequence`, the `dropped` count of each frame, a frame with an unknown version, stream or format, and the band's own loss counters from the Status record are all shown as markers on the signal with their reason, and counted in the activity's summary. A repeat or an older sequence is not a gap; a restart of the band is followed, not counted as thousands of lost frames. From contract 2.2 a stream's sequence advances only when the band's stack accepted the frame: a refused notification is retried with the same number, so a hole is a frame lost after the stack took it, and samples the band had to discard travel in `dropped`.
 - **Units come from the contract** (`display_unit`, `display_per_wire`): no unit is written by hand in a screen. A sentinel is a gap in the line, never `0`.
 - **Wording.** The raw ECG is a signal from a wellness band, not a medical ECG ([ADR-0013](0013-health-data-special-category.md)): no diagnostic or arrhythmia wording anywhere, "via Synapse" on every chart, never mixed into Averyn's own charts. Every chart has a text or table equivalent ([TDD-0015](../design/TDD-0015-consumer-ux.md)).
 - **Size.** The raw streams are about 2.4 kB/s, roughly 8.5 MB per hour. A cap per activity (proposed: 4 hours) and the sync policy (proposed: raw files upload on Wi-Fi only, after the activity) are part of the pull request that adds the endpoint; the figures are to be confirmed on a real band.
@@ -58,3 +58,12 @@ Two things changed after [ADR-0026](0026-averyn-synapse-link.md).
 ## Revisit when
 
 The first real band run shows the loss or the size figures wrong; or a second device wants raw display (then the rules become general); or a store review objects to a raw ECG view in a wellness app.
+
+## Amendments at acceptance (2026-11-07)
+
+- **Contract 2.2, not 2.1.** The device repository advanced the contract once more before Averyn pinned it: v1 marked retired, the `sport_types` enum added to `gatt_v2.json`, the raw-frame sequence rule above, and LF line endings enforced so the sha256 of a checkout equals the one of the index.
+- **v1 is dropped**, not kept next to v2 (see Pin).
+- **One scope per kind of data.** The RR intervals are `rr_recording` however they arrive (the standard `0x2A37` or the feature frame); `hrv_analysis` is only for the RMSSD and SDNN the band computes. ADR-0021 reserved `hrv_analysis` for the server's own `hrv-v1`.
+- **A pyramid instead of "only decimated series"** for the raw streams, so a signal can be zoomed (see Rules for L1R).
+- **Sidecar format.** Each record is `u16 length | i64 t_rx_ns | frame bytes`, little endian; the consumer records (feature 27 B, status 40 B) go to `<id>.synapse.bin`, the raw frames to `<id>.synapse-raw.bin`; the device repository publishes a 60 s sample of each with its answer key (`contracts/fixtures/session_60s.*`).
+- **Priority.** This work starts before the device campaign has finished, an exception to the order of work in the roadmap, because the contract is free to fix only until someone pins it. A red row of the campaign still stops it.
