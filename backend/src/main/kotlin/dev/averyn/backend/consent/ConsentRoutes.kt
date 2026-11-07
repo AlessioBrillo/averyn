@@ -106,11 +106,23 @@ fun Application.consent(
     return store
 }
 
-/** Scopes Averyn currently grants consent for (ADR-0021). `hrv_analysis` is reserved for hrv-v1. */
+/**
+ * Scopes Averyn currently grants consent for (ADR-0021, ADR-0030). `hrv_analysis` covers the RMSSD and SDNN a band
+ * computes (and `hrv-v1` when it exists); the RR intervals are `rr_recording` however they arrive.
+ */
 object ConsentScope {
     val RR_RECORDING = "rr_recording"
     val HRV_ANALYSIS = "hrv_analysis"
-    val ALL = setOf(RR_RECORDING, HRV_ANALYSIS)
+
+    /** A Synapse band's derived values: signal quality, motion artifact, heart rate, battery (L1). */
+    val SIGNAL_QUALITY = "signal_quality"
+
+    /** The band's stress class. */
+    val STRESS_MONITORING = "stress_monitoring"
+
+    /** The band's raw ECG, PPG and IMU streams (L1R). The most identifying data the band has: its own scope. */
+    val RAW_SIGNALS = "raw_signals"
+    val ALL = setOf(RR_RECORDING, HRV_ANALYSIS, SIGNAL_QUALITY, STRESS_MONITORING, RAW_SIGNALS)
 }
 
 /** The caller's Averyn user id, or null after answering 403 because the account was deleted (ADR-0017). */
