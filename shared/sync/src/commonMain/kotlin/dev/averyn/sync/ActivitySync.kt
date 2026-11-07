@@ -253,6 +253,8 @@ class ActivitySync internal constructor(
                 403 -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "CONSENT_REVOKED")
                 410 -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "DELETED_ON_SERVER")
                 404 -> SyncStatus(SyncState.FAILED_RETRYABLE, attempts, "HTTP_404")
+                // The quota does not free itself; the file stays on the device for the user to decide.
+                507 -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "QUOTA_EXCEEDED")
                 408, 429, in 500..599 -> SyncStatus(SyncState.FAILED_RETRYABLE, attempts, "HTTP_$code")
                 else -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "HTTP_$code")
             }

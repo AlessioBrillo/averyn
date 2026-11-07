@@ -456,7 +456,7 @@ class ActivitySyncTest {
             val expected =
                 mapOf(
                     HttpStatusCode.NotFound to SyncState.FAILED_RETRYABLE,
-                    HttpStatusCode.InsufficientStorage to SyncState.FAILED_RETRYABLE,
+                    HttpStatusCode.InsufficientStorage to SyncState.FAILED_PERMANENT,
                     HttpStatusCode.TooManyRequests to SyncState.FAILED_RETRYABLE,
                     HttpStatusCode.PayloadTooLarge to SyncState.FAILED_PERMANENT,
                     HttpStatusCode.UnprocessableEntity to SyncState.FAILED_PERMANENT,

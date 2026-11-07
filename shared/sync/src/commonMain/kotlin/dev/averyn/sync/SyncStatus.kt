@@ -171,6 +171,15 @@ class SyncStatusStore(
         SystemFileSystem.atomicMove(temp, target)
     }
 
+    /** Throws the status of one Synapse band sidecar away. */
+    fun deleteSynapse(
+        activityId: String,
+        kind: SynapseSidecarKind,
+    ) {
+        val path = synapsePath(activityId, kind)
+        if (SystemFileSystem.exists(path)) SystemFileSystem.delete(path)
+    }
+
     private fun synapsePath(
         activityId: String,
         kind: SynapseSidecarKind,
