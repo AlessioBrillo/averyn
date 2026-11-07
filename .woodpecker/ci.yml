@@ -18,6 +18,9 @@ steps:
       - ci-android-sdk:/ci-android
       - /var/run/docker.sock:/var/run/docker.sock
     commands:
+      # The sibling containers publish their ports on the engine that owns the socket: its bridge gateway reaches them,
+      # while host.docker.internal may point elsewhere (the Windows LAN address under WSL). ponytail: assumes a /24 bridge.
+      - echo "$(hostname -i | awk '{print $1}' | sed 's/\.[0-9]*$/.1/') host.docker.internal" >> /etc/hosts
       - apt-get update -q && apt-get install -y -q unzip curl git
       - |
         if [ ! -x /ci-android/cmdline-tools/latest/bin/sdkmanager ]; then
