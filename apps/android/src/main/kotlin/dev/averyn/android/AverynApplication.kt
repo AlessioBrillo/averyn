@@ -7,7 +7,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.averyn.android.auth.AuthManager
+import dev.averyn.android.ble.BandPrefs
 import dev.averyn.android.ble.BleHrAdapter
+import dev.averyn.android.ble.HrSensor
+import dev.averyn.android.ble.SynapseBleAdapter
 import dev.averyn.api.ConsentGrant
 import dev.averyn.api.UnitSystem
 import dev.averyn.client.HistoryRepository
@@ -102,6 +105,21 @@ class AverynApplication : Application() {
      *  devices without Bluetooth too (the adapter itself is harmless when Bluetooth is off). */
     val hrAdapter: BleHrAdapter by lazy { BleHrAdapter(this) }
 
+    /** What the user chose about a SYNAPSE band (ADR-0030): the sensor, its address, raw over mobile data. */
+    val bandPrefs: BandPrefs by lazy { BandPrefs(this) }
+
+    /** The SYNAPSE band: heart rate for the recording plus the two sidecars, under the consents below. */
+    val synapseAdapter: SynapseBleAdapter by lazy { SynapseBleAdapter(this, store, bandPrefs) }
+
+    /** The consents of the band's signals as the server last said (ADR-0021); none until the first answer. */
+    @Volatile
+    var synapseConsents: dev.averyn.sensors.SynapseConsents = dev.averyn.sensors.SynapseConsents.NONE
+        private set
+
+    /** The sensor of the next recording: the band if the user chose it, otherwise the heart-rate strap. */
+    val sensor: HrSensor
+        get() = if (bandPrefs.useBand) synapseAdapter.also { it.consents = synapseConsents } else hrAdapter
+
     /** Whether RR intervals (Health class) may be recorded right now. Consent is server-authoritative
      *  (ADR-0021); this cache is populated from GET /v1/consents and failed closed (false) until then. */
     var hasRrConsent = false
@@ -110,6 +128,7 @@ class AverynApplication : Application() {
     fun setRrConsent(granted: Boolean) {
         hasRrConsent = granted
         hrAdapter.recordRrIntervals = granted
+        if (bandPrefs.useBand) synapseAdapter.recordRrIntervals = granted
     }
 
     /** The scope the heart-rate sidecar needs: without it the raw intervals are never recorded. */
@@ -149,6 +168,10 @@ class AverynApplication : Application() {
                     emptySet<String>()
                 }
             setRrConsent(scopes.contains(rrConsentScope))
+            synapseConsents =
+                dev.averyn.sensors.SynapseConsents
+                    .fromScopes(scopes)
+            if (bandPrefs.useBand) synapseAdapter.consents = synapseConsents
         }
     }
 

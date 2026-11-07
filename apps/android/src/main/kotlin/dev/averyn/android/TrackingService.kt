@@ -23,7 +23,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
-import dev.averyn.android.ble.BleHrAdapter
+import dev.averyn.android.ble.HrSensor
 import dev.averyn.domain.ActivityState
 import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Reason
@@ -69,7 +69,9 @@ class TrackingService : Service() {
     private lateinit var locationManager: LocationManager
     private val app: AverynApplication get() = application as AverynApplication
     private val recorder: ActivityRecorder get() = app.recorder
-    private val hrAdapter: BleHrAdapter get() = app.hrAdapter
+
+    /** The sensor of this recording (the band or the strap), fixed when it starts so stopping reaches the same one. */
+    private var sensor: HrSensor? = null
 
     /** Coroutine scope for best-effort HR sensor connection; cancelled when the service stops. */
     private val hrScope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
@@ -111,7 +113,7 @@ class TrackingService : Service() {
             // A strap that was switched on after the start, or was out of range for the first scan, is looked for
             // again: start() does nothing while a strap is connected, and scans for a few seconds otherwise.
             if (hrActive && recorder.currentState == ActivityState.RECORDING) {
-                hrScope.launch { hrAdapter.start(recorder.currentActivityId ?: "") }
+                sensor?.let { s -> hrScope.launch { s.start(recorder.currentActivityId ?: "") } }
             }
             watchdogHandler.postDelayed(watchdogRunnable, WATCHDOG_CHECK_INTERVAL_MS)
         }
@@ -300,19 +302,22 @@ class TrackingService : Service() {
      * is handed to the main thread, where the fixes arrive too.
      */
     private fun startHr() {
-        if (hrActive || !hrAdapter.isAvailable) return
+        val chosen = app.sensor
+        if (hrActive || !chosen.isAvailable) return
         hrActive = true
-        hrAdapter.onSample = { sample -> mainHandler.post { app.feedHeartRate(sample) } }
-        hrAdapter.onRrInterval = { rr -> mainHandler.post { app.feedRrInterval(rr) } }
-        hrAdapter.onInvalid = { mainHandler.post { app.feedInvalidHeartRate() } }
-        hrScope.launch { hrAdapter.start(recorder.currentActivityId ?: "") }
+        sensor = chosen
+        chosen.onSample = { sample -> mainHandler.post { app.feedHeartRate(sample) } }
+        chosen.onRrInterval = { rr -> mainHandler.post { app.feedRrInterval(rr) } }
+        chosen.onInvalid = { mainHandler.post { app.feedInvalidHeartRate() } }
+        hrScope.launch { chosen.start(recorder.currentActivityId ?: "") }
     }
 
     /** Stops the HR sensor and clears the flag so a new activity can start it again. */
     private fun stopHr() {
         if (!hrActive) return
         hrActive = false
-        hrScope.launch { hrAdapter.stop() }
+        sensor?.let { s -> hrScope.launch { s.stop() } }
+        sensor = null
     }
 
     private fun hasPreciseLocation() =
