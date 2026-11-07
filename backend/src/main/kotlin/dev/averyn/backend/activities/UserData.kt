@@ -117,6 +117,7 @@ class UserData(
                 "activities",
                 "deleted_activities",
                 "deleted_rr",
+                "deleted_synapse",
                 "consents",
                 "user_profiles",
                 "privacy_zones",
@@ -176,6 +177,28 @@ class UserData(
      * cannot be complete, and starting the ZIP would answer `200` before finding out: the route checks this first.
      */
     fun missingRawObjects(ownerId: UUID): List<String> =
+        (synapseSidecars(ownerId).map { it.third } + activityObjectKeys(ownerId)).filterNot { raw.exists(it) }
+
+    /** The Synapse sidecars of [ownerId] as (client activity id, kind, object key): they leave with the account. */
+    private fun synapseSidecars(ownerId: UUID): List<Triple<UUID, String, String>> =
+        db.connection.use { conn ->
+            conn
+                .prepareStatement(
+                    "SELECT a.client_activity_id, s.kind, s.object_key FROM activity_synapse_sidecars s " +
+                        "JOIN activities a ON a.id = s.activity_id WHERE s.owner_id = ? ORDER BY a.started_at, s.kind",
+                ).use { stmt ->
+                    stmt.setObject(1, ownerId)
+                    stmt.executeQuery().use { rs ->
+                        buildList {
+                            while (rs.next()) {
+                                add(Triple(rs.getObject(1, UUID::class.java), rs.getString(2), rs.getString(3)))
+                            }
+                        }
+                    }
+                }
+        }
+
+    private fun activityObjectKeys(ownerId: UUID): List<String> =
         db.connection
             .use { conn ->
                 conn
@@ -193,7 +216,7 @@ class UserData(
                             }
                         }
                     }
-            }.filterNot { raw.exists(it) }
+            }
 
     /**
      * Writes a ZIP of everything the user has to [out]: each raw file unchanged, the file it was imported from
@@ -276,6 +299,12 @@ class UserData(
                     exported += ExportedActivity(summary, skipped)
                 }
                 // The settings of the account (TDD-0012): units and maximum heart rate.
+                // What the band sent during the activities, as stored (ADR-0030): features and raw frames.
+                for ((id, kind, key) in synapseSidecars(ownerId)) {
+                    zip.putNextEntry(ZipEntry("synapse/$id.$kind.bin"))
+                    zip.write(raw.get(key))
+                    zip.closeEntry()
+                }
                 zip.putNextEntry(ZipEntry("profile.json"))
                 zip.write(Json.encodeToString(UserProfile.serializer(), profileStore.get(ownerId)).toByteArray())
                 zip.closeEntry()

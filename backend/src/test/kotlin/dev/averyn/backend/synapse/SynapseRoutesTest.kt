@@ -26,6 +26,7 @@ import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.testApplication
 import kotlinx.io.files.Path
@@ -35,6 +36,7 @@ import java.util.UUID
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -351,6 +353,56 @@ class SynapseRoutesTest {
                 st.executeQuery().use { rs ->
                     check(rs.next()) { "no user $subject yet" }
                     rs.getObject(1, UUID::class.java)
+                }
+            }
+        }
+
+    private val everyField = FeatureField.entries.toSet()
+
+    @Test
+    fun anUploadNeverStoresTheFieldsOfAScopeThatWasNotGranted() =
+        app {
+            val id = activity()
+            grant(ConsentScope.SIGNAL_QUALITY)
+            val full = fullFeatureSidecar()
+
+            assertEquals(HttpStatusCode.NoContent, putSidecar(id, "features", full).status)
+
+            val stored = SynapseStore(db, raw).get(owner("alice"), id, SynapseKind.FEATURES)!!
+            assertContentEquals(maskFeatureSidecar(full, everyField), raw.get(stored.objectKey))
+            assertEquals(sha256Hex(raw.get(stored.objectKey)), stored.sha256)
+
+            grant(ConsentScope.STRESS_MONITORING)
+            grant(ConsentScope.RR_RECORDING)
+            grant(ConsentScope.HRV_ANALYSIS)
+            assertEquals(HttpStatusCode.NoContent, putSidecar(id, "features", full).status)
+            val again = SynapseStore(db, raw).get(owner("alice"), id, SynapseKind.FEATURES)!!
+            assertContentEquals(full, raw.get(again.objectKey), "with every consent the sidecar is stored as sent")
+        }
+
+    @Test
+    fun theExportCarriesTheSidecarsAndTheDeletionTheirTombstones() =
+        app {
+            val id = activity()
+            grant(ConsentScope.SIGNAL_QUALITY)
+            grant(ConsentScope.RAW_SIGNALS)
+            putSidecar(id, "features", featureSidecar)
+            putSidecar(id, "raw", rawSidecar)
+
+            val zip =
+                java.util.zip
+                    .ZipInputStream(
+                        get("/v1/me/export") { bearerAuth(alice) }.readRawBytes().inputStream(),
+                    ).use { z -> buildMap { generateSequence { z.nextEntry }.forEach { put(it.name, z.readBytes()) } } }
+            assertContentEquals(rawSidecar, zip.getValue("synapse/$id.raw.bin"))
+            assertTrue(zip.containsKey("synapse/$id.features.bin"))
+
+            revoke(ConsentScope.RAW_SIGNALS)
+            assertEquals(HttpStatusCode.NoContent, delete("/v1/me") { bearerAuth(alice) }.status)
+            db.connection.use { c ->
+                c.createStatement().executeQuery("SELECT count(*) FROM deleted_synapse").use {
+                    it.next()
+                    assertEquals(0, it.getInt(1), "the tombstones go with the account")
                 }
             }
         }
