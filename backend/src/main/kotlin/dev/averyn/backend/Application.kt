@@ -8,12 +8,14 @@ import dev.averyn.backend.activities.activities
 import dev.averyn.backend.activities.perUserRateLimit
 import dev.averyn.backend.auth.OidcConfig
 import dev.averyn.backend.auth.auth
-import dev.averyn.backend.consent.ConsentScope
 import dev.averyn.backend.consent.consent
 import dev.averyn.backend.imports.imports
 import dev.averyn.backend.privacy.privacyZones
 import dev.averyn.backend.profile.profile
 import dev.averyn.backend.storage.RawObjectStore
+import dev.averyn.backend.synapse.SynapseStore
+import dev.averyn.backend.synapse.revocationHook
+import dev.averyn.backend.synapse.synapse
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
@@ -63,11 +65,9 @@ fun Application.module() {
     perUserRateLimit(
         cfg.propertyOrNull("averyn.limits.requestsPerMinute")?.getString()?.toInt() ?: DEFAULT_REQUESTS_PER_MINUTE,
     )
-    val consentStore =
-        consent(db) { ownerId, scope ->
-            // Revoking the recording consent really deletes the data it covers (ADR-0021).
-            if (scope == ConsentScope.RR_RECORDING) userData.deleteRrData(ownerId)
-        }
+    val synapseStore = SynapseStore(db, raw)
+    val revoke = revocationHook(userData, synapseStore)
+    val consentStore = consent(db) { ownerId, scope -> revoke(ownerId, scope) }
     activities(
         db,
         raw,
@@ -79,6 +79,7 @@ fun Application.module() {
         userData = userData,
         analysisService = analysisService,
     )
+    synapse(db, raw, consentStore, quotaBytes = quotaBytes, store = synapseStore)
     imports(db, raw, quotaBytes = quotaBytes)
     profile(db)
     privacyZones(db)
