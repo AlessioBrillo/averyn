@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GeoJSONSourceSpecification, Map as MapLibreMap } from 'maplibre-gl'
 import { Analysis } from './Analysis'
+import { SynapseSignals } from './SynapseSignals'
 import { ApiError, deleteActivity, getActivity, getAnalysis, getTrack } from './api'
 import type { ActivityAnalysis, ActivitySummary, Track } from './api'
 import { formatDistance, formatDuration, formatQuality, formatRate, formatSport } from './format'
@@ -194,6 +195,7 @@ export function ActivityDetail({
         ))}
       </dl>
       {analysis && <Analysis analysis={analysis} sport={activity.sport} />}
+      <SynapseSignals activityId={activity.clientActivityId} />
       {analysisError === 'busy' && (
         <p role="status">
           {t('The server is busy: the analysis of this activity is being prepared. Reload in a moment.')}

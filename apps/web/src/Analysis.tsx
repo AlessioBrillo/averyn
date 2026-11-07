@@ -62,7 +62,7 @@ export function HeartRateZonesTable({ zones }: { zones: HeartRateZones | null })
 }
 
 /** The colour of the track, used for the charts too. */
-const ACCENT = '#e4572e'
+export const ACCENT = '#e4572e'
 
 const CHART_HEIGHT = 200
 
@@ -73,12 +73,12 @@ type UPlotConstructor = new (
 ) => uPlot
 
 /** The options and the data of a chart, once the colours of the page are known. */
-type Prepare = (colors: { text: string; grid: string }) => {
+export type Prepare = (colors: { text: string; grid: string }) => {
   data: uPlot.AlignedData
   options: uPlot.Options
 }
 
-function axisOptions(
+export function axisOptions(
   colors: { text: string; grid: string },
   label: string,
 ): uPlot.Axis {
@@ -95,7 +95,7 @@ function axisOptions(
  * A chart. The library is loaded when the chart is drawn, not when the page is: the detail page of an activity
  * without a chart must not pay for it.
  */
-function Chart({
+export function Chart({
   prepare,
   label,
 }: {
