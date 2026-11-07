@@ -366,3 +366,96 @@ export interface PersonalRecords {
 
 /** The personal records of the account (TDD-0010). */
 export const getRecords = () => get<PersonalRecords>('/v1/me/records')
+
+/**
+ * What a Synapse band recorded during an activity (ADR-0030). The contract of
+ * `GET /v1/activities/{id}/synapse`; every number is imported data, shown as "via Synapse".
+ */
+export interface SynapseGap {
+  tMs: number
+  durMs: number
+  reason: 'lost_frames' | 'device_dropped' | 'restart'
+  count: number
+}
+
+export interface SynapseFeatures {
+  frames: number
+  lostFrames: number
+  unknownVersionFrames: number
+  statusRecords: number
+  elapsedMs: number[]
+  heartRateBpm: (number | null)[]
+  ppgQuality: (number | null)[]
+  motionArtifact: (number | null)[]
+  motionLevel: (number | null)[]
+  batteryPercent: (number | null)[]
+  stress: (string | null)[]
+  rrLastMs: (number | null)[]
+  rmssdMs: (number | null)[]
+  sdnnMs: (number | null)[]
+  gaps: SynapseGap[]
+}
+
+export interface SynapseChannel {
+  name: string
+  unit: string
+}
+
+export interface SynapseRawStream {
+  stream: string
+  rateHz: number
+  channels: SynapseChannel[]
+  frames: number
+  values: number
+  lostFrames: number
+  deviceDropped: number
+  restarts: number
+  outOfOrder: number
+  startMs: number
+  endMs: number
+  gaps: SynapseGap[]
+}
+
+export interface SynapseSummary {
+  clientActivityId: string
+  source: string
+  seriesVersion: string
+  features: SynapseFeatures | null
+  raw: { durationMs: number; streams: SynapseRawStream[]; invalidFrames: Record<string, number> } | null
+}
+
+/** A run of the stream with no hole in it: min and max of every bucket, `[channel][bucket]`, in the channel's unit. */
+export interface SynapseSegment {
+  t0Ms: number
+  bucketMs: number
+  bucketSamples: number
+  min: number[][]
+  max: number[][]
+}
+
+export interface SynapseWindow {
+  stream: string
+  fromMs: number
+  toMs: number
+  channels: SynapseChannel[]
+  segments: SynapseSegment[]
+  gaps: SynapseGap[]
+}
+
+/** What the band recorded, or null when nothing was stored (or the consent for it is not given). */
+export const getSynapse = async (id: string): Promise<SynapseSummary | null> => {
+  try {
+    const summary = await get<SynapseSummary>(`/v1/activities/${encodeURIComponent(id)}/synapse`)
+    return summary.features === null && summary.raw === null ? null : summary
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null
+    throw e
+  }
+}
+
+/** A window of one raw signal, between two instants (milliseconds since the recording began). */
+export const getSynapseWindow = (id: string, stream: string, fromMs: number, toMs: number, maxPoints: number) =>
+  get<SynapseWindow>(
+    `/v1/activities/${encodeURIComponent(id)}/synapse/raw/${encodeURIComponent(stream)}` +
+      `?from=${Math.round(fromMs)}&to=${Math.round(toMs)}&maxPoints=${maxPoints}`,
+  )
