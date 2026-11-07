@@ -1,6 +1,6 @@
 # Synapse integration contract
 
-Status: v0.3 — draft (2026-10-29). What Averyn requires from, and does with, a Synapse device, under [ADR-0010](../adr/0010-ecosystem-boundary.md), [ADR-0011](../adr/0011-identity-oidc.md), [ADR-0014](../adr/0014-sensor-integration-contract.md) and [ADR-0026](../adr/0026-averyn-synapse-link.md). It supersedes the device-side specifics in [`docs/strategy/`](../strategy/README.md) (corrections in [`review-2026-09-27.md`](../strategy/review-2026-09-27.md)). v0.2 replaced the byte-level tables of v0.1: the device repository owns them. v0.3 adds the roles of the two products, the way a contract change travels and the pairing experience.
+Status: v0.4 — draft (2026-11-07; the sections on the pin and what is in place are rewritten with the code of the pairs of pull requests that follow ADR-0030). What Averyn requires from, and does with, a Synapse device, under [ADR-0010](../adr/0010-ecosystem-boundary.md), [ADR-0011](../adr/0011-identity-oidc.md), [ADR-0014](../adr/0014-sensor-integration-contract.md) and [ADR-0026](../adr/0026-averyn-synapse-link.md). It supersedes the device-side specifics in [`docs/strategy/`](../strategy/README.md) (corrections in [`review-2026-09-27.md`](../strategy/review-2026-09-27.md)). v0.2 replaced the byte-level tables of v0.1: the device repository owns them. v0.3 adds the roles of the two products, the way a contract change travels and the pairing experience.
 
 Level L0 needs no code. Level L1 is scheduled in the [roadmap](../product/roadmap.md#synapse-track) as a beta and is the first item on the cut line; its pure core is in place (section 1b), the native adapters, the sidecar and the server side wait for a prototype that produces real frames and for the approval of [ADR-0026](../adr/0026-averyn-synapse-link.md).
 
@@ -44,7 +44,7 @@ What Averyn relies on, without copying the tables:
 
 - **Standard services** `0x180D` (Heart Rate, RR in the flag-gated field of `0x2A37`), `0x180F` (Battery), `0x180A` (Device Information). These are level L0.
 - **One consumer service** with a feature-stream characteristic notified at 1 Hz, a versioned frame with a `sequence`, and a per-field "not available" sentinel. The current firmware fills only heart rate, the PPG quality index, the motion-artifact probability and the stress class; RMSSD, SDNN and RR are always "not available".
-- **A research service** with raw ECG/PPG/IMU streams. Averyn never subscribes to it.
+- **A research service** with raw ECG/PPG/IMU/power streams. Averyn subscribes to it only under the `raw_signals` consent, only while an activity is recording or the live-signals screen is open ([ADR-0030](../adr/0030-synapse-contract-v2-1-and-raw-signals.md), level L1R).
 - **FIT developer fields**, flat scalars. The stress enum is `0 = baseline, 1 = stress, 2 = artifact, 3 = unknown`.
 
 ### Pairing experience (L0 and L1)
