@@ -41,13 +41,19 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 private val HEART_RATE_SERVICE = UUID.fromString("0000180d-0000-1000-8000-00805f9b34fb")
 private val HEART_RATE_MEASUREMENT = UUID.fromString("00002a37-0000-1000-8000-00805f9b34fb")
 private val CCCD = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 private const val SCAN_TIMEOUT_MS = 15_000L
 private const val STEP_TIMEOUT_MS = 5_000L
+
+/** MTU exchange plus service discovery; a band that does not answer in this time is reconnected. */
+private const val SERVICES_TIMEOUT_MS = 15_000L
 
 /**
  * The SYNAPSE band over BLE (ADR-0030), the Android half. One connection does three things:
@@ -114,12 +120,33 @@ class SynapseBleAdapter(
     private var sessionId: String = ""
     private var startNanos = 0L
 
+    /** Bumped by [stop]: a start that began before it must not connect after it. */
+    private val generation = AtomicInteger()
+    private val starting = AtomicBoolean(false)
+
     override suspend fun start(sessionId: String) {
         withContext(Dispatchers.Default) {
             if (sessionId.isEmpty() || connectJob?.isActive == true) return@withContext
+            if (!starting.compareAndSet(false, true)) return@withContext // a scan is already looking
+            try {
+                startLocked(sessionId)
+            } finally {
+                starting.set(false)
+            }
+        }
+    }
+
+    private suspend fun startLocked(sessionId: String) {
+        val started = generation.get()
+        run {
             if (recorder == null || sessionId != this@SynapseBleAdapter.sessionId) {
                 this@SynapseBleAdapter.sessionId = sessionId
-                startNanos = SystemClock.elapsedRealtimeNanos()
+                // t_rx_ns counts from the start of the recording, also after a restart of the process in
+                // the middle of it: the sidecar is appended to, and its clock must not jump back to zero.
+                val sinceStartMs =
+                    store.metadataOf(sessionId)?.let { System.currentTimeMillis() - it.startedAtMs }
+                        ?: 0L
+                startNanos = SystemClock.elapsedRealtimeNanos() - sinceStartMs.coerceAtLeast(0L) * 1_000_000L
                 recorder =
                     SynapseRecorder(
                         store.synapseSink(sessionId, SynapseSidecarKind.FEATURES),
@@ -134,13 +161,15 @@ class SynapseBleAdapter(
                     null // not found in time: the recording goes on without it, and the next call looks again
                 } catch (e: SecurityException) {
                     null
-                } ?: return@withContext
+                } ?: return
+            if (generation.get() != started) return // stopped while looking: do not connect
             prefs.address = device.address
             connectJob = scope.launch { connectAndStream(device) }
         }
     }
 
     override suspend fun stop() {
+        generation.incrementAndGet()
         connectJob?.cancel()
         connectJob = null
         synchronized(lock) {
@@ -284,7 +313,10 @@ class SynapseBleAdapter(
                 }
             val gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
             synchronized(lock) { currentGatt = gatt }
-            if (!connected.await() || !servicesOk.await() || !setUp(gatt, steps)) {
+            if (!connected.await() ||
+                !(withTimeoutOrNull(SERVICES_TIMEOUT_MS) { servicesOk.await() } ?: false) ||
+                !setUp(gatt, steps)
+            ) {
                 delay(reconnectBackoffMs(++attempt))
                 continue
             }

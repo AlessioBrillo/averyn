@@ -118,7 +118,15 @@ class AverynApplication : Application() {
 
     /** The sensor of the next recording: the band if the user chose it, otherwise the heart-rate strap. */
     val sensor: HrSensor
-        get() = if (bandPrefs.useBand) synapseAdapter.also { it.consents = synapseConsents } else hrAdapter
+        get() =
+            if (bandPrefs.useBand) {
+                synapseAdapter.also {
+                    it.consents = synapseConsents
+                    it.recordRrIntervals = hasRrConsent // fail closed: never what it was when last used
+                }
+            } else {
+                hrAdapter
+            }
 
     /** Whether RR intervals (Health class) may be recorded right now. Consent is server-authoritative
      *  (ADR-0021); this cache is populated from GET /v1/consents and failed closed (false) until then. */
@@ -128,7 +136,7 @@ class AverynApplication : Application() {
     fun setRrConsent(granted: Boolean) {
         hasRrConsent = granted
         hrAdapter.recordRrIntervals = granted
-        if (bandPrefs.useBand) synapseAdapter.recordRrIntervals = granted
+        synapseAdapter.recordRrIntervals = granted
     }
 
     /** The scope the heart-rate sidecar needs: without it the raw intervals are never recorded. */
