@@ -17,8 +17,28 @@ import { MAX_MAX_HR_BPM, MIN_MAX_HR_BPM, parseMaxHr } from './profile'
 /** The word the user types to confirm the deletion of the account: the same in every language, like the button. */
 const DELETE_WORD = 'delete'
 
-/** The scope the user can grant here: the one the devices ask for (ADR-0021). */
-const GRANTABLE_SCOPE = 'rr_recording'
+/**
+ * The scopes the user can grant here, one by one (ADR-0021, ADR-0030): what a sensor may record. Granting one never
+ * implies another; the raw signals are the most identifying data a band has and have their own.
+ */
+const GRANTABLE_SCOPES = ['rr_recording', 'signal_quality', 'stress_monitoring', 'hrv_analysis', 'raw_signals'] as const
+
+function scopeDescription(scope: string): string {
+  switch (scope) {
+    case 'rr_recording':
+      return t('Beat-to-beat intervals from a heart-rate strap or a band.')
+    case 'signal_quality':
+      return t('Heart rate, signal quality and motion artifact from a Synapse band.')
+    case 'stress_monitoring':
+      return t('The stress class from a Synapse band.')
+    case 'hrv_analysis':
+      return t('The RMSSD and SDNN a band computes itself.')
+    case 'raw_signals':
+      return t('Raw ECG, pulse wave and motion signals from a Synapse band. The most identifying data a band has.')
+    default:
+      return ''
+  }
+}
 
 /** The user's data: download everything, or delete it (TDD-0004). Consent for health-adjacent sensor data is
  *  server-authoritative and revocable here (ADR-0021). */
@@ -200,7 +220,7 @@ export function Account({
         <h3>{t('Sensor data consent')}</h3>
         <p>
           {t(
-            'Some sensors (for example a heart-rate strap) can record raw beat-to-beat intervals. That is health data: Averyn only stores it while you consent, per scope, and you can withdraw that consent at any time. Withdrawing stops new recordings immediately and deletes the intervals already uploaded.',
+            'Some sensors (a heart-rate strap, a Synapse band) can record beat-to-beat intervals, derived values and raw signals. That is health data: Averyn only stores each kind while you consent to it, one scope at a time, and you can withdraw a consent at any time. Withdrawing stops new recordings immediately and deletes what was uploaded for that scope.',
           )}
         </p>
         {consentsLoaded ? (
@@ -221,7 +241,11 @@ export function Account({
               )}
               {consents.map((g) => (
                 <tr key={g.scope}>
-                  <td>{g.scope}</td>
+                  <td>
+                    {g.scope}
+                    <br />
+                    <small>{scopeDescription(g.scope)}</small>
+                  </td>
                   <td>{new Date(g.grantedAt).toLocaleString()}</td>
                   <td>{g.revokedAt == null ? '—' : new Date(g.revokedAt).toLocaleString()}</td>
                   <td>
@@ -235,18 +259,22 @@ export function Account({
                   </td>
                 </tr>
               ))}
-              {!consents.some((g) => g.scope === GRANTABLE_SCOPE) && (
-                <tr>
-                  <td>{GRANTABLE_SCOPE}</td>
+              {GRANTABLE_SCOPES.filter((scope) => !consents.some((g) => g.scope === scope)).map((scope) => (
+                <tr key={scope}>
+                  <td>
+                    {scope}
+                    <br />
+                    <small>{scopeDescription(scope)}</small>
+                  </td>
                   <td>—</td>
                   <td>—</td>
                   <td>
-                    <button onClick={() => grant(GRANTABLE_SCOPE)} disabled={busy}>
+                    <button onClick={() => grant(scope)} disabled={busy}>
                       {t('Grant')}
                     </button>
                   </td>
                 </tr>
-              )}
+              ))}
             </tbody>
           </table>
         ) : (
