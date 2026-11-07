@@ -54,7 +54,7 @@ Everything below is **code in place, not verified on a device**: the device matr
 | 8 | Voice cues | Per-kilometre events from the tracking engine; text-to-speech on both phones |
 | 9 | Onboarding and accessibility | Permission explanations, pairing of a strap or band, large text, screen readers |
 | 10 | Cloud, legal texts, store listings | Provider, SMTP, open sign-up; closed test on Play; the name |
-| 11 | Synapse L1 beta | When the prototype arrives |
+| 11 | Synapse L1 beta | When the prototype arrives. **Exception (2026-11-07):** the contract, the parsers, the consent scopes, the sidecars and the web history view start now, with the device repository's synthetic fixtures ([ADR-0030](../adr/0030-synapse-contract-v2-1-and-raw-signals.md)): the contract is free to fix only until someone pins it. Nothing is verified on a band; a red row of the campaign still stops this work |
 
 ## Synapse track
 
