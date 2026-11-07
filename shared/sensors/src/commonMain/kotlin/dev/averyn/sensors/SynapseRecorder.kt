@@ -1,5 +1,7 @@
 package dev.averyn.sensors
 
+import kotlin.concurrent.Volatile
+
 /**
  * Which consents the user has granted right now (ADR-0021, ADR-0030). The recorder reads it before every write, so a
  * value without its consent never reaches the disk: the server masks only on revocation and accepts whatever is put.
@@ -68,13 +70,17 @@ fun interface SynapseSidecarSink {
  *   comes later counts it.
  *
  * [consents] is replaced when the periodic re-read of the server's consents finds a change; the next frame obeys it.
- * Not thread-safe: one thread (the BLE callback queue) feeds it.
+ * [consents] may be replaced from another thread than the one that feeds the recorder (the periodic re-read versus the
+ * BLE callback queue), so it is volatile: a revocation is seen by the next frame, not at some later flush.
  */
 class SynapseRecorder(
     private val features: SynapseSidecarSink,
     private val raw: SynapseSidecarSink,
-    var consents: SynapseConsents = SynapseConsents.NONE,
+    consents: SynapseConsents = SynapseConsents.NONE,
 ) {
+    @Volatile
+    var consents: SynapseConsents = consents
+
     private val rawCharacteristics = SYNAPSE_RESEARCH_CHARACTERISTIC_UUIDS.values.toSet()
 
     /**
