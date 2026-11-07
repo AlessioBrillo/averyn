@@ -51,6 +51,8 @@ class SyncWorker(
                 return Result.retry() // no network or the IdP is unreachable
             }
         val sync = ActivitySync.create(app.store, serverUrl)
+        // The raw band signals are big: on mobile data only if the user said so (ADR-0030).
+        sync.rawUploads = app.bandPrefs.rawOnMobile || !isNetworkMetered(applicationContext)
         try {
             return if (shouldRetry(sync.syncPending(token))) Result.retry() else Result.success()
         } finally {
@@ -58,3 +60,10 @@ class SyncWorker(
         }
     }
 }
+
+/** Whether the active network costs the user data. Unknown counts as metered: the big upload waits. */
+internal fun isNetworkMetered(context: android.content.Context): Boolean =
+    runCatching {
+        (context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager)
+            .isActiveNetworkMetered
+    }.getOrDefault(true)

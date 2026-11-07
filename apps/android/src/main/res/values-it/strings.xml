@@ -89,6 +89,10 @@
     <string name="units_metric">Metrico (km, m)</string>
     <string name="units_imperial">Imperiale (mi, ft)</string>
     <string name="max_hr">Frequenza cardiaca massima (bpm)</string>
+    <string name="band">Band SYNAPSE</string>
+    <string name="band_use">Registra con una band SYNAPSE invece della fascia cardio</string>
+    <string name="band_raw_on_mobile">Carica i segnali grezzi anche con i dati mobili (molti dati)</string>
+    <string name="band_forget">Dimentica questa band</string>
     <string name="max_hr_invalid">Un numero intero da %1$s a %2$s, oppure vuoto.</string>
     <string name="sign_in_again_profile">Accedi di nuovo per salvare il profilo.</string>
     <string name="saved">Salvato</string>
