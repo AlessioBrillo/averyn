@@ -1,6 +1,7 @@
 package dev.averyn.sync
 
 import dev.averyn.tracking.ActivityStore
+import dev.averyn.tracking.SynapseSidecarKind
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.bearerAuth
@@ -41,6 +42,13 @@ class ActivitySync internal constructor(
 ) {
     private val baseUrl = serverUrl.trimEnd('/')
 
+    /**
+     * Whether this pass may upload the raw band sidecar (up to 48 MB). Off by default: the caller turns it on only
+     * on an unmetered network, or when the user chose to spend mobile data on it (ADR-0030). The feature sidecar
+     * is small and always goes up. A property and not a parameter of [syncPending]: Swift sees no default arguments.
+     */
+    var rawUploads: Boolean = false
+
     companion object {
         /** For the apps (and Swift): the HTTP engine is the platform's (OkHttp / Darwin). */
         fun create(
@@ -75,18 +83,17 @@ class ActivitySync internal constructor(
             if (previous?.state == SyncState.READY) {
                 // The activity is up; its heart-rate sidecar may not be (it failed retryably, or it came into being
                 // after the upload): it is tried again here, otherwise it would never go up.
-                if (!sidecarPending(id)) continue
+                if (!sidecarPending(id) && !synapsePending(id)) continue
                 if (accessToken == null) {
                     needsLogin = true
                     break
                 }
-                when (uploadRrSidecar(id, accessToken)?.lastError) {
-                    "AUTH" -> {
-                        needsLogin = true
-                        break
-                    }
-                    "NETWORK", in RETRYABLE_HTTP -> retryable++
+                val errors = uploadSidecars(id, accessToken)
+                if ("AUTH" in errors) {
+                    needsLogin = true
+                    break
                 }
+                if (errors.any { it == "NETWORK" || it in RETRYABLE_HTTP }) retryable++
                 continue
             }
             if (previous?.state == SyncState.FAILED_PERMANENT) continue
@@ -122,10 +129,9 @@ class ActivitySync internal constructor(
                 SyncState.READY -> {
                     uploaded++
                     // The heart-rate sidecar goes up after the activity it belongs to, and never holds it back.
-                    when (uploadRrSidecar(id, accessToken)?.lastError) {
-                        "AUTH" -> needsLogin = true
-                        "NETWORK", in RETRYABLE_HTTP -> retryable++
-                    }
+                    val errors = uploadSidecars(id, accessToken)
+                    if ("AUTH" in errors) needsLogin = true
+                    if (errors.any { it == "NETWORK" || it in RETRYABLE_HTTP }) retryable++
                 }
                 SyncState.FAILED_PERMANENT -> permanent++
                 else -> retryable++
@@ -139,6 +145,20 @@ class ActivitySync internal constructor(
             if (code == 429 || code == 503 || status.lastError == "ACCOUNT_DELETED") break
         }
         return SyncRunResult(uploaded, retryable, permanent, needsLogin)
+    }
+
+    /** The errors the sidecars of an activity ended in (none when all went up or none was due). */
+    private suspend fun uploadSidecars(
+        activityId: String,
+        accessToken: String,
+    ): Set<String> {
+        val errors = mutableSetOf<String>()
+        uploadRrSidecar(activityId, accessToken)?.lastError?.let(errors::add)
+        for (kind in SynapseSidecarKind.entries) {
+            if ("AUTH" in errors) break // the same token is refused for the next one too
+            uploadSynapse(activityId, kind, accessToken)?.lastError?.let(errors::add)
+        }
+        return errors
     }
 
     /** The response, or null if the request could not be completed (no network, timeout, ...). */
@@ -192,6 +212,75 @@ class ActivitySync internal constructor(
         }
         return status
     }
+
+    private fun allowed(kind: SynapseSidecarKind) = kind == SynapseSidecarKind.FEATURES || rawUploads
+
+    /** Whether a band sidecar this pass may send is neither on the server nor refused for good. */
+    private fun synapsePending(activityId: String): Boolean =
+        SynapseSidecarKind.entries.any { synapsePending(activityId, it) }
+
+    private fun synapsePending(
+        activityId: String,
+        kind: SynapseSidecarKind,
+    ): Boolean {
+        if (!allowed(kind) || !store.hasSynapse(activityId, kind)) return false
+        val state = statuses.readSynapse(activityId, kind)?.state
+        return state != SyncState.READY && state != SyncState.FAILED_PERMANENT
+    }
+
+    /**
+     * Uploads one Synapse band sidecar (ADR-0030): the bytes as they are, `PUT /v1/activities/{id}/synapse/{kind}`,
+     * which the server answers with **204** (the activity sidecar answers 200/201, hence the separate mapping).
+     * A refusal for consent or a deletion is permanent and takes the local copy with it, as for the heart-rate
+     * sidecar; a 404 means the server does not have the activity yet, so a later pass tries again.
+     */
+    private suspend fun uploadSynapse(
+        activityId: String,
+        kind: SynapseSidecarKind,
+        accessToken: String,
+    ): SyncStatus? {
+        if (!synapsePending(activityId, kind)) return null
+        val previous = statuses.readSynapse(activityId, kind)
+        val attempts = (previous?.attempts ?: 0) + 1
+        statuses.writeSynapse(activityId, kind, SyncStatus(SyncState.UPLOADING, attempts, previous?.lastError))
+        val response = uploadSynapseFile(activityId, kind, accessToken)
+        val code = response?.status?.value
+        val status =
+            when (code) {
+                200, 201, 204 -> SyncStatus(SyncState.READY, attempts)
+                401 -> SyncStatus(SyncState.FAILED_RETRYABLE, attempts, "AUTH")
+                null -> SyncStatus(SyncState.FAILED_RETRYABLE, attempts, "NETWORK")
+                403 -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "CONSENT_REVOKED")
+                410 -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "DELETED_ON_SERVER")
+                404 -> SyncStatus(SyncState.FAILED_RETRYABLE, attempts, "HTTP_404")
+                // The quota does not free itself; the file stays on the device for the user to decide.
+                507 -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "QUOTA_EXCEEDED")
+                408, 429, in 500..599 -> SyncStatus(SyncState.FAILED_RETRYABLE, attempts, "HTTP_$code")
+                else -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "HTTP_$code")
+            }
+        statuses.writeSynapse(activityId, kind, status)
+        if (status.lastError == "CONSENT_REVOKED" || status.lastError == "DELETED_ON_SERVER") {
+            store.deleteSynapse(activityId, kind)
+        }
+        return status
+    }
+
+    private suspend fun uploadSynapseFile(
+        activityId: String,
+        kind: SynapseSidecarKind,
+        accessToken: String,
+    ): HttpResponse? =
+        try {
+            http.put("$baseUrl/v1/activities/$activityId/synapse/${kind.pathSegment}") {
+                bearerAuth(accessToken)
+                contentType(ContentType.Application.OctetStream)
+                setBody(store.readSynapse(activityId, kind))
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
 
     /** Whether the activity has a sidecar that is neither on the server nor refused for good. */
     private fun sidecarPending(activityId: String): Boolean {
