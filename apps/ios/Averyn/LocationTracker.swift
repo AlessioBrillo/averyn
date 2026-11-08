@@ -94,16 +94,10 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
         let reduced = manager.accuracyAuthorization == .reducedAccuracy
         guard denied || reduced else { return }
         let reason: Reason = denied ? .permissionRevoked : .permissionDowngraded
-        switch recorder.currentState {
-        case .recording:
-            recorder.pause(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs(), reason: reason)
-        case .preparing:
-            recorder.fail(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs(), reason: reason)
-            // No fix will ever arrive: stop CoreLocation so the blue indicator and GPS turn off.
-            stop()
-        default:
-            return
-        }
+        let was = recorder.currentState
+        guard recorder.interrupt(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs(), reason: reason) != nil else { return }
+        // No fix will ever arrive: stop CoreLocation so the blue indicator and GPS turn off.
+        if was == .preparing { stop() }
         onIssue?(denied
             ? tr("Location permission was removed: the activity is paused.")
             : tr("Precise location was turned off: the activity is paused. Turn Precise Location on to continue."))

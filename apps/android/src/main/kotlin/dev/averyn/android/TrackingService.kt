@@ -360,19 +360,8 @@ class TrackingService : Service() {
         NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID)
     }
 
-    /**
-     * The location source is gone while an activity exists (F9). Before the first fix there is nothing to keep, so
-     * the activity fails; once recording it is paused with the reason and the data stays resumable. Never throws:
-     * the state machine has no legal move from IDLE or a terminal state, and then there is nothing to interrupt.
-     */
     private fun interrupt(reason: Reason) {
-        val elapsedMs = SystemClock.elapsedRealtime()
-        val timeMs = System.currentTimeMillis()
-        when (recorder.currentState) {
-            ActivityState.PREPARING -> recorder.fail(elapsedMs, timeMs, reason)
-            ActivityState.RECORDING -> recorder.pause(elapsedMs, timeMs, reason)
-            else -> {}
-        }
+        recorder.interrupt(SystemClock.elapsedRealtime(), System.currentTimeMillis(), reason)
     }
 
     private fun Location.toSample() =
