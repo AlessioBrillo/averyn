@@ -74,12 +74,9 @@ final class AppModel {
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("profile", isDirectory: true)
 
-        UIDevice.current.isBatteryMonitoringEnabled = true
+        let battery = BatteryCache()
         let recorder = ActivityRecorder(store: store)
-        recorder.batteryPercent = {
-            let level = UIDevice.current.batteryLevel
-            return level >= 0 ? KotlinInt(int: Int32(level * 100)) : nil
-        }
+        recorder.batteryPercent = { battery.percent.map { KotlinInt(int: $0) } }
         self.recorder = recorder
         heartRate = HeartRateMonitor()
         band = SynapseBand(store: store)
