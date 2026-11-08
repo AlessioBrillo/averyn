@@ -4,7 +4,7 @@ import Foundation
 
 /// What `AppModel` needs of a heart-rate source: the shared adapter plus the count of values the model refused
 /// and the late search for a sensor that was switched on after the start. The strap and the band both are one.
-protocol HeartRateSource: AnyObject, SensorAdapter {
+protocol HeartRateSource: AnyObject, Sendable, SensorAdapter {
     var onInvalid: (() -> Void)? { get set }
     func searchAgainIfNeverFound()
 }
@@ -63,14 +63,21 @@ final class SynapseBand: NSObject, @unchecked Sendable, CBCentralManagerDelegate
     var consents: SynapseConsents {
         get { lock.withLock { _consents } }
         set {
-            let revoked: Bool = lock.withLock {
-                let was = _consents.rawSignals && !newValue.rawSignals
+            let change: (revoked: Bool, granted: Bool) = lock.withLock {
+                let before = _consents.rawSignals
                 _consents = newValue
-                return was
+                return (before && !newValue.rawSignals, !before && newValue.rawSignals)
             }
             queue.async {
+                // `consents` of the recorder is volatile: safe to set from here while the write queue reads it.
                 self.recorder?.consents = newValue
-                if revoked { self.writeControl(SynapseControl.shared.stop()) }
+                if change.revoked { self.writeControl(SynapseControl.shared.stop()) }
+                // Granted while connected (or the first answer of the server came after the connection): the raw
+                // characteristics are subscribed and the streams started now, not at the next connection.
+                if change.granted, let peripheral = self.peripheral, self.controlPoint != nil {
+                    self.subscribe(peripheral, to: Set(self.rawUUIDs))
+                    self.writeControl(SynapseControl.shared.start())
+                }
             }
         }
     }
@@ -79,6 +86,9 @@ final class SynapseBand: NSObject, @unchecked Sendable, CBCentralManagerDelegate
 
     private let store: ActivityStore
     private let queue = DispatchQueue(label: "dev.averyn.band")
+    /// The sidecar files are appended here, one record at a time, so that disk I/O on the raw streams never holds up the
+    /// BLE callbacks (and the heart rate of the recording). The recorder is touched on this queue only.
+    private let writeQueue = DispatchQueue(label: "dev.averyn.band.write")
     private let lock = NSLock()
     private var _recordRr = false
     private var _consents = SynapseConsents.companion.NONE
@@ -119,6 +129,18 @@ final class SynapseBand: NSObject, @unchecked Sendable, CBCentralManagerDelegate
     init(store: ActivityStore) {
         self.store = store
         super.init()
+        // The system hands a restored connection back only to a manager created at launch with the same
+        // identifier (as `HeartRateMonitor` does); not for someone who never chose the band.
+        if BandPrefs.useBand { ensureCentral() }
+    }
+
+    private func ensureCentral() {
+        guard central == nil else { return }
+        central = CBCentralManager(
+            delegate: self,
+            queue: queue,
+            options: [CBCentralManagerOptionRestoreIdentifierKey: "dev.averyn.app.band"]
+        )
     }
 
     // MARK: - SensorAdapter
@@ -173,13 +195,7 @@ final class SynapseBand: NSObject, @unchecked Sendable, CBCentralManagerDelegate
         guard !running else { return }
         running = true
         attempt = 0
-        if central == nil {
-            central = CBCentralManager(
-                delegate: self,
-                queue: queue,
-                options: [CBCentralManagerOptionRestoreIdentifierKey: "dev.averyn.app.band"]
-            )
-        }
+        ensureCentral()
         connectOrScan()
     }
 
@@ -237,6 +253,7 @@ final class SynapseBand: NSObject, @unchecked Sendable, CBCentralManagerDelegate
         peripheral = nil
         controlPoint = nil
         guard running else { return }
+        retryWork?.cancel()
         let delay = Self.reconnectBackoffSeconds[min(attempt, Self.reconnectBackoffSeconds.count - 1)]
         attempt += 1
         let work = DispatchWorkItem { [weak self] in self?.connectOrScan() }
@@ -288,8 +305,12 @@ final class SynapseBand: NSObject, @unchecked Sendable, CBCentralManagerDelegate
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         let services = peripheral.services ?? []
         pendingServices = services.count
-        // Without the consumer service this is not a band: leave the connection to the next reconnect.
-        guard services.contains(where: { $0.uuid == consumerService }) else { return }
+        // Without the consumer service this is not (yet) a band: disconnect, so the reconnect with backoff tries
+        // again instead of holding a silent connection.
+        guard error == nil, services.contains(where: { $0.uuid == consumerService }) else {
+            central?.cancelPeripheralConnection(peripheral)
+            return
+        }
         for service in services { peripheral.discoverCharacteristics(nil, for: service) }
     }
 
@@ -306,13 +327,21 @@ final class SynapseBand: NSObject, @unchecked Sendable, CBCentralManagerDelegate
         var wanted: Set<CBUUID> = [featureUUID, statusUUID, hrMeasurement]
         if rawAllowed { wanted.formUnion(rawUUIDs) }
         for service in peripheral.services ?? [] {
-            for characteristic in service.characteristics ?? [] {
-                if characteristic.uuid == controlUUID { controlPoint = characteristic }
-                if wanted.contains(characteristic.uuid) { peripheral.setNotifyValue(true, for: characteristic) }
+            for characteristic in service.characteristics ?? [] where characteristic.uuid == controlUUID {
+                controlPoint = characteristic
             }
         }
+        subscribe(peripheral, to: wanted)
         writeControl(SynapseControl.shared.setTime(epochMillis: nowTimeMs()))
         writeControl(rawAllowed ? SynapseControl.shared.start() : SynapseControl.shared.stop())
+    }
+
+    private func subscribe(_ peripheral: CBPeripheral, to wanted: Set<CBUUID>) {
+        for service in peripheral.services ?? [] {
+            for characteristic in service.characteristics ?? [] where wanted.contains(characteristic.uuid) {
+                peripheral.setNotifyValue(true, for: characteristic)
+            }
+        }
     }
 
     private func writeControl(_ bytes: KotlinByteArray) {
@@ -331,12 +360,12 @@ final class SynapseBand: NSObject, @unchecked Sendable, CBCentralManagerDelegate
         if characteristic.uuid == hrMeasurement {
             deliverHeartRate(bytes)
         } else {
-            let sinceStart = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW) &- startUptimeNanos
-            _ = recorder?.onNotify(
-                characteristicUuid: characteristic.uuid.uuidString,
-                data: bytes,
-                receivedNanos: Int64(sinceStart)
-            )
+            let sinceStart = Int64(clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW) &- startUptimeNanos)
+            let uuid = characteristic.uuid.uuidString
+            guard let recorder else { return }
+            nonisolated(unsafe) let frame = bytes // handed over once, not touched here again
+            nonisolated(unsafe) let target = recorder
+            writeQueue.async { _ = target.onNotify(characteristicUuid: uuid, data: frame, receivedNanos: sinceStart) }
         }
     }
 
