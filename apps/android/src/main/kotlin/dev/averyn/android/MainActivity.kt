@@ -61,8 +61,7 @@ import dev.averyn.tracking.DiagnosticsReport
 import dev.averyn.tracking.LiveSnapshot
 import dev.averyn.tracking.RecoveryResult
 import dev.averyn.tracking.ResumeAction
-import dev.averyn.tracking.finishOlderInterrupted
-import dev.averyn.tracking.resumeDecision
+import dev.averyn.tracking.planLaunchRecovery
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -166,14 +165,11 @@ private fun RecordScreen(app: AverynApplication) {
             return@LaunchedEffect
         }
         val (elapsedMs, timeMs) = now()
-        val decision =
-            withContext(Dispatchers.IO) { app.store.resumeDecision(timeMs, hasPreciseLocation(context)) }
-                ?: return@LaunchedEffect
-        val finishedOlder =
-            withContext(Dispatchers.IO) {
-                app.store.finishOlderInterrupted(decision.metadata.activityId, elapsedMs, timeMs)
-            }
-        if (finishedOlder > 0) {
+        val plan =
+            withContext(Dispatchers.IO) { app.store.planLaunchRecovery(elapsedMs, timeMs, hasPreciseLocation(context)) }
+        if (plan.failure != null) notice = resources.getString(R.string.recovery_unreadable)
+        val decision = plan.decision ?: return@LaunchedEffect
+        if (plan.finishedOlder > 0) {
             enqueueSync(context)
             historyVersion++
         }

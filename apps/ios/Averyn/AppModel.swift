@@ -266,19 +266,16 @@ final class AppModel {
         let hasPrecisePermission = tracker.canRecordInBackground
         let store = self.store
         recovery = Task {
-            let (found, finishedOlder) = await Task.detached(priority: .userInitiated) { () -> (ResumeDecision?, Int32) in
-                guard let decision = store.resumeDecision(nowTimeMs: timeMs, hasPrecisePermission: hasPrecisePermission)
-                else { return (nil, 0) }
-                let finished = store.finishOlderInterrupted(
-                    keepId: decision.metadata.activityId,
+            let plan = await Task.detached(priority: .userInitiated) {
+                store.planLaunchRecovery(
                     nowElapsedRealtimeMs: elapsedMs,
-                    nowTimeMs: timeMs
+                    nowTimeMs: timeMs,
+                    hasPrecisePermission: hasPrecisePermission
                 )
-                return (decision, finished)
             }.value
-            if finishedOlder > 0 { Task { await sync.syncNow() } }
+            if plan.finishedOlder > 0 { Task { await sync.syncNow() } }
             // The user may have pressed Start while the files were read: that recording owns the recorder.
-            guard let decision = found, decision.action == ResumeAction.resumeNow, recorder.currentState == .idle
+            guard let decision = plan.decision, decision.action == ResumeAction.resumeNow, recorder.currentState == .idle
             else { return }
             applyRecovery(decision, elapsedMs: elapsedMs, timeMs: timeMs)
         }

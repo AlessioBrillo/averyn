@@ -60,6 +60,7 @@
     <string name="sync_failed_permanent">the server refused it</string>
     <string name="sync_deleted_on_server">deleted on the server</string>
     <string name="resumed_notice">Recording resumed after an interruption</string>
+    <string name="recovery_unreadable">An interrupted activity could not be read. Its file is kept; export it from History.</string>
     <string name="precise_location_needed">Precise location is needed to record. Choose “Precise” when asked, or allow it in the app settings.</string>
     <string name="background_location_title">Keep recording if the app is closed</string>
     <string name="background_location_text">If your phone closes the app or restarts during an activity, Averyn can resume the recording by itself only when location is allowed all the time. Choose “Allow all the time” on the next screen. Your location stays on this phone and is used only while an activity is recording. You can skip this: the recording works anyway, and you will get a notification to resume.</string>

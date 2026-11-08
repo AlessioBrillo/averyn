@@ -71,3 +71,41 @@ fun ActivityStore.finishOlderInterrupted(
     }
     return finished
 }
+
+/**
+ * What the launch found (TDD-0006 §5.1): the newest interrupted activity and what to do with it, how many older
+ * ones were finished on the way (their sync is due), and [failure] when the stored files could not be read.
+ * [failure] is the exception's class name, never its message (a path or a file's content has no place in a log).
+ */
+class LaunchRecovery(
+    val decision: ResumeDecision?,
+    val finishedOlder: Int,
+    val failure: String?,
+)
+
+/**
+ * The one launch routine of both phones: decide on the newest interrupted activity and finish the older ones.
+ *
+ * Reads whole stored files, so call it off the main thread. It never throws: a file that cannot be read (a full
+ * or failing disk, a corrupt first line) would otherwise end the process from Swift, where Kotlin exceptions are
+ * not catchable. The activity files stay on disk; the failure is reported so the caller can say so.
+ */
+fun ActivityStore.planLaunchRecovery(
+    nowElapsedRealtimeMs: Long,
+    nowTimeMs: Long,
+    hasPrecisePermission: Boolean,
+): LaunchRecovery =
+    try {
+        val decision = resumeDecision(nowTimeMs, hasPrecisePermission)
+        val finished =
+            if (decision ==
+                null
+            ) {
+                0
+            } else {
+                finishOlderInterrupted(decision.metadata.activityId, nowElapsedRealtimeMs, nowTimeMs)
+            }
+        LaunchRecovery(decision, finished, null)
+    } catch (e: Exception) {
+        LaunchRecovery(null, 0, e::class.simpleName ?: "Exception")
+    }

@@ -108,4 +108,26 @@ class ResumePolicyTest {
         assertEquals(ActivityState.COMPLETED, replay(store, "old").lastState)
         assertEquals(listOf("new"), store.interrupted().map { it.activityId })
     }
+
+    @Test
+    fun theLaunchPlanDecidesOnTheNewestAndFinishesTheOlderOnesInOneCall() {
+        interruptedActivity("old", startMs = 0)
+        interruptedActivity("new", startMs = 500_000)
+
+        val plan = store.planLaunchRecovery(700_000, wallBase + 700_000, hasPrecisePermission = true)
+
+        assertEquals("new", plan.decision?.metadata?.activityId)
+        assertEquals(1, plan.finishedOlder)
+        assertNull(plan.failure)
+        assertEquals(ActivityState.COMPLETED, replay(store, "old").lastState)
+    }
+
+    @Test
+    fun theLaunchPlanOfAnEmptyStoreIsEmptyAndNotAFailure() {
+        val plan = store.planLaunchRecovery(0, 0, hasPrecisePermission = true)
+
+        assertNull(plan.decision)
+        assertEquals(0, plan.finishedOlder)
+        assertNull(plan.failure)
+    }
 }
