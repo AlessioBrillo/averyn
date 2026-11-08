@@ -60,6 +60,7 @@
     <string name="sync_failed_permanent">il server l\'ha rifiutata</string>
     <string name="sync_deleted_on_server">eliminata sul server</string>
     <string name="resumed_notice">Registrazione ripresa dopo un\'interruzione</string>
+    <string name="recovery_unreadable">Non riesco a leggere un\'attività interrotta. Il file è conservato: esportalo dalla Cronologia.</string>
     <string name="precise_location_needed">Per registrare serve la posizione precisa. Scegli «Precisa» quando richiesto, oppure consentila nelle impostazioni dell\'app.</string>
     <string name="background_location_title">Continua a registrare se l\'app si chiude</string>
     <string name="background_location_text">Se il telefono chiude l\'app o si riavvia durante un\'attività, Averyn può riprendere la registrazione da solo solo se la posizione è consentita sempre. Nella schermata successiva scegli «Consenti sempre». La posizione resta su questo telefono e viene usata solo mentre un\'attività è in registrazione. Puoi saltare: la registrazione funziona comunque e riceverai una notifica per riprenderla.</string>

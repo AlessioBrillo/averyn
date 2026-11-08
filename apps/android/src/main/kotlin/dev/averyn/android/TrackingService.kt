@@ -31,8 +31,7 @@ import dev.averyn.tracking.ActivityRecorder
 import dev.averyn.tracking.DroppedInputReason
 import dev.averyn.tracking.RecoveryResult
 import dev.averyn.tracking.ResumeAction
-import dev.averyn.tracking.finishOlderInterrupted
-import dev.averyn.tracking.resumeDecision
+import dev.averyn.tracking.planLaunchRecovery
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -269,8 +268,9 @@ class TrackingService : Service() {
         val app = application as AverynApplication
         val elapsedMs = SystemClock.elapsedRealtime()
         val timeMs = System.currentTimeMillis()
-        val decision = app.store.resumeDecision(timeMs, hasPrecisePermission = hasPreciseLocation()) ?: return false
-        if (app.store.finishOlderInterrupted(decision.metadata.activityId, elapsedMs, timeMs) > 0) enqueueSync(this)
+        val plan = app.store.planLaunchRecovery(elapsedMs, timeMs, hasPrecisePermission = hasPreciseLocation())
+        if (plan.finishedOlder > 0) enqueueSync(this)
+        val decision = plan.decision ?: return false
         if (decision.action == ResumeAction.ASK_USER) {
             postInterruptedNotification(this)
             return false
