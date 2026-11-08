@@ -1,6 +1,6 @@
 # Device test matrix
 
-Status: ready for the first campaign — protocol below; **no row has been run yet** (0 of 48 scenarios). Results are filled in as devices are tested; a feature is `verified` only when its row is green ([ADR-0028](../adr/0028-consumer-launch-target.md)). Emulators are **not** valid evidence for background, battery or recovery behavior ([TDD-0001 §6](../design/TDD-0001-tracking-engine.md)). Builds under test come from the tester tracks ([ADR-0019](../adr/0019-crash-reporting-and-tester-builds.md)); every result row names the build.
+Status: ready for the first campaign — protocol below; **no row has been run yet** (0 of 50 scenarios). Results are filled in as devices are tested; a feature is `verified` only when its row is green ([ADR-0028](../adr/0028-consumer-launch-target.md)). Emulators are **not** valid evidence for background, battery or recovery behavior ([TDD-0001 §6](../design/TDD-0001-tracking-engine.md)). Builds under test come from the tester tracks ([ADR-0019](../adr/0019-crash-reporting-and-tester-builds.md)); every result row names the build.
 
 ## Dimensions ([report §6.4](../product/reference-report-v0.1.md))
 
