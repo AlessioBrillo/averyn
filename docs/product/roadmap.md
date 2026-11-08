@@ -54,7 +54,7 @@ Everything below is **code in place, not verified on a device**: the device matr
 | 8 | Voice cues | Per-kilometre events from the tracking engine; text-to-speech on both phones |
 | 9 | Onboarding and accessibility | Permission explanations, pairing of a strap or band, large text, screen readers |
 | 10 | Cloud, legal texts, store listings | Provider, SMTP, open sign-up; closed test on Play; the name |
-| 11 | Synapse L1 beta | When the prototype arrives |
+| 11 | Synapse L1 beta | When the prototype arrives. **Exception (2026-11-07):** the contract, the parsers, the consent scopes, the sidecars and the web history view start now, with the device repository's synthetic fixtures ([ADR-0030](../adr/0030-synapse-contract-v2-1-and-raw-signals.md)): the contract is free to fix only until someone pins it. Nothing is verified on a band; a red row of the campaign still stops this work |
 
 ## Synapse track
 
@@ -63,10 +63,10 @@ Optional third-party sensor integration. The rules are [ADR-0010](../adr/0010-ec
 | Level | What | Averyn code | When |
 |---|---|---|---|
 | L0 | The band as a standard HR strap (`0x180D`/`0x2A37` with RR, Battery, Device Information) | none | When the prototype arrives: matrix row S15 with the band next to the reference strap |
-| L1 | Feature frame v1 from the consumer service (SQI, motion artifact, stress class; RMSSD/SDNN once real) | pure parser in `shared/sensors` (**done**, with vectors generated from the packed struct), native adapters and a consent-gated sidecar (wait for a prototype and for the handoff in the Synapse repository) | MVP-L, beta, first on the cut line |
+| L1 | Feature frame v2.2 from the consumer service (heart rate, SQI, motion artifact, stress class; RR/RMSSD/SDNN once real) | **done:** parsers and vectors in `shared/sensors`, the consent scopes, the sidecar store, the summary endpoint and the web view; **not done:** the phone adapters and the sidecar writer/upload | MVP-L, beta, first on the cut line |
 | L2 | `synapse_*` FIT developer fields read by the FIT import as imported data | field mapping in the FIT decoder | With the FIT import if time allows, otherwise after launch |
 | L3 | Job/result plumbing to a stateless worker (HRV trends, daily stress) | queue and per-job credentials | After launch, after the DPIA covers it |
-| L1R | The research raw streams (ECG 500 Hz, PPG, IMU) shown as signals in Averyn, behind their own scope `raw_signals` ([ADR-0030](../adr/0030-synapse-contract-v2-1-and-raw-signals.md), proposed) | parser for contract 2.1 and raw frames, adapters, sidecar `<id>.synapse-raw.bin`, signal views on Android, iOS and web | After L1, with the same beta |
+| L1R | The research raw streams (ECG 500 Hz, PPG, IMU) shown as signals in Averyn, behind their own scope `raw_signals` ([ADR-0030](../adr/0030-synapse-contract-v2-1-and-raw-signals.md), accepted) | **done:** raw-frame decoder, session account, `<id>.synapse-raw.bin` store, min/max windows and the web viewer with zoom; **not done:** the phone adapters, a live screen, mobile views | After L1, with the same beta |
 
 ## MVP-0 and MVP-1 gates still open
 

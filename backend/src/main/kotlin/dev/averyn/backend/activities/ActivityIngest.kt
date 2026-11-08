@@ -385,9 +385,12 @@ class ActivityIngest(
             conn
                 .prepareStatement(
                     "SELECT coalesce(sum(raw_size_bytes + coalesce(source_size_bytes, 0) " +
-                        "+ coalesce(rr_size_bytes, 0)), 0) FROM activities WHERE owner_id = ?",
+                        "+ coalesce(rr_size_bytes, 0)), 0) + " +
+                        "(SELECT coalesce(sum(size_bytes), 0) FROM activity_synapse_sidecars WHERE owner_id = ?) " +
+                        "FROM activities WHERE owner_id = ?",
                 ).use {
                     it.setObject(1, ownerId)
+                    it.setObject(2, ownerId)
                     it.executeQuery().use { rs -> if (rs.next()) rs.getLong(1) else 0 }
                 }
         }
@@ -585,9 +588,12 @@ class ActivityIngest(
             conn
                 .prepareStatement(
                     "SELECT coalesce(sum(raw_size_bytes + coalesce(source_size_bytes, 0) " +
-                        "+ coalesce(rr_size_bytes, 0)), 0) FROM activities WHERE owner_id = ?",
+                        "+ coalesce(rr_size_bytes, 0)), 0) + " +
+                        "(SELECT coalesce(sum(size_bytes), 0) FROM activity_synapse_sidecars WHERE owner_id = ?) " +
+                        "FROM activities WHERE owner_id = ?",
                 ).use {
                     it.setObject(1, ownerId)
+                    it.setObject(2, ownerId)
                     it.executeQuery().use { rs -> if (rs.next()) rs.getLong(1) else 0 }
                 }
         }

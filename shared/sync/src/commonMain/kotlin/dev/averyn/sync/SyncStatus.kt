@@ -2,6 +2,7 @@ package dev.averyn.sync
 
 import dev.averyn.domain.ActivityState
 import dev.averyn.tracking.ActivityStore
+import dev.averyn.tracking.SynapseSidecarKind
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
@@ -136,4 +137,51 @@ class SyncStatusStore(
         val path = Path(directory, "$activityId.rr.sync.json")
         if (SystemFileSystem.exists(path)) SystemFileSystem.delete(path)
     }
+
+    /**
+     * The status of one Synapse band sidecar of an activity (`<id>.synapse.sync.json`,
+     * `<id>.synapse-raw.sync.json`): each has its own consent and its own failures, and none holds the activity back.
+     */
+    fun readSynapse(
+        activityId: String,
+        kind: SynapseSidecarKind,
+    ): SyncStatus? {
+        val path = synapsePath(activityId, kind)
+        if (!SystemFileSystem.exists(path)) return null
+        return try {
+            json.decodeFromString(
+                SyncStatus.serializer(),
+                SystemFileSystem.source(path).buffered().use { it.readString() },
+            )
+        } catch (e: SerializationException) {
+            null
+        }
+    }
+
+    fun writeSynapse(
+        activityId: String,
+        kind: SynapseSidecarKind,
+        status: SyncStatus,
+    ) {
+        val target = synapsePath(activityId, kind)
+        val temp = Path(directory, "${target.name}.tmp")
+        SystemFileSystem.sink(temp, append = false).buffered().use {
+            it.writeString(json.encodeToString(SyncStatus.serializer(), status))
+        }
+        SystemFileSystem.atomicMove(temp, target)
+    }
+
+    /** Throws the status of one Synapse band sidecar away. */
+    fun deleteSynapse(
+        activityId: String,
+        kind: SynapseSidecarKind,
+    ) {
+        val path = synapsePath(activityId, kind)
+        if (SystemFileSystem.exists(path)) SystemFileSystem.delete(path)
+    }
+
+    private fun synapsePath(
+        activityId: String,
+        kind: SynapseSidecarKind,
+    ) = Path(directory, "$activityId${kind.fileSuffix.removeSuffix(".bin")}.sync.json")
 }

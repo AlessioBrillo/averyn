@@ -22,7 +22,6 @@ import androidx.core.content.ContextCompat
 import dev.averyn.sensors.HeartRateSample
 import dev.averyn.sensors.ParseResult
 import dev.averyn.sensors.RrInterval
-import dev.averyn.sensors.SensorAdapter
 import dev.averyn.sensors.parseHeartRateFrames
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -73,7 +72,7 @@ internal fun reconnectBackoffMs(attempt: Int): Long =
 @SuppressLint("MissingPermission")
 class BleHrAdapter(
     private val context: Context,
-) : SensorAdapter {
+) : HrSensor {
     private val bluetoothManager =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     private val bluetoothAdapter: BluetoothAdapter? = bluetoothManager.adapter
@@ -91,8 +90,7 @@ class BleHrAdapter(
     override var onSample: ((HeartRateSample) -> Unit)? = null
     override var onRrInterval: ((RrInterval) -> Unit)? = null
 
-    /** A value of a frame the heart-rate model rejects: the caller counts it as a dropped input. */
-    var onInvalid: (() -> Unit)? = null
+    override var onInvalid: (() -> Unit)? = null
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var connectJob: Job? = null

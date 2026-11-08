@@ -37,7 +37,7 @@ screens come later); the editing of a split; the laps the device or the user wou
 | R7 | The analysis is computed when the activity is stored, and it is recomputed when it is missing or when the algorithms changed. |
 | R8 | The web app shows the splits in a table, the elevation and the heart rate in two charts, and the numbers of the analysis next to the ones of the activity. |
 | R9 | The analysis is part of the export of the account (`analysis/<id>.json`) and it is deleted with the activity. |
-| R10 | Every number declares the algorithm that produced it (`splits-v1`, `elevation-v1`, `series-v1`, `hr-v2`). |
+| R10 | Every number declares the algorithm that produced it (`splits-v1`, `elevation-v1`, `series-v2`, `hr-v2`). |
 
 ## 4. Non-functional requirements
 
