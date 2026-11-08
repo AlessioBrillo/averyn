@@ -313,7 +313,8 @@ class SynapseBleAdapter(
                 }
             val gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
             synchronized(lock) { currentGatt = gatt }
-            if (!connected.await() ||
+            if (gatt == null ||
+                !connected.awaitOrFalse(GATT_CONNECT_TIMEOUT_MS) ||
                 !(withTimeoutOrNull(SERVICES_TIMEOUT_MS) { servicesOk.await() } ?: false) ||
                 !setUp(gatt, steps)
             ) {

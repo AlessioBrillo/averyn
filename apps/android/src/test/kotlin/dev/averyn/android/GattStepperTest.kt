@@ -1,10 +1,12 @@
 package dev.averyn.android
 
 import dev.averyn.android.ble.GattStepper
+import dev.averyn.android.ble.awaitOrFalse
 import dev.averyn.android.ble.synapseNotifyPlan
 import dev.averyn.sensors.SYNAPSE_FEATURE_CHARACTERISTIC_UUID
 import dev.averyn.sensors.SYNAPSE_RESEARCH_CHARACTERISTIC_UUIDS
 import dev.averyn.sensors.SYNAPSE_STATUS_CHARACTERISTIC_UUID
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -76,4 +78,12 @@ class GattStepperTest {
         assertEquals(base, synapseNotifyPlan(rawAllowed = false))
         assertEquals(base + SYNAPSE_RESEARCH_CHARACTERISTIC_UUIDS.values, synapseNotifyPlan(rawAllowed = true))
     }
+
+    @Test
+    fun aConnectionThatNeverAnswersIsAFailureNotAWaitForEver() =
+        runBlocking {
+            assertFalse(CompletableDeferred<Boolean>().awaitOrFalse(50))
+            assertTrue(CompletableDeferred(true).awaitOrFalse(50))
+            assertFalse(CompletableDeferred(false).awaitOrFalse(50))
+        }
 }

@@ -54,3 +54,14 @@ internal fun synapseNotifyPlan(rawAllowed: Boolean): List<String> =
         add(SYNAPSE_STATUS_CHARACTERISTIC_UUID)
         if (rawAllowed) addAll(SYNAPSE_RESEARCH_CHARACTERISTIC_UUIDS.values)
     }
+
+/** How long a connection attempt may take before it is counted as failed and retried with the backoff. */
+internal const val GATT_CONNECT_TIMEOUT_MS = 20_000L
+
+/**
+ * The result of [this] within [timeoutMs], false when it did not come in time. A callback that never arrives (a
+ * strap that went out of range between the scan and the connection, a stack that drops the event) would
+ * otherwise leave the reconnect loop waiting for ever: the run would end with no heart rate and no error.
+ */
+internal suspend fun CompletableDeferred<Boolean>.awaitOrFalse(timeoutMs: Long): Boolean =
+    withTimeoutOrNull(timeoutMs) { await() } ?: false

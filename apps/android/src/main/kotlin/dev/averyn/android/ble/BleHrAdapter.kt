@@ -45,6 +45,9 @@ private val CCCD = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 /** How long to scan before giving up and reporting the sensor as unavailable. */
 private val SCAN_TIMEOUT_MS = 15_000L
 
+/** How long the service discovery of a connected strap may take. */
+private const val SERVICES_TIMEOUT_MS = 15_000L
+
 /** Reconnect backoff: 1s, 2s, 4s, 8s, then stop. */
 private const val RECONNECT_BACKOFF_FIRST_MS = 1_000L
 private const val RECONNECT_BACKOFF_MAX_MS = 30_000L
@@ -283,11 +286,12 @@ class BleHrAdapter(
                 }
             val gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
             synchronized(lock) { currentGatt = gatt }
-            if (!connected.await()) {
+            // Some stacks return no handle, or never call back: both are a failed attempt, retried with the backoff.
+            if (gatt == null || !connected.awaitOrFalse(GATT_CONNECT_TIMEOUT_MS)) {
                 delay(reconnectBackoffMs(++attempt))
                 continue
             }
-            if (!servicesOk.await()) {
+            if (!servicesOk.awaitOrFalse(SERVICES_TIMEOUT_MS)) {
                 delay(reconnectBackoffMs(++attempt))
                 continue
             }
