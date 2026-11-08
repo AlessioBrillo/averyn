@@ -37,6 +37,24 @@ class ActivityStoreTest {
     private fun sample(elapsedMs: Long) = LocationSample(elapsedMs, elapsedMs, 45.0, 9.0, 5.0)
 
     @Test
+    fun onlyAFailedActivityWithoutSamplesIsAnEmptyFailure() {
+        store.create(ActivityMetadata("empty", Sport.RUN, 0))
+        store.appendEvent("empty", StateEvent(0, 0, ActivityState.PREPARING, Reason.USER))
+        store.appendEvent("empty", StateEvent(1, 1, ActivityState.FAILED, Reason.ERROR))
+        store.create(ActivityMetadata("partial", Sport.RUN, 0))
+        store.appendEvent("partial", StateEvent(0, 0, ActivityState.RECORDING, Reason.GPS_READY))
+        store.appendSample("partial", sample(10))
+        store.appendEvent("partial", StateEvent(20, 20, ActivityState.FAILED, Reason.ERROR))
+        store.create(ActivityMetadata("preparing", Sport.RUN, 0))
+        store.appendEvent("preparing", StateEvent(0, 0, ActivityState.PREPARING, Reason.USER))
+
+        assertEquals(true, store.isEmptyFailure("empty"))
+        assertEquals(false, store.isEmptyFailure("partial"))
+        assertEquals(false, store.isEmptyFailure("preparing"))
+        assertEquals(false, store.isEmptyFailure("missing"))
+    }
+
+    @Test
     fun lastStateOfReadsOnlyTheEventLinesAndIgnoresDamagedOnes() {
         store.create(ActivityMetadata("a1", Sport.RUN, 0))
         store.appendEvent("a1", StateEvent(0, 0, ActivityState.PREPARING, Reason.USER))
