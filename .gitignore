@@ -53,3 +53,7 @@ coverage/
 infrastructure/compose/data/
 infrastructure/compose/seaweedfs-s3.local.json
 *.log
+
+# Backups hold the data of every user and the instance secrets (infrastructure/compose/backup.sh writes outside the repo by default)
+backups/
+*.sql.gz

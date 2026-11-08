@@ -1,5 +1,6 @@
 #!/bin/sh
-# Backs up an instance into the directory given as the first argument (default: ./backups/<UTC time>).
+# Backs up an instance into the directory given as the first argument (default: ~/averyn-backups/<UTC time>, outside
+# the repository: a backup holds the data of every user and the secrets, and must never be one `git add` away).
 # This is docs/runbooks/backup-database.md as a script: it stops the writers for the few minutes the copy takes.
 #
 #   COMPOSE   the Compose command you start the stack with        (default: docker compose --env-file .env)
@@ -11,7 +12,7 @@ set -eu
 
 dc() { ${COMPOSE:-docker compose --env-file .env} "$@"; }
 env_file="${ENV_FILE:-.env}"
-B="${1:-backups/$(date -u +%Y%m%dT%H%M%SZ)}"
+B="${1:-${HOME}/averyn-backups/$(date -u +%Y%m%dT%H%M%SZ)}"
 mkdir -p "$B"
 chmod 700 "$B"
 B=$(cd "$B" && pwd)

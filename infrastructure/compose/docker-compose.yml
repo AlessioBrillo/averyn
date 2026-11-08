@@ -86,6 +86,9 @@ services:
       ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2099-01-01T00:00:00Z"
       ZITADEL_FIRSTINSTANCE_PATPATH: /bootstrap/admin.pat
       ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "false"
+      # Sign-up is closed unless the operator opens it (AVERYN_OPEN_SIGNUP=true in .env). Read at the first start only: an
+      # existing instance keeps its login policy (change it in the console: Settings > Login Behavior).
+      ZITADEL_DEFAULTINSTANCE_LOGINPOLICY_ALLOWREGISTER: ${AVERYN_OPEN_SIGNUP:-false}
     volumes:
       - idp-bootstrap:/bootstrap
     networks:
