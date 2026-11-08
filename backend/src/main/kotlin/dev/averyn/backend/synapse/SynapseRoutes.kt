@@ -105,19 +105,29 @@ fun Application.synapse(
                         val dir = Files.createTempDirectory("averyn-synapse-")
                         try {
                             val file = dir.resolve("$clientId.${kind.wireName}.bin")
-                            val sha256 =
+                            var sha256 =
                                 call.receiveToFile(file, limit)
                                     ?: return@withContext call.respond(
                                         HttpStatusCode.PayloadTooLarge,
                                         errorBody("file too large"),
                                     )
-                            val bytes = Files.readAllBytes(file)
+                            var bytes = Files.readAllBytes(file)
                             // A whole record at least; a cut tail (the app was killed mid-write) is allowed and ignored.
                             if (readSynapseSidecar(bytes).records.isEmpty()) {
                                 return@withContext call.respond(
                                     HttpStatusCode.UnprocessableEntity,
                                     errorBody("the sidecar has no whole record"),
                                 )
+                            }
+                            if (kind == SynapseKind.FEATURES) {
+                                // signal_quality lets the sidecar in; stress, RR and the band's HRV are separate
+                                // consents (ADR-0021), so the fields of a scope not granted are never written.
+                                val ungranted = ungrantedFields { consentStore.isGranted(owner, it) }
+                                if (ungranted.isNotEmpty()) {
+                                    bytes = maskFeatureSidecar(bytes, ungranted)
+                                    Files.write(file, bytes)
+                                    sha256 = sha256Hex(bytes)
+                                }
                             }
                             val previous = store.get(owner, clientId, kind)
                             val stored = store.storedBytes(owner) - (previous?.sizeBytes ?: 0L)

@@ -227,7 +227,7 @@ class SynapseStore(
             }
         for (row in rows) {
             val masked = maskFeatureSidecar(raw.get(row.key), fields)
-            val sha = MessageDigest.getInstance("SHA-256").digest(masked).joinToString("") { "%02x".format(it) }
+            val sha = sha256Hex(masked)
             val key = keyOf(owner, row.clientActivityId, SynapseKind.FEATURES, sha)
             if (key != row.key) {
                 val file = Files.createTempFile("averyn-synapse-mask-", ".bin")
@@ -255,6 +255,21 @@ enum class FeatureField(
     RR(10..12, 0xFF), // rr_last (u16, 0xFFFF) and rr_count (u8, 0xFF)
     BAND_HRV(20..23, 0xFF), // rmssd and sdnn, both u16 0xFFFF
 }
+
+/** The consent each field of a feature frame needs, besides `signal_quality` which admits the sidecar. */
+private val FIELD_SCOPE =
+    mapOf(
+        FeatureField.STRESS to ConsentScope.STRESS_MONITORING,
+        FeatureField.RR to ConsentScope.RR_RECORDING,
+        FeatureField.BAND_HRV to ConsentScope.HRV_ANALYSIS,
+    )
+
+/** The fields whose scope [isGranted] says no to. Pure given [isGranted]. */
+fun ungrantedFields(isGranted: (String) -> Boolean): Set<FeatureField> =
+    FeatureField.entries.filterTo(mutableSetOf()) { !isGranted(FIELD_SCOPE.getValue(it)) }
+
+fun sha256Hex(bytes: ByteArray): String =
+    MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
 /**
  * Sets [fields] to "not available" in every feature frame of a consumer sidecar and leaves everything else as it is,
