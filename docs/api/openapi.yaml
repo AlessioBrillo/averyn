@@ -224,6 +224,90 @@ paths:
         "413": { description: Body over the size limit }
         "422": { description: The file has no metadata line }
         "503": { description: Too many uploads in progress, retry after the Retry-After seconds }
+  /v1/activities/{clientActivityId}/synapse/{kind}:
+    put:
+      summary: Upload what a Synapse band sent during an activity (consent-gated, ADR-0030)
+      description: >
+        `kind` is `features` (the consumer records at about 1 Hz; consent `signal_quality`) or `raw` (the research
+        frames; consent `raw_signals`). The file is stored as received, with one exception: in a `features`
+        file the fields of a scope that is not granted (stress, RR, the band's RMSSD/SDNN) are set to "not
+        available" before it is stored (ADR-0021). The activity must exist, and the file needs at least one whole record.
+      security: [{ oidc: [] }]
+      parameters:
+        - name: clientActivityId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: kind
+          in: path
+          required: true
+          schema: { type: string, enum: [features, raw] }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        "204": { description: Stored }
+        "400": { description: Malformed activity id }
+        "401": { description: Missing or invalid token }
+        "403": { description: The consent of that kind is not granted }
+        "404": { description: Unknown kind, or the activity does not exist or is not owned by the caller }
+        "410": { description: The sidecar was deleted (consent withdrawn) and is not accepted again }
+        "413": { description: Body over the size limit }
+        "422": { description: The file has no whole record }
+        "507": { description: Storage quota exceeded }
+  /v1/activities/{clientActivityId}/synapse:
+    get:
+      summary: What the band recorded in an activity, as the consents allow (SynapseSummaryDto)
+      security: [{ oidc: [] }]
+      parameters:
+        - name: clientActivityId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The summary; a field is null when its sidecar is absent or its consent was withdrawn
+          content:
+            application/json:
+              schema: { type: object, description: SynapseSummaryDto in shared/api }
+        "401": { description: Missing or invalid token }
+        "404": { description: The activity does not exist or is not owned by the caller }
+  /v1/activities/{clientActivityId}/synapse/raw/{stream}:
+    get:
+      summary: A bounded window of one raw stream, decimated to at most `maxPoints` per segment (SynapseWindowDto)
+      security: [{ oidc: [] }]
+      parameters:
+        - name: clientActivityId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: stream
+          in: path
+          required: true
+          schema: { type: string }
+        - name: from
+          in: query
+          description: Start of the window in milliseconds since the start of the recording
+          schema: { type: integer, format: int64, default: 0 }
+        - name: to
+          in: query
+          description: End of the window, in the same unit; must be after `from`
+          schema: { type: integer, format: int64 }
+        - name: maxPoints
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The window, in the contract's units
+          content:
+            application/json:
+              schema: { type: object, description: SynapseWindowDto in shared/api }
+        "400": { description: Malformed activity id or an empty window }
+        "401": { description: Missing or invalid token }
+        "403": { description: The `raw_signals` consent is not granted }
+        "404": { description: Unknown stream, a stream that was not recorded, or no such activity }
         "507": { description: "Storing this file would exceed the caller's storage quota; nothing was stored" }
   /v1/imports/gpx:
     post:
@@ -373,7 +457,7 @@ paths:
         - name: scope
           in: path
           required: true
-          schema: { type: string, enum: [rr_recording, hrv_analysis] }
+          schema: { type: string, enum: [rr_recording, hrv_analysis, signal_quality, stress_monitoring, raw_signals] }
       responses:
         "201": { description: Granted }
         "400": { description: Missing or unknown scope }
@@ -385,7 +469,7 @@ paths:
         - name: scope
           in: path
           required: true
-          schema: { type: string, enum: [rr_recording, hrv_analysis] }
+          schema: { type: string, enum: [rr_recording, hrv_analysis, signal_quality, stress_monitoring, raw_signals] }
       responses:
         "204": { description: Revoked; the data it covered is deleted }
         "400": { description: Missing or unknown scope }
