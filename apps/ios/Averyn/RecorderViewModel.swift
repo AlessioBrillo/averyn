@@ -211,7 +211,9 @@ final class RecorderViewModel: ObservableObject {
     /// Throws one activity off this device: the files go, the server keeps what it has.
     func deleteLocal(_ item: DeviceActivityItem) async {
         let repository = AppModel.shared.history()
-        try? await repository.deleteLocal(activityId: item.activityId)
+        let rec = AppModel.shared.recorder
+        let running = (rec.currentState == .idle || rec.currentState.isTerminal) ? nil : rec.currentActivityId
+        _ = try? await repository.deleteLocal(activityId: item.activityId, inProgressId: running)
         deviceActivities = (try? await repository.deviceData()) ?? []
     }
 

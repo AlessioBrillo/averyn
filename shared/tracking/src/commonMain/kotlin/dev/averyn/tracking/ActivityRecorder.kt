@@ -299,6 +299,22 @@ class ActivityRecorder(
         emit()
     }
 
+    /**
+     * The location source is gone while an activity exists (F9). Before the first fix there is nothing to keep, so
+     * the activity fails; once recording it is paused with the reason and the data stays resumable. Never throws for
+     * a state with nothing to interrupt (IDLE, PAUSED, STOPPING, terminal): returns the new state, or null then.
+     */
+    fun interrupt(
+        elapsedRealtimeMs: Long,
+        timeMs: Long,
+        reason: Reason,
+    ): ActivityState? =
+        when (state) {
+            ActivityState.PREPARING -> fail(elapsedRealtimeMs, timeMs, reason)
+            ActivityState.RECORDING -> pause(elapsedRealtimeMs, timeMs, reason)
+            else -> null
+        }?.let { state }
+
     fun pause(
         elapsedRealtimeMs: Long,
         timeMs: Long,

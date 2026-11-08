@@ -14,6 +14,7 @@ import kotlinx.io.writeString
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -319,5 +320,41 @@ class ActivityStoreTest {
         // The main activity file is untouched.
         store.create(ActivityMetadata("a1", Sport.RUN, 0))
         assertEquals(1, store.metadataOf("a1")!!.formatVersion)
+    }
+
+    @Test
+    fun aSynapseSidecarIsAppendedReadAndDeletedPerKind() {
+        assertFalse(store.hasSynapse("a1", SynapseSidecarKind.FEATURES))
+        assertTrue(store.appendSynapse("a1", SynapseSidecarKind.FEATURES, byteArrayOf(1, 2)))
+        assertTrue(store.appendSynapse("a1", SynapseSidecarKind.FEATURES, byteArrayOf(3)))
+        assertTrue(store.appendSynapse("a1", SynapseSidecarKind.RAW, byteArrayOf(9)))
+        assertContentEquals(byteArrayOf(1, 2, 3), store.readSynapse("a1", SynapseSidecarKind.FEATURES))
+        store.deleteSynapse("a1", SynapseSidecarKind.FEATURES)
+        assertFalse(store.hasSynapse("a1", SynapseSidecarKind.FEATURES))
+        assertTrue(store.hasSynapse("a1", SynapseSidecarKind.RAW), "the other kind is untouched")
+        store.deleteSynapse("a1", SynapseSidecarKind.FEATURES) // absent: no-op
+    }
+
+    @Test
+    fun aSynapseSidecarStopsAtItsCapAndWritesNothingPastIt() {
+        val almost = ByteArray((SynapseSidecarKind.FEATURES.maxBytes - 4).toInt())
+        assertTrue(store.appendSynapse("a1", SynapseSidecarKind.FEATURES, almost))
+        assertFalse(store.appendSynapse("a1", SynapseSidecarKind.FEATURES, ByteArray(5)))
+        assertEquals(almost.size, store.readSynapse("a1", SynapseSidecarKind.FEATURES).size)
+        assertTrue(store.appendSynapse("a1", SynapseSidecarKind.FEATURES, ByteArray(4)), "exactly the cap still fits")
+    }
+
+    @Test
+    fun theSynapseSidecarsAreNotActivitiesAndDoNotListAsOne() {
+        store.create(ActivityMetadata("a1", Sport.RUN, 0))
+        store.appendSynapse("a1", SynapseSidecarKind.FEATURES, byteArrayOf(1))
+        store.appendSynapse("a1", SynapseSidecarKind.RAW, byteArrayOf(1))
+        assertEquals(listOf("a1"), store.list().map { it.activityId })
+    }
+
+    @Test
+    fun theSinkAppendsToTheActivitysSidecar() {
+        store.synapseSink("a1", SynapseSidecarKind.RAW).append(byteArrayOf(7, 8))
+        assertContentEquals(byteArrayOf(7, 8), store.readSynapse("a1", SynapseSidecarKind.RAW))
     }
 }

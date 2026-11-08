@@ -7,6 +7,7 @@ import dev.averyn.sensors.RrInterval
 import dev.averyn.tracking.ActivityMetadata
 import dev.averyn.tracking.ActivityRecorder
 import dev.averyn.tracking.ActivityStore
+import dev.averyn.tracking.SynapseSidecarKind
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -26,6 +27,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -398,5 +400,122 @@ class ActivitySyncTest {
             assertEquals(SyncRunResult(uploaded = 1, retryable = 0, permanent = 1, needsLogin = false), result)
             assertEquals(SyncStatus(SyncState.FAILED_PERMANENT, 1, "DELETED_ON_SERVER"), statuses.statusOf("a1"))
             assertEquals(SyncState.READY, statuses.statusOf("a2").state)
+        }
+
+    private fun withSynapse(
+        id: String,
+        kind: SynapseSidecarKind,
+    ) {
+        finishedActivity(id)
+        store.appendSynapse(id, kind, byteArrayOf(1, 2, 3))
+    }
+
+    private fun synapseAnswer(
+        code: HttpStatusCode,
+    ): suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
+        { request ->
+            if ("/synapse/" in request.url.encodedPath) respond("", code) else created(this, request)
+        }
+
+    @Test
+    fun theFeatureSidecarGoesUpAsRawBytesAndTheServersNoContentIsSuccess() =
+        runTest {
+            withSynapse("a1", SynapseSidecarKind.FEATURES)
+
+            val result = sync(synapseAnswer(HttpStatusCode.NoContent)).syncPending("tok")
+
+            val put = requests.last()
+            assertEquals(HttpMethod.Put, put.method)
+            assertEquals("https://server.test/v1/activities/a1/synapse/features", put.url.toString())
+            assertContentEquals(byteArrayOf(1, 2, 3), put.body.toByteArray())
+            assertEquals(SyncStatus(SyncState.READY, 1), statuses.readSynapse("a1", SynapseSidecarKind.FEATURES))
+            assertEquals(SyncRunResult(uploaded = 1, retryable = 0, permanent = 0, needsLogin = false), result)
+        }
+
+    @Test
+    fun theRawSidecarStaysOnTheDeviceUntilRawUploadsAreAllowed() =
+        runTest {
+            withSynapse("a1", SynapseSidecarKind.RAW)
+
+            val s = sync(synapseAnswer(HttpStatusCode.NoContent))
+            s.syncPending("tok")
+            assertTrue(requests.none { "/synapse/" in it.url.encodedPath }, "not on mobile data by default")
+            assertNull(statuses.readSynapse("a1", SynapseSidecarKind.RAW))
+
+            s.rawUploads = true
+            s.syncPending("tok")
+            assertEquals("https://server.test/v1/activities/a1/synapse/raw", requests.last().url.toString())
+            assertEquals(SyncState.READY, statuses.readSynapse("a1", SynapseSidecarKind.RAW)?.state)
+        }
+
+    @Test
+    fun aRefusalForConsentOrDeletionIsPermanentAndTakesTheLocalCopyWithIt() =
+        runTest {
+            withSynapse("a1", SynapseSidecarKind.FEATURES)
+            sync(synapseAnswer(HttpStatusCode.Forbidden)).syncPending("tok")
+            assertEquals(
+                SyncStatus(SyncState.FAILED_PERMANENT, 1, "CONSENT_REVOKED"),
+                statuses.readSynapse("a1", SynapseSidecarKind.FEATURES),
+            )
+            assertFalse(store.hasSynapse("a1", SynapseSidecarKind.FEATURES))
+
+            withSynapse("a2", SynapseSidecarKind.FEATURES)
+            sync(synapseAnswer(HttpStatusCode.Gone)).syncPending("tok")
+            assertEquals("DELETED_ON_SERVER", statuses.readSynapse("a2", SynapseSidecarKind.FEATURES)?.lastError)
+            assertFalse(store.hasSynapse("a2", SynapseSidecarKind.FEATURES))
+        }
+
+    @Test
+    fun everyOtherCodeIsRetriedOrRefusedForGoodAsTheTableSays() =
+        runTest {
+            val expected =
+                mapOf(
+                    HttpStatusCode.NotFound to SyncState.FAILED_RETRYABLE,
+                    HttpStatusCode.InsufficientStorage to SyncState.FAILED_PERMANENT,
+                    HttpStatusCode.TooManyRequests to SyncState.FAILED_RETRYABLE,
+                    HttpStatusCode.PayloadTooLarge to SyncState.FAILED_PERMANENT,
+                    HttpStatusCode.UnprocessableEntity to SyncState.FAILED_PERMANENT,
+                )
+            for ((code, state) in expected) {
+                val id = "a${code.value}"
+                withSynapse(id, SynapseSidecarKind.FEATURES)
+                sync(synapseAnswer(code)).syncPending("tok")
+                assertEquals(state, statuses.readSynapse(id, SynapseSidecarKind.FEATURES)?.state, "HTTP ${code.value}")
+                assertTrue(
+                    store.hasSynapse(id, SynapseSidecarKind.FEATURES),
+                    "kept: only a consent or deletion drops it",
+                )
+            }
+        }
+
+    @Test
+    fun aSidecarThatFailedRetryablyIsTriedAgainAndANetworkFailureCountsAsRetry() =
+        runTest {
+            withSynapse("a1", SynapseSidecarKind.FEATURES)
+            val down =
+                sync { request ->
+                    if ("/synapse/" in
+                        request.url.encodedPath
+                    ) {
+                        throw IOException("no network")
+                    } else {
+                        created(this, request)
+                    }
+                }
+            val first = down.syncPending("tok")
+            assertEquals(1, first.retryable)
+            assertEquals("NETWORK", statuses.readSynapse("a1", SynapseSidecarKind.FEATURES)?.lastError)
+
+            val second = sync(synapseAnswer(HttpStatusCode.NoContent)).syncPending("tok")
+            assertEquals(SyncState.READY, statuses.readSynapse("a1", SynapseSidecarKind.FEATURES)?.state)
+            assertEquals(0, second.retryable)
+        }
+
+    @Test
+    fun aRefusedTokenOnASidecarAsksForLogin() =
+        runTest {
+            withSynapse("a1", SynapseSidecarKind.FEATURES)
+            val result = sync(synapseAnswer(HttpStatusCode.Unauthorized)).syncPending("tok")
+            assertTrue(result.needsLogin)
         }
 }

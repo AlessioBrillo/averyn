@@ -166,7 +166,7 @@ export function SynapseSignals({ activityId }: { activityId: string }) {
         if (cancelled) return
         setSummary(s)
         const first = s?.raw?.streams[0]
-        if (s?.raw && first) {
+        if (s?.raw && first && s.raw.durationMs > 0) {
           setStream(first.stream)
           setRange({ fromMs: 0, toMs: s.raw.durationMs })
         }

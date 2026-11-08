@@ -89,6 +89,10 @@
     <string name="units_metric">Metric (km, m)</string>
     <string name="units_imperial">Imperial (mi, ft)</string>
     <string name="max_hr">Maximum heart rate (bpm)</string>
+    <string name="band">SYNAPSE band</string>
+    <string name="band_use">Record with a SYNAPSE band instead of a heart-rate strap</string>
+    <string name="band_raw_on_mobile">Upload its raw signals on mobile data too (large)</string>
+    <string name="band_forget">Forget this band</string>
     <string name="max_hr_invalid">A whole number from %1$s to %2$s, or empty.</string>
     <string name="sign_in_again_profile">Sign in again to save your profile.</string>
     <string name="saved">Saved</string>

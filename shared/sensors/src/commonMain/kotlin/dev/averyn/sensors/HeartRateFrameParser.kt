@@ -12,12 +12,13 @@ private val RR_RANGE_MS = 1..3000
  * Frame layout (Bluetooth spec):
  *   [flags: u8][hr: u8|u16][energy_expended: u16?][rr_intervals: u16...]
  *   flags bit 0: hr value format (0 = uint8, 1 = uint16)
- *   flags bit 1-2: sensor contact status (00 = not supported, 01 = detected, 10 = not detected, 11 = reserved)
+ *   flags bit 1-2: sensor contact status (00 and 01 = not supported, no information; 10 = supported, contact not detected; 11 = supported, detected)
  *   flags bit 3: energy expended present
  *   flags bit 4: RR intervals present
  *
- * Never reads past the buffer; a truncated frame is reported as [ParseResult.Incomplete] and consumes
- * no bytes, so the caller can retry with more data.
+ * Never reads past the buffer; a frame cut inside its heart-rate or energy field is reported as
+ * [ParseResult.Incomplete] and consumes no bytes, so the caller can retry with more data. An odd trailing byte
+ * in the RR list is dropped (a notification is self-contained, nothing can complete it).
  *
  * Returns the parsed results and how many input bytes were consumed. Callers loop until consumed == 0
  * (no more complete frames) or the buffer is exhausted.
