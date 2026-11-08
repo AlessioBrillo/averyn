@@ -13,6 +13,8 @@ final class AppModel {
     let recorder: ActivityRecorder
     let tracker: LocationTracker
     let heartRate: HeartRateMonitor
+    /// The SYNAPSE band; used instead of the strap when the user chose it (`BandPrefs.useBand`).
+    let band: SynapseBand
     let auth: AuthManager
     let sync: SyncService
     /// Where the activity files live; the raw file of an activity is `<id>.jsonl` in here (ADR-0015).
@@ -47,6 +49,8 @@ final class AppModel {
     private static let consentRefreshInterval: TimeInterval = 2 * 60
     /// True while the strap session of this activity runs, so that `startHeartRate`, called on every fix, starts it once.
     private var heartRateActive = false
+    /// The sensor of this activity (the band or the strap), fixed when it starts so stopping reaches the same one.
+    private var activeSource: HeartRateSource?
 
     private init() {
         let dir = FileManager.default
@@ -78,6 +82,7 @@ final class AppModel {
         }
         self.recorder = recorder
         heartRate = HeartRateMonitor()
+        band = SynapseBand(store: store)
         tracker = LocationTracker(recorder: recorder)
         auth = AuthManager()
         sync = SyncService(store: store, auth: auth)
@@ -87,7 +92,11 @@ final class AppModel {
         recorder.listener = { [weak self] snapshot in
             if snapshot.state.isTerminal {
                 Task { @MainActor in self?.heartRateActive = false }
-                Task { try? await self?.heartRate.stop() }
+                Task { @MainActor in
+                    let source = self?.activeSource
+                    self?.activeSource = nil
+                    try? await source?.stop()
+                }
                 Task { @MainActor in self?.stopConsentRefresh() }
             }
             self?.recorderListenersLock.lock()
@@ -116,19 +125,21 @@ final class AppModel {
         guard !heartRateActive, let activityId = recorder.currentActivityId else { return }
         heartRateActive = true
         startConsentRefresh()
-        heartRate.onSample = { [weak self] sample in
+        let source: HeartRateSource = BandPrefs.useBand ? band : heartRate
+        activeSource = source
+        source.onSample = { [weak self] sample in
             self?.feedHeartRate(sample)
         }
-        heartRate.onRrInterval = { [weak self] rr in
+        source.onRrInterval = { [weak self] rr in
             self?.feedRrInterval(rr)
         }
-        heartRate.onInvalid = { [weak self] in
+        source.onInvalid = { [weak self] in
             self?.recorder.recordDroppedInput(reason: .invalidHeartRate)
         }
-        if heartRate.isAvailable {
+        if source.isAvailable {
             Task {
                 do {
-                    try await heartRate.start(sessionId: activityId)
+                    try await source.start(sessionId: activityId)
                 } catch {
                     // Sensor errors are non-fatal: recording continues without HR.
                 }
@@ -151,16 +162,16 @@ final class AppModel {
             guard let token = try? await auth.freshAccessToken(),
                   let server = auth.normalizedServerURL,
                   !server.isEmpty else {
-                setRrConsent(false)
+                setConsents(scopes: [])
                 return
             }
             do {
                 let result = try await history().client.consents(accessToken: token)
                 // A failure carries no value: no grants, so no RR (fail-closed).
                 let grants = (result.value as? [ConsentGrant]) ?? []
-                setRrConsent(grants.contains { $0.scope == "rr_recording" })
+                setConsents(scopes: grants.map { $0.scope })
             } catch {
-                setRrConsent(false)
+                setConsents(scopes: [])
             }
         }
     }
@@ -171,7 +182,7 @@ final class AppModel {
             Task { @MainActor in
                 self?.refreshConsents()
                 // A strap switched on after the start is looked for again (the first scan gives up after a few seconds).
-                self?.heartRate.searchAgainIfNeverFound()
+                self?.activeSource?.searchAgainIfNeverFound()
             }
         }
     }
@@ -181,9 +192,16 @@ final class AppModel {
         consentTimer = nil
     }
 
-    private func setRrConsent(_ granted: Bool) {
+    /// The consents the server last listed (ADR-0021), for both sensors, whichever is in use: a consent revoked
+    /// while the band was off must not come back when it is switched on again. Empty = nothing granted.
+    private func setConsents(scopes: [String]) {
+        let granted = scopes.contains("rr_recording")
         hasRrConsent = granted
         heartRate.recordRrIntervals = granted
+        band.recordRrIntervals = granted
+        band.consents = scopes.isEmpty
+            ? SynapseConsents.companion.NONE
+            : SynapseConsents.companion.fromScopes(scopes: scopes)
     }
 
     /// Forwards an HR sample from the adapter to the recorder while an activity is RECORDING.

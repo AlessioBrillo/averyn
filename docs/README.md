@@ -37,6 +37,7 @@ Docs live in the repo, are reviewed like code, and are checked in CI (markdownli
 | [0014](design/TDD-0014-health-platforms.md) | Saving an activity to HealthKit and Health Connect | implemented, not verified |
 | [0015](design/TDD-0015-consumer-ux.md) | The consumer experience: design system and the three moments | draft, waiting for the owner's approval of the mockups |
 | [0016](design/TDD-0016-privacy-zones.md) | Privacy zones: the cut, the API, the phone's store | draft: server, shared code and phone store implemented with tests; the screens and S42 wait |
+| [0017](design/TDD-0017-synapse-signal-views.md) | The band's signals on the activity page: sidecars, windows, consent that deletes | draft: server, shared code and web page implemented with tests; the phone side, the mobile screens and every check on a band wait |
 
 Nothing is `verified` yet: the device matrix has no filled row ([ADR-0028](adr/0028-consumer-launch-target.md)). The status line inside each design doc keeps saying `implemented` until its rows are green.
 

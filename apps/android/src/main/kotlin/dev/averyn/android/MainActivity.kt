@@ -25,6 +25,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -515,6 +516,7 @@ private fun AccountSection(app: AverynApplication) {
         message?.let { Text(it) }
         Text(syncText)
         ProfileSection(app, signedIn)
+        BandSection(app)
     }
 
     if (confirmDelete) {
@@ -581,6 +583,51 @@ private fun DeleteAccountDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
+}
+
+/**
+ * The SYNAPSE band (ADR-0030): use it as the sensor of a recording, let its raw signals go up over mobile data, and
+ * forget the one found. The consents for what it records are managed with the account, not here. The choices live
+ * on this phone only.
+ */
+@Composable
+private fun BandSection(app: AverynApplication) {
+    val prefs = app.bandPrefs
+    var useBand by remember { mutableStateOf(prefs.useBand) }
+    var rawOnMobile by remember { mutableStateOf(prefs.rawOnMobile) }
+    var address by remember { mutableStateOf(prefs.address) }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(stringResource(R.string.band))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(
+                checked = useBand,
+                onCheckedChange = {
+                    useBand = it
+                    prefs.useBand = it
+                },
+            )
+            Text(stringResource(R.string.band_use), modifier = Modifier.padding(start = 8.dp))
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(
+                checked = rawOnMobile,
+                enabled = useBand,
+                onCheckedChange = {
+                    rawOnMobile = it
+                    prefs.rawOnMobile = it
+                },
+            )
+            Text(stringResource(R.string.band_raw_on_mobile), modifier = Modifier.padding(start = 8.dp))
+        }
+        if (address != null) {
+            TextButton(
+                onClick = {
+                    prefs.address = null
+                    address = null
+                },
+            ) { Text(stringResource(R.string.band_forget)) }
+        }
+    }
 }
 
 /**

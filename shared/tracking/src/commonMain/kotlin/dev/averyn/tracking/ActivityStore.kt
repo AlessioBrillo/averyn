@@ -6,6 +6,7 @@ import dev.averyn.domain.Sport
 import dev.averyn.domain.StateEvent
 import dev.averyn.sensors.HeartRateSample
 import dev.averyn.sensors.RrInterval
+import dev.averyn.sensors.SynapseSidecarSink
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
@@ -91,6 +92,21 @@ private const val HR_PREFIX = "HR "
 
 /** The file name suffix of the heart-rate sidecar: it ends in `.jsonl` but it is not an activity file. */
 private const val RR_FILE_SUFFIX = ".rr.jsonl"
+
+/**
+ * The sidecars a Synapse band adds to an activity (ADR-0030): `<id>.synapse.bin` (feature and status records) and
+ * `<id>.synapse-raw.bin` (raw frames). Own lifecycle like the heart-rate sidecar, and the same caps as the server
+ * (4 MB and 48 MB), so a file that fits here is not refused there for its size.
+ */
+enum class SynapseSidecarKind(
+    val fileSuffix: String,
+    val maxBytes: Long,
+    /** The last segment of the upload path: `PUT /v1/activities/{id}/synapse/{pathSegment}`. */
+    val pathSegment: String,
+) {
+    FEATURES(".synapse.bin", 4L * 1024 * 1024, "features"),
+    RAW(".synapse-raw.bin", 48L * 1024 * 1024, "raw"),
+}
 
 /** The file name suffix of the local summary sidecar (TDD-0011): the numbers of an activity on this device. */
 private const val SUMMARY_FILE_SUFFIX = ".summary.json"
@@ -591,6 +607,55 @@ class ActivityStore(
     /** Deletes the RR sidecar (consent revocation, ADR-0021). No-op when absent. */
     fun deleteRr(activityId: String) {
         val path = pathForRr(activityId)
+        if (SystemFileSystem.exists(path)) SystemFileSystem.delete(path)
+    }
+
+    // --- Synapse band sidecars (ADR-0030): `<id>.synapse.bin`, `<id>.synapse-raw.bin`; own lifecycle, consent-gated.
+
+    private fun pathForSynapse(
+        activityId: String,
+        kind: SynapseSidecarKind,
+    ) = Path(directory, "$activityId${kind.fileSuffix}")
+
+    /**
+     * Appends one record. Returns false, and writes nothing, when the file would pass the cap of its kind: a
+     * recording that long is cut at the cap and not refused whole by the server.
+     */
+    fun appendSynapse(
+        activityId: String,
+        kind: SynapseSidecarKind,
+        record: ByteArray,
+    ): Boolean {
+        val path = pathForSynapse(activityId, kind)
+        val size = SystemFileSystem.metadataOrNull(path)?.size ?: 0L
+        if (size + record.size > kind.maxBytes) return false
+        SystemFileSystem.sink(path, append = true).buffered().use { it.write(record) }
+        return true
+    }
+
+    /** Where a [dev.averyn.sensors.SynapseRecorder] writes one kind of this activity's sidecar. */
+    fun synapseSink(
+        activityId: String,
+        kind: SynapseSidecarKind,
+    ): SynapseSidecarSink = SynapseSidecarSink { appendSynapse(activityId, kind, it) }
+
+    /** Whether the activity has a non-empty sidecar of this kind. */
+    fun hasSynapse(
+        activityId: String,
+        kind: SynapseSidecarKind,
+    ): Boolean = (SystemFileSystem.metadataOrNull(pathForSynapse(activityId, kind))?.size ?: 0L) > 0L
+
+    fun readSynapse(
+        activityId: String,
+        kind: SynapseSidecarKind,
+    ): ByteArray = SystemFileSystem.source(pathForSynapse(activityId, kind)).buffered().use { it.readByteArray() }
+
+    /** Deletes a sidecar (consent revoked, or the server deleted its copy). No-op when absent. */
+    fun deleteSynapse(
+        activityId: String,
+        kind: SynapseSidecarKind,
+    ) {
+        val path = pathForSynapse(activityId, kind)
         if (SystemFileSystem.exists(path)) SystemFileSystem.delete(path)
     }
 }

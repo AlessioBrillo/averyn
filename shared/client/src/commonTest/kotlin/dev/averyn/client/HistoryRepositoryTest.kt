@@ -16,12 +16,14 @@ import dev.averyn.domain.Sport
 import dev.averyn.sync.SyncStatusStore
 import dev.averyn.tracking.ActivityRecorder
 import dev.averyn.tracking.ActivityStore
+import dev.averyn.tracking.SynapseSidecarKind
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.files.Path
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -230,10 +232,21 @@ class HistoryRepositoryTest {
     fun `deleting an activity on the device removes its files`() =
         runTest {
             localActivity("local1")
+            store.appendSynapse("local1", SynapseSidecarKind.RAW, byteArrayOf(1))
+            store.appendSynapse("local1", SynapseSidecarKind.FEATURES, byteArrayOf(1))
             repository.deleteLocal("local1")
             assertTrue(store.list().isEmpty())
+            assertTrue(SynapseSidecarKind.entries.none { store.hasSynapse("local1", it) })
             assertNull(store.readLocalSummary("local1"))
             assertTrue(repository.deviceData().isEmpty())
+        }
+
+    @Test
+    fun `the activity being recorded is not deleted`() =
+        runTest {
+            localActivity("local1")
+            assertFalse(repository.deleteLocal("local1", inProgressId = "local1"))
+            assertEquals(1, store.list().size)
         }
 
     @Test

@@ -491,6 +491,46 @@
         }
       }
     },
+    "SYNAPSE band": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Band SYNAPSE"
+          }
+        }
+      }
+    },
+    "Record with a SYNAPSE band instead of a heart-rate strap": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registra con una band SYNAPSE invece della fascia cardio"
+          }
+        }
+      }
+    },
+    "Upload its raw signals on mobile data too (large)": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carica i segnali grezzi anche con i dati mobili (molti dati)"
+          }
+        }
+      }
+    },
+    "Forget this band": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dimentica questa band"
+          }
+        }
+      }
+    },
     "Save profile": {
       "localizations": {
         "it": {
