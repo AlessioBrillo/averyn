@@ -3,6 +3,7 @@ package dev.averyn.tracking
 import dev.averyn.domain.ActivityState
 import dev.averyn.domain.LocationSample
 import dev.averyn.domain.Sport
+import dev.averyn.sensors.HeartRateSample
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
@@ -106,7 +107,7 @@ class DiagnosticsTest {
         recorder.onSample(sample(10_000, 45.001))
         val diag = recorder.stop(10_000, 11_000).diagnostics
 
-        assertEquals("diagnostics-v4", diag.formatVersion)
+        assertEquals("diagnostics-v5", diag.formatVersion)
         assertEquals(AlgorithmVersions("distance-v1", "time-v1", "speed-v1", "quality-v2"), diag.algorithms)
         assertEquals(
             listOf(
@@ -183,5 +184,57 @@ class DiagnosticsTest {
         val diag = restarted.stop(4_000, 4_000).diagnostics
 
         assertEquals(mapOf(DroppedInputReason.NO_ACTIVE_ACTIVITY to 2), diag.droppedInputs)
+    }
+
+    @Test
+    fun gapsAreCountedInsideARecordingIntervalAndNeverAcrossAPause() {
+        val recorder = ActivityRecorder(store)
+        recorder.start("a1", Sport.RUN, 0, 0)
+        recorder.gpsReady(0, 0)
+        recorder.onSample(sample(0, 45.0))
+        recorder.onSample(sample(5_000, 45.0)) // 5 s: not a gap
+        recorder.onSample(sample(25_000, 45.0)) // 20 s of silence while recording: a gap
+        recorder.pause(26_000, 26_000)
+        recorder.resume(200_000, 200_000) // a long pause is not a gap
+        recorder.onSample(sample(201_000, 45.0))
+        val live = recorder.stop(202_000, 202_000).diagnostics
+
+        assertEquals(SignalGaps(10_000, 1, 20_000, listOf(SignalGap(5_000, 20_000))), live.locationGaps)
+        assertEquals(null, live.heartRate)
+        // The report rebuilt from the file agrees with the one built live.
+        assertEquals(live.locationGaps, store.diagnosticsOf("a1")!!.locationGaps)
+    }
+
+    @Test
+    fun heartRateDiagnosticsCarryTheStrapNumbersAndItsLongestGap() {
+        val recorder = ActivityRecorder(store)
+        recorder.start("a1", Sport.RUN, 0, 0)
+        recorder.gpsReady(0, 0)
+        for (t in listOf(0L, 1_000L, 2_000L, 40_000L, 41_000L)) {
+            recorder.onHeartRate(HeartRateSample(t, t, if (t < 40_000L) 120 else 160))
+        }
+        val live = recorder.stop(42_000, 42_000).diagnostics
+        val hr = live.heartRate!!
+
+        assertEquals(136, hr.avgBpm) // (120 * 3 + 160 * 2) / 5
+        assertEquals(160, hr.maxBpm)
+        assertEquals(1, hr.gaps.count)
+        assertEquals(38_000L, hr.gaps.longestMs)
+        assertEquals(hr, store.diagnosticsOf("a1")!!.heartRate)
+    }
+
+    @Test
+    fun aRecoveryEndsTheStreamSoTheDowntimeIsNotAGap() {
+        val first = ActivityRecorder(store)
+        first.start("a1", Sport.RUN, 0, 0)
+        first.gpsReady(0, 0)
+        first.onSample(sample(0, 45.0))
+        val second = ActivityRecorder(store)
+        second.recover("a1", 600_000, 600_000) // killed for ten minutes
+        second.onSample(sample(601_000, 45.0))
+        val diag = second.stop(602_000, 602_000).diagnostics
+
+        assertEquals(0, diag.locationGaps.count)
+        assertEquals(1, diag.recoveryGaps.size)
     }
 }

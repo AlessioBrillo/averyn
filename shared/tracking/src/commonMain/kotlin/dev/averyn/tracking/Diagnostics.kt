@@ -14,9 +14,11 @@ import kotlinx.serialization.json.Json
  * Format version stamped on every [DiagnosticsReport]. TDD-0001 F8/§5.4, Q5; v2 adds the TDD-0006 §5.5 fields;
  * v3 lets the accuracy percentage be null (quality-v2: an accuracy that was never measured); v4 keeps the
  * counters of `droppedInputs` across a kill (they were rebuilt as an empty map) and adds the reasons
- * `INVALID_HEART_RATE` and `STORAGE_WRITE_FAILED`.
+ * `INVALID_HEART_RATE` and `STORAGE_WRITE_FAILED`; v5 adds `locationGaps` (the fix gaps over 10 s inside the
+ * recording intervals) and `heartRate` (average, maximum, coverage and gaps of the strap), which the device
+ * matrix rows S2, S15 and S25 are measured with.
  */
-const val DIAGNOSTICS_FORMAT_VERSION = "diagnostics-v4"
+const val DIAGNOSTICS_FORMAT_VERSION = "diagnostics-v5"
 
 /**
  * Aggregate quality/battery report for one completed activity (TDD-0001 F8), built by [ActivityRecorder]
@@ -58,6 +60,10 @@ data class DiagnosticsReport(
     val recoveryGaps: List<RecoveryGap>,
     /** The state timeline with reasons, on the continuous (effective) clock. */
     val events: List<TimelineEvent>,
+    /** Gaps between consecutive fixes inside one recording interval (v5). */
+    val locationGaps: SignalGaps,
+    /** The strap's numbers; null when no heart-rate sample was recorded (v5). */
+    val heartRate: HeartRateDiagnostics?,
 )
 
 @Serializable
@@ -162,7 +168,7 @@ data class DeviceInfo(
     val manufacturer: String?,
     /** The commit the build came from (ADR-0019), so a matrix row and a store crash report can be matched. */
     val buildId: String?,
-    /** e.g. `PRECISE_ALWAYS`, `APPROXIMATE`, `WHEN_IN_USE`, `DENIED`; platform-specific vocabulary, never free text. */
+    /** `{PRECISE,APPROXIMATE}_{ALWAYS,WHILE_IN_USE}`, `DENIED` or (iOS) `NOT_DETERMINED`: one vocabulary on both phones, never free text. */
     val locationPermission: String?,
     val powerSaverOn: Boolean?,
     /** Android only: the app is exempt from battery optimisation. */
@@ -190,6 +196,8 @@ internal fun diagnosticsReport(
     recoveryGaps: List<RecoveryGap>,
     events: List<TimelineEvent>,
     endedAtMs: Long?,
+    locationGaps: SignalGaps,
+    heartRateDiagnostics: HeartRateDiagnostics?,
     heartRate: String? = null,
 ): DiagnosticsReport {
     val hours = metrics.elapsedMs / 3_600_000.0
@@ -229,6 +237,8 @@ internal fun diagnosticsReport(
         droppedInputs = droppedInputs,
         recoveryGaps = recoveryGaps,
         events = events,
+        locationGaps = locationGaps,
+        heartRate = heartRateDiagnostics,
     )
 }
 

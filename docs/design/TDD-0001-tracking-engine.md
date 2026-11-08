@@ -126,7 +126,7 @@ Per-sample flags (a sample can carry several; raw data is preserved): `POOR_ACCU
 
 Grade: `GOOD` if ≤ 5% of samples flagged and % time accuracy ≤ 20 m is ≥ 90; `POOR` if > 20% flagged or that percentage is < 50; `FAIR` otherwise. Thresholds are constants versioned with `QUALITY_ALGORITHM_VERSION`; retuned only as a new version, from fixtures.
 
-**Diagnostics export (`diagnostics-v1`, now `diagnostics-v4`; the constant in `Diagnostics.kt` says what each version added):** F8's per-activity report — the `QualityReport` above plus sample/loss counts, recovery count, moving/paused time and battery start/end/drain-per-hour — is built by `ActivityRecorder` from counters it already keeps while live or replaying during `recover()`. Both apps show it after an activity completes and export it as JSON (`DiagnosticsReport.toJson`, `shared/tracking`) with a `DeviceInfo` (model/OS/app version, no device identifiers). No coordinates in the export. This is the artifact a tester attaches to a [device matrix](../testing/device-matrix.md) row.
+**Diagnostics export (`diagnostics-v1`, now `diagnostics-v5`; the constant in `Diagnostics.kt` says what each version added):** F8's per-activity report — the `QualityReport` above plus sample/loss counts, recovery count, moving/paused time and battery start/end/drain-per-hour — is built by `ActivityRecorder` from counters it already keeps while live or replaying during `recover()`. Both apps show it after an activity completes and export it as JSON (`DiagnosticsReport.toJson`, `shared/tracking`) with a `DeviceInfo` (model/OS/app version, no device identifiers). No coordinates in the export. This is the artifact a tester attaches to a [device matrix](../testing/device-matrix.md) row.
 
 ### 5.5 Local persistence and recovery
 

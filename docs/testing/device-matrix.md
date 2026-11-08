@@ -40,7 +40,7 @@ Setup common to all: fully charged unless the scenario says otherwise, precise l
 | S12 | Sync ([TDD-0002](../design/TDD-0002-activity-sync.md)): finish offline, reconnect | Needs the backend reachable over TLS from the phone | Reaches `READY`; one row server-side; same distance as the phone |
 | S13 | Sync: kill the app mid-upload | Throttle the network, kill during upload, relaunch | Retries; no duplicate row; one object |
 | S14 | Sync: expired / revoked sign-in | Revoke the session at the IdP | `FAILED_RETRYABLE (AUTH)`; signing in again uploads it |
-| S15 | Heart rate vs reference strap | Record ≥ 10 min with a BLE HR strap; compare `avgHrBpm`/`maxHrBpm` in the exported diagnostics with the strap's own app | HR present, within 5 bpm of the strap reference, no dropouts > 30 s |
+| S15 | Heart rate vs reference strap | Record ≥ 10 min with a BLE HR strap; compare `heartRate.avgBpm`/`heartRate.maxBpm` in the exported diagnostics (`diagnostics-v5`) with the strap's own app | HR present, within 5 bpm of the strap reference, no dropouts > 30 s |
 | S16 | Consent revocation mid-activity | Grant `rr_recording`, record with RR, revoke consent in Account, continue recording | The RR sidecar stops within the consent refresh period (2 minutes: the phone asks the server again, ADR-0021; there is no consent screen in the app, revoke it on the web Account page); re-upload of the sidecar gets `410`; the activity file itself is intact |
 | S17 | Analysis of a recorded activity | Record ≥ 10 km (or the longest the route allows) with the app; open the activity on the web | The splits add up to the distance of the summary (±0.1 %); the times of the splits add up to the moving time (±1 s); the elevation is within 15 % of the reference of the route; the charts are drawn |
 | S18 | Analysis of an imported file | Import a GPX of another app with more than one `<trkseg>` and with an `<ele>`; open the activity on the web | The pause is not crossed by the track; the profile is drawn; the elevation is not zero when the file has one; the last split is marked partial |
@@ -91,7 +91,7 @@ xmllint --noout --schema gpx-1.1.xsd activity.gpx
 
 ## Filling a row
 
-After each run, use the history list in the app: export **diagnostics** (JSON, `diagnostics-v4`, [TDD-0006 §5.5](../design/TDD-0006-field-readiness.md)), **GPX** and, for S5/S6/S10, the **raw file**. Diagnostics hold everything **Samples lost** and **Battery Δ/h** need (`droppedInputs`, `recordLosses`, `batteryDrainPercentPerHour`) and the quality grade for **Notes**. Keep the exported files with the run in a private folder, not in this repository (test artifacts, not fixtures; raw files contain coordinates).
+After each run, use the history list in the app: export **diagnostics** (JSON, `diagnostics-v5`, [TDD-0006 §5.5](../design/TDD-0006-field-readiness.md)), **GPX** and, for S5/S6/S10, the **raw file**. Diagnostics hold everything **Samples lost** and **Battery Δ/h** need (`droppedInputs`, `recordLosses`, `batteryDrainPercentPerHour`) and the quality grade for **Notes**. Keep the exported files with the run in a private folder, not in this repository (test artifacts, not fixtures; raw files contain coordinates).
 
 For the analysis rows (S17–S20) the evidence is the web page: a screenshot of the splits and of the two charts, the numbers of the activity and of the analysis next to each other, and the `analysis/<id>.json` of the export.
 

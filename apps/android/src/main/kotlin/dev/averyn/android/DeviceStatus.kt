@@ -17,12 +17,19 @@ private fun hasApproximateLocation(context: Context) =
     ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
         PackageManager.PERMISSION_GRANTED
 
-internal fun locationPermissionLabel(context: Context): String =
-    when {
-        hasPreciseLocation(context) -> "PRECISE"
-        hasApproximateLocation(context) -> "APPROXIMATE"
-        else -> "DENIED"
-    }
+/** The vocabulary of `DeviceInfo.locationPermission`, the same on both phones: `{PRECISE,APPROXIMATE}_{ALWAYS,WHILE_IN_USE}` or `DENIED`. */
+internal fun locationPermissionLabel(context: Context): String {
+    val precision =
+        when {
+            hasPreciseLocation(context) -> "PRECISE"
+            hasApproximateLocation(context) -> "APPROXIMATE"
+            else -> return "DENIED"
+        }
+    val background =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+    return precision + if (background) "_ALWAYS" else "_WHILE_IN_USE"
+}
 
 /** True when the system will not put the app to sleep to save battery (what long recordings need). */
 internal fun isIgnoringBatteryOptimizations(context: Context): Boolean =
