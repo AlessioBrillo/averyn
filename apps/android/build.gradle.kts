@@ -33,6 +33,19 @@ android {
         buildConfig = true
     }
 
+    buildTypes {
+        // The build of the device campaign (docs/testing/device-matrix.md): the release code, not debuggable, signed with
+        // the debug key so a tester installs it with `adb install` and no keystore. The battery and background figures of a
+        // debug build are not evidence. Same application id as the others (the sign-in redirect and the data are tied
+        // to it): uninstall one to install the other.
+        create("campaign") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+            versionNameSuffix = "-campaign"
+        }
+    }
+
     if (releaseKeystore != null) {
         // A keystore without its passwords used to fail later, deep in the signing task, with a null argument.
         fun required(name: String) = System.getenv(name) ?: error("$name must be set when AVERYN_KEYSTORE_FILE is")

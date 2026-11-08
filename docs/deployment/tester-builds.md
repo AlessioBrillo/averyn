@@ -40,15 +40,16 @@ A CI job for this is deliberately not written yet: it cannot be tested without t
 
 The first campaign ([ADR-0028](../adr/0028-consumer-launch-target.md)) does not wait for the stores. Both builds below carry the commit id, so a matrix row names its build exactly as a store build would.
 
-**Android** (a debug build installed over USB; enable *USB debugging* in the developer options of the phone):
+**Android** (the `campaign` build type installed over USB; enable *USB debugging* in the developer options of the phone). It is the release code, not debuggable, signed with the debug key: the battery and background figures of a debug build are not evidence, and this needs no keystore. It has the same application id as the other builds, so uninstall one to install the other.
 
 ```sh
 # JAVA_HOME must point at JDK 21; adb is in <sdk.dir>/platform-tools (sdk.dir is in local.properties)
-./gradlew :apps:android:installDebug -Paveryn.versionName=0.1.0-dev.1 -Paveryn.commit=$(git rev-parse HEAD)
+./gradlew :apps:android:assembleCampaign -Paveryn.versionName=0.1.0-dev.1 -Paveryn.commit=$(git rev-parse HEAD)
 adb devices          # the phone must be listed as "device", not "unauthorized"
+adb install -r apps/android/build/outputs/apk/campaign/android-campaign.apk
 ```
 
-With several phones, add `-Pandroid.injected.device.serial=<serial>` or run `adb -s <serial> install -r apps/android/build/outputs/apk/debug/*.apk` once per phone. A debug build is not optimised the way a release build is; rows about battery drain (S8, S11) are repeated on a release build once signing exists.
+With several phones, run `adb -s <serial> install -r apps/android/build/outputs/apk/campaign/android-campaign.apk` once per phone. The code is the release code, but it is not minified or shrunk; the store builds will be, so the battery rows (S8, S11) are repeated on a store build once one exists.
 
 **iPhone** (from the Mac; a free Apple ID is enough, the profile lasts 7 days and the app must be re-installed after that):
 
@@ -66,3 +67,20 @@ HealthKit and the background location mode need a real device and the capability
 ## After installing
 
 Run the scenarios of the device matrix. In the app, **History** exports the GPX, the `diagnostics-v5` report and the raw file of any stored activity; attach the diagnostics to the results row together with its `buildId`.
+
+**Filling the row by machine.** `tools/campaign` reads the exported diagnostics and prints the row for the Results table of the [device matrix](../testing/device-matrix.md), then each criterion with `ok` / `FAIL` / `?` (`?` = an input it needs was not given):
+
+```sh
+# from the repository root, JDK 21; the file names are the ones you exported
+./gradlew -q :tools:campaign:run --args="evaluate /path/diagnostics.json --row S15 --ref /path/strap.fit"
+```
+
+| Row | Inputs besides the diagnostics | Decided by number |
+|---|---|---|
+| S1 | `--gpx activity.gpx` (checked against the GPX 1.1 schema), `--ref-distance-m <m>` | grade, GPX validity, distance within 2 % |
+| S2 | none | at least 1 h, no gap over 10 s |
+| S5 | `--kill-at <ISO instant>` (the second you noted) | recovered, last stored sample within 1 s of the kill |
+| S6 | none | recovered, reboot detected, no `NON_MONOTONIC_TIME` burst (at most 3) |
+| S15, S29 | `--ref strap.fit` (the strap's own FIT export) | at least 10 min, average and maximum within 5 bpm, no dropout over 30 s |
+
+Any other row prints `MANUAL`. Exit code: 0 PASS, 1 FAIL, 2 MANUAL. The strap's file must be a FIT file: a GPX with heart-rate extensions is not read yet.
