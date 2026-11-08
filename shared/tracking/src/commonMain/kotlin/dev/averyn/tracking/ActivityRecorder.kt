@@ -126,7 +126,13 @@ class ActivityRecorder(
      */
     private var heartRateMetrics = HeartRateMetrics()
 
+    // The gaps of the two signals inside the recording intervals (diagnostics-v5); see [SignalGapTracker].
+    private var locationGaps = SignalGapTracker()
+    private var heartRateGaps = SignalGapTracker()
+
     private fun resetDiagnosticsCounters() {
+        locationGaps = SignalGapTracker()
+        heartRateGaps = SignalGapTracker()
         totalSamples = 0
         recordingSamples = 0
         recordLosses.clear()
@@ -270,6 +276,7 @@ class ActivityRecorder(
         trackLastKnown(sample.elapsedRealtimeMs, sample.timeMs)
         if (state == ActivityState.RECORDING) {
             recordingSamples++
+            locationGaps.onSample(effective(sample.elapsedRealtimeMs), sample.timeMs)
             ingestSample(sample.onClock(clockOffsetMs), qualityAssessor, qualityAccumulator, metrics)
         }
         emit()
@@ -294,7 +301,10 @@ class ActivityRecorder(
         }
         // The metric counts the samples of the recording state only: the ones of a paused activity are stored
         // but are not part of `hr-v2` (docs/metrics/heart-rate.md).
-        if (state == ActivityState.RECORDING) heartRateMetrics.onSample(sample.bpm)
+        if (state == ActivityState.RECORDING) {
+            heartRateMetrics.onSample(sample.bpm)
+            heartRateGaps.onSample(effective(sample.elapsedRealtimeMs), sample.timeMs)
+        }
         hrRecorded = true
         emit()
     }
@@ -386,6 +396,10 @@ class ActivityRecorder(
     ) {
         val id = activityId ?: return
         val battery = batteryPercent?.invoke()
+        if (newState != ActivityState.RECORDING || reason == Reason.RECOVERED) {
+            locationGaps.breakStream()
+            heartRateGaps.breakStream()
+        }
         trackBattery(battery)
         // Stored raw; the offset travels on RECOVERED events only, which is what replay() reads it from.
         val offset = if (reason == Reason.RECOVERED) clockOffsetMs else 0L
@@ -440,6 +454,16 @@ class ActivityRecorder(
             recoveryGaps = recoveryGaps.snapshot(),
             events = timeline.toList(),
             endedAtMs = lastKnownTimeMs,
+            locationGaps = locationGaps.snapshot(),
+            heartRateDiagnostics =
+                if (hrRecorded) {
+                    heartRateDiagnostics(
+                        heartRateMetrics.snapshot((metrics.elapsedMs - metrics.pausedMs).coerceAtLeast(0L)),
+                        heartRateGaps.snapshot(),
+                    )
+                } else {
+                    null
+                },
             heartRate = if (hrRecorded) HR_ALGORITHM_VERSION else null,
         )
 
@@ -478,6 +502,8 @@ class ActivityRecorder(
         batteryEndPercent = replayed.batteryEndPercent
         batteryReadingCount = replayed.batteryReadingCount
         recoveryGaps = replayed.recoveryGaps
+        locationGaps = replayed.locationGaps
+        heartRateGaps = replayed.heartRateGaps
         timeline.clear()
         timeline.addAll(replayed.timeline)
 

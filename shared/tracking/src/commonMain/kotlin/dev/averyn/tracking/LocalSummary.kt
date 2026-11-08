@@ -32,6 +32,8 @@ fun ActivityStore.localSummaryOf(activityId: String): LocalActivitySummary? {
             recoveryGaps = replayed.recoveryGaps.snapshot(),
             events = replayed.timeline,
             endedAtMs = replayed.lastKnownTimeMs,
+            locationGaps = replayed.locationGaps.snapshot(),
+            heartRateDiagnostics = replayed.heartRateDiagnosticsOf(),
             heartRate = if (replayed.hasHeartRate) HR_ALGORITHM_VERSION else null,
         )
     val recordingMs = (metrics.elapsedMs - metrics.pausedMs).coerceAtLeast(0L)

@@ -48,6 +48,8 @@ class ReplayResult internal constructor(
      * same file.
      */
     val heartRate: HeartRateMetrics = HeartRateMetrics(),
+    internal val locationGaps: SignalGapTracker = SignalGapTracker(),
+    internal val heartRateGaps: SignalGapTracker = SignalGapTracker(),
 )
 
 /**
@@ -109,6 +111,8 @@ fun replay(
     var offsetMs = 0L
     var hasHeartRate = false
     val heartRate = HeartRateMetrics()
+    val locationGaps = SignalGapTracker()
+    val heartRateGaps = SignalGapTracker()
     val gaps = RecoveryGapTracker()
     val timeline = mutableListOf<TimelineEvent>()
 
@@ -127,12 +131,17 @@ fun replay(
                 lastTimeMs = sample.timeMs
                 if (lastState == ActivityState.RECORDING) {
                     recordingSamples++
+                    locationGaps.onSample(sample.elapsedRealtimeMs, sample.timeMs)
                     if (ingestSample(sample, assessor, quality, metrics)) onMeteredSample(sample)
                 }
             }
             is ActivityRecord.Event -> {
                 val event = record.event
                 val recovered = event.reason == Reason.RECOVERED
+                if (event.state != ActivityState.RECORDING || recovered) {
+                    locationGaps.breakStream()
+                    heartRateGaps.breakStream()
+                }
                 val previousOffsetMs = offsetMs
                 if (recovered) offsetMs = event.clockOffsetMs
                 // A recovery also finalizes a killed STOPPING as COMPLETED(RECOVERED): one recovery, two events.
@@ -171,9 +180,13 @@ fun replay(
             is ActivityRecord.HeartRate -> {
                 // Heart-rate records don't affect GPS state/metrics; they're reported to the caller
                 // (backend computes the heart-rate metric from them, same as GPS samples from onMeteredSample).
-                onHeartRate(record.sample.onClock(offsetMs), lastState)
+                val hrSample = record.sample.onClock(offsetMs)
+                onHeartRate(hrSample, lastState)
                 // The metric of the activity (hr-v2) counts the samples of the recording state only.
-                if (lastState == ActivityState.RECORDING) heartRate.onSample(record.sample.bpm)
+                if (lastState == ActivityState.RECORDING) {
+                    heartRate.onSample(record.sample.bpm)
+                    heartRateGaps.onSample(hrSample.elapsedRealtimeMs, hrSample.timeMs)
+                }
                 hasHeartRate = true
             }
         }
@@ -200,6 +213,8 @@ fun replay(
         timeline = timeline.toList(),
         hasHeartRate = hasHeartRate,
         heartRate = heartRate,
+        locationGaps = locationGaps,
+        heartRateGaps = heartRateGaps,
     )
 }
 
@@ -229,6 +244,8 @@ fun ActivityStore.diagnosticsOf(activityId: String): DiagnosticsReport? {
         recoveryGaps = replayed.recoveryGaps.snapshot(),
         events = replayed.timeline,
         endedAtMs = replayed.lastKnownTimeMs,
+        locationGaps = replayed.locationGaps.snapshot(),
+        heartRateDiagnostics = replayed.heartRateDiagnosticsOf(),
         heartRate = if (replayed.hasHeartRate) HR_ALGORITHM_VERSION else null,
     )
 }

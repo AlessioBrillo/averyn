@@ -47,8 +47,8 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
     var permissionLabel: String {
         let precise = manager.accuracyAuthorization == .fullAccuracy
         switch manager.authorizationStatus {
-        case .authorizedAlways: return precise ? "ALWAYS_PRECISE" : "ALWAYS_APPROXIMATE"
-        case .authorizedWhenInUse: return precise ? "WHEN_IN_USE_PRECISE" : "WHEN_IN_USE_APPROXIMATE"
+        case .authorizedAlways: return precise ? "PRECISE_ALWAYS" : "APPROXIMATE_ALWAYS"
+        case .authorizedWhenInUse: return precise ? "PRECISE_WHILE_IN_USE" : "APPROXIMATE_WHILE_IN_USE"
         case .denied, .restricted: return "DENIED"
         default: return "NOT_DETERMINED"
         }

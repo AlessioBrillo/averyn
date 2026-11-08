@@ -26,7 +26,7 @@ MVP-0 and MVP-1 are implemented but unproven: the device matrix is empty. A code
 | R4 | For any activity, live numbers, numbers after `recover()` and `replay()` results are equal, including recovery from PAUSED/STOPPING and "Finish now" |
 | R5 | A GPX export is complete (flushed), uses plain decimal numbers and validates against the GPX 1.1 schema |
 | R6 | Every dropped input is counted with a reason: samples with no active activity, samples that violate the model |
-| R7 | Diagnostics (`diagnostics-v3`) contain what the matrix needs: per-recovery gaps, the event timeline with reasons, algorithm versions, permission and power state, real device model, build id |
+| R7 | Diagnostics (`diagnostics-v3`, now v5: §5.5.1) contain what the matrix needs: per-recovery gaps, the event timeline with reasons, algorithm versions, permission and power state, real device model, build id |
 | R8 | The apps list past activities and export GPX, diagnostics and the raw file of each; the exports survive a restart |
 | R9 | Android requests precise location, notification permission and explains battery optimisation; a reduced-accuracy grant on either platform moves the activity to a defined state (F9) |
 | R10 | Tester builds are distributed through Play internal testing and TestFlight; each build identifies itself (version, commit) in diagnostics |
@@ -104,6 +104,18 @@ Additive over `diagnostics-v1`; `formatVersion` becomes 2.
 | `stationaryMs`, `endedAtMs` | previously missing |
 | `droppedInputs` | by reason: `NO_ACTIVE_ACTIVITY`, `INVALID_SAMPLE`, plus the store losses |
 | `DeviceInfo` | manufacturer, hardware model (`utsname` on iOS), OS, app version, **build/commit**, permission level (precise/approximate, always/when-in-use), power-saver on, battery-optimisation exempt (Android). Every field is passed explicitly by the native caller (Swift cannot see Kotlin default arguments) |
+
+### 5.5.1 Diagnostics v5 (S2, S15, S25)
+
+Additive over v4 (`diagnostics-v5`): the rows of the device matrix that compare a number with a reference are measured from the export, not by hand.
+
+| Field | Meaning |
+|---|---|
+| `locationGaps` | gaps between consecutive fixes **inside one continuous RECORDING interval**: `thresholdMs` (10 000), `count` (complete), `longestMs`, `gaps[]` (`fromMs`, `durationMs`; the first 50). A pause, an interruption or a recovery ends the stream, so downtime is never a gap (it is in `recoveryGaps`) |
+| `heartRate` | null without heart-rate samples; else `avgBpm`, `maxBpm`, `coveragePercent`, `artifacts` (the `hr-v2` numbers of the recording state) and `gaps` (the same structure, for the strap) |
+| `DeviceInfo.locationPermission` | one vocabulary on both phones: `PRECISE_ALWAYS`, `PRECISE_WHILE_IN_USE`, `APPROXIMATE_ALWAYS`, `APPROXIMATE_WHILE_IN_USE`, `DENIED` (iOS also `NOT_DETERMINED`). "Always" is the background permission |
+
+The live recorder and `replay()` feed the same `SignalGapTracker`, so the report built live and the one rebuilt from the file agree (tested).
 
 A FAILED activity has no diagnostics report: `ActivityRecorder.fail` has no `CompletedActivity` to attach one to, and the counters of a failed run are only in the file (a `ponytail:` in `ActivityRecorder.fail` says so). A report for a failed run is needed only when the history view shows one.
 
