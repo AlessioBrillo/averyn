@@ -1,5 +1,6 @@
 @preconcurrency import BackgroundTasks
 import Foundation
+import Network
 import Shared
 
 /// Uploads finished activities (TDD-0002): the upload logic, retry classification and per-activity status all
@@ -14,6 +15,7 @@ final class SyncService: ObservableObject {
     private let store: ActivityStore
     private let auth: AuthManager
     private var running = false
+    private let networkCost = NetworkCost()
 
     init(store: ActivityStore, auth: AuthManager) {
         self.store = store
@@ -36,6 +38,8 @@ final class SyncService: ObservableObject {
             let token = try await auth.freshAccessToken()
             let sync = ActivitySync.companion.create(store: store, serverUrl: server)
             defer { sync.close() }
+            // The raw band signals are big: on mobile data (or a hotspot) only if the user said so (ADR-0030).
+            sync.rawUploads = BandPrefs.rawOnMobile || !networkCost.isExpensive
             let result = try await sync.syncPending(accessToken: token)
             if result.needsLogin {
                 // S14: a refused / revoked session must be observable as FAILED_RETRYABLE (AUTH) so the UI
@@ -95,4 +99,22 @@ final class SyncService: ObservableObject {
         request.requiresNetworkConnectivity = true
         try? BGTaskScheduler.shared.submit(request)
     }
+}
+
+/// Whether the network in use costs the user data (cellular, a personal hotspot, Low Data Mode). Unknown counts as
+/// costly until the first answer: the big upload waits.
+private final class NetworkCost: @unchecked Sendable {
+    private let monitor = NWPathMonitor()
+    private let lock = NSLock()
+    private var expensive = true
+
+    init() {
+        monitor.pathUpdateHandler = { [weak self] path in
+            guard let self else { return }
+            self.lock.withLock { self.expensive = path.isExpensive || path.isConstrained }
+        }
+        monitor.start(queue: DispatchQueue(label: "dev.averyn.networkcost"))
+    }
+
+    var isExpensive: Bool { lock.withLock { expensive } }
 }

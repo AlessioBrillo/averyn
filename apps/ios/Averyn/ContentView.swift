@@ -419,6 +419,7 @@ private struct AccountSection: View {
             if let message { Text(message) }
             Text(sync.statusText)
             ProfileSection(viewModel: viewModel, isSignedIn: auth.isSignedIn)
+            BandSection()
         }
         // The last confirmation (ADR-0017): the user types the word, so a stray tap cannot delete an account.
         .alert("Delete your account?", isPresented: $confirmingDelete) {
@@ -463,6 +464,27 @@ private struct AccountSection: View {
         let repository = AppModel.shared.history()
         guard let stats = try? await repository.cacheStats(), stats.detailCount > 0 else { return "" }
         return tr("Offline copy: %@ activities, %@ kB", "\(stats.detailCount)", "\(stats.bytes / 1024)")
+    }
+}
+
+/// The SYNAPSE band (ADR-0030): use it as the sensor of a recording, let its raw signals go up over mobile data, and
+/// forget the one found. The consents for what it records are managed with the account. The choices live on this
+/// phone only; `SynapseBand` reads the same keys.
+private struct BandSection: View {
+    @AppStorage(BandPrefs.useKey) private var useBand = false
+    @AppStorage(BandPrefs.rawOnMobileKey) private var rawOnMobile = false
+    @AppStorage(BandPrefs.identifierKey) private var identifier = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("SYNAPSE band")
+            Toggle("Record with a SYNAPSE band instead of a heart-rate strap", isOn: $useBand)
+            Toggle("Upload its raw signals on mobile data too (large)", isOn: $rawOnMobile)
+                .disabled(!useBand)
+            if !identifier.isEmpty {
+                Button("Forget this band") { identifier = "" }
+            }
+        }
     }
 }
 
