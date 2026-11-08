@@ -320,8 +320,13 @@ class HistoryRepository(
      * Throws one activity off this device: the raw file, the local summary, the sync status and the
      * heart-rate and band sidecars go with it. The server keeps what it has.
      */
-    suspend fun deleteLocal(activityId: String) =
+    suspend fun deleteLocal(
+        activityId: String,
+        inProgressId: String? = null,
+    ): Boolean =
         withContext(Dispatchers.Default) {
+            // The recorder keeps appending to an activity that runs: deleting its file would leave a file with no header.
+            if (activityId == inProgressId) return@withContext false
             store.delete(activityId)
             store.deleteRr(activityId)
             statuses.delete(activityId)
@@ -330,6 +335,7 @@ class HistoryRepository(
                 store.deleteSynapse(activityId, kind)
                 statuses.deleteSynapse(activityId, kind)
             }
+            true
         }
 
     /** The unit system as the device last knew it: the cached one, or metric. Never touches the network. */

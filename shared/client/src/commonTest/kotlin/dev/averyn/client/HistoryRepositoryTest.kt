@@ -23,6 +23,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -238,6 +239,14 @@ class HistoryRepositoryTest {
             assertTrue(SynapseSidecarKind.entries.none { store.hasSynapse("local1", it) })
             assertNull(store.readLocalSummary("local1"))
             assertTrue(repository.deviceData().isEmpty())
+        }
+
+    @Test
+    fun `the activity being recorded is not deleted`() =
+        runTest {
+            localActivity("local1")
+            assertFalse(repository.deleteLocal("local1", inProgressId = "local1"))
+            assertEquals(1, store.list().size)
         }
 
     @Test

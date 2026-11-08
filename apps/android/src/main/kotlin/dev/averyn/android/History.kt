@@ -43,6 +43,7 @@ import dev.averyn.client.HistorySnapshot
 import dev.averyn.client.HistorySource
 import dev.averyn.client.HistorySyncState
 import dev.averyn.client.UnitFormat
+import dev.averyn.domain.ActivityState
 import dev.averyn.tracking.workoutExport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -299,7 +300,13 @@ internal fun HistorySection(
                 TextButton(onClick = {
                     toDelete = null
                     scope.launch {
-                        app.history().deleteLocal(item.activityId)
+                        val running =
+                            app.recorder
+                                .takeIf {
+                                    !it.currentState.isTerminal &&
+                                        it.currentState != ActivityState.IDLE
+                                }?.currentActivityId
+                        app.history().deleteLocal(item.activityId, running)
                         deviceData = app.history().deviceData()
                         message = resources.getString(R.string.deleted_from_device)
                     }
