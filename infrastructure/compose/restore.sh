@@ -14,8 +14,6 @@ B=$(cd "$B" && pwd)
 db_user=$(sed -n 's/^POSTGRES_USER=//p' "$B/.env" | head -n 1)
 db_user="${db_user:-averyn}"
 
-cp "$B/.env" "$env_file"
-[ -f "$B/seaweedfs-s3.local.json" ] && cp "$B/seaweedfs-s3.local.json" .
 # Unpacking over a volume that has data would mix two states of the instance: restore onto an empty host, or say so.
 # Checked before the containers are created: creating them seeds a volume from the image (the storage one is never
 # empty after that), and a volume that does not exist yet is empty by definition.
@@ -27,6 +25,9 @@ for v in storage-data idp-bootstrap oidc-config caddy-data; do
     exit 1
   fi
 done
+# Only now is the current .env replaced: a refused restore (above) must leave the instance's secrets as they were.
+cp "$B/.env" "$env_file"
+[ -f "$B/seaweedfs-s3.local.json" ] && cp "$B/seaweedfs-s3.local.json" .
 dc up --no-start
 for v in storage-data idp-bootstrap oidc-config caddy-data; do
   [ -f "$B/$v.tgz" ] || continue

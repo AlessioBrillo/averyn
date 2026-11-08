@@ -18,6 +18,12 @@ handle /v1/* {
 	reverse_proxy backend:8080
 }
 
+# For an external uptime check: the backend's readiness (database and object store), a fixed tiny body. /metrics and
+# /health stay inside the network.
+handle /ready {
+	reverse_proxy backend:8080
+}
+
 handle {
 	root * /srv
 	try_files {path} /index.html
