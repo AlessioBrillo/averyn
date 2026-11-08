@@ -43,6 +43,7 @@ import dev.averyn.client.HistorySnapshot
 import dev.averyn.client.HistorySource
 import dev.averyn.client.HistorySyncState
 import dev.averyn.client.UnitFormat
+import dev.averyn.client.formatDuration
 import dev.averyn.domain.ActivityState
 import dev.averyn.tracking.workoutExport
 import kotlinx.coroutines.Dispatchers
@@ -559,14 +560,6 @@ private fun syncLabel(state: HistorySyncState): String =
 
 private fun formatDate(epochMs: Long): String =
     DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(epochMs))
-
-private fun formatDuration(ms: Long): String {
-    val total = ms / 1000
-    val hours = total / 3600
-    val minutes = (total % 3600) / 60
-    val seconds = total % 60
-    return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds) else "%d:%02d".format(minutes, seconds)
-}
 
 /** How many times the app comes back for an analysis the server is still computing. */
 private const val ANALYSIS_RETRIES = 3

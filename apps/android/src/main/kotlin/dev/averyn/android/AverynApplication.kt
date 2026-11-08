@@ -192,7 +192,8 @@ class AverynApplication : Application() {
         // (TDD-0011), so their numbers are there even without a connection.
         appScope.launch {
             // Killed before the first fix: nothing was recorded, and the file would stay for good.
-            store.discardEmptyPreparing()
+            // The activity this process is recording (a Start tapped at once) is not that file.
+            store.discardEmptyPreparing(exceptId = recorder.currentActivityId)
             store.backfillLocalSummaries()
         }
     }

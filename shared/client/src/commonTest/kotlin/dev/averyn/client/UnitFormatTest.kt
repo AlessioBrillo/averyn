@@ -10,6 +10,16 @@ class UnitFormatTest {
     private val imperial = UnitFormat(UnitSystem.IMPERIAL)
 
     @Test
+    fun aDurationIsMinutesAndSecondsAndHoursFromTheFirstHour() {
+        assertEquals("0:00", formatDuration(0))
+        assertEquals("0:59", formatDuration(59_999))
+        assertEquals("59:59", formatDuration(3_599_000))
+        assertEquals("1:00:00", formatDuration(3_600_000))
+        assertEquals("2:05:09", formatDuration(2 * 3_600_000 + 5 * 60_000 + 9_000L))
+        assertEquals("0:00", formatDuration(-5_000))
+    }
+
+    @Test
     fun metricDistancesAreMetresBelowAKilometreAndKilometresAbove() {
         assertEquals("0 m", metric.distance(0.0))
         assertEquals("950 m", metric.distance(950.4))
