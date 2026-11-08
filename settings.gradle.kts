@@ -40,5 +40,6 @@ if (System.getenv("AVERYN_BACKEND_ONLY") != null) {
         ":shared:ios-umbrella",
         ":backend",
         ":apps:android",
+        ":tools:campaign",
     )
 }
