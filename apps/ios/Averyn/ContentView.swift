@@ -623,13 +623,7 @@ private func formatDate(_ epochMs: Int64) -> String {
 }
 
 private func formatDuration(_ ms: Int64) -> String {
-    let total = Int(ms / 1000)
-    let hours = total / 3600
-    let minutes = (total % 3600) / 60
-    let seconds = total % 60
-    return hours > 0
-        ? String(format: "%d:%02d:%02d", hours, minutes, seconds)
-        : String(format: "%d:%02d", minutes, seconds)
+    UnitFormatKt.formatDuration(ms: ms)
 }
 
 /// The warning of a version that does not fit (TDD-0011): it never stops the app from working.

@@ -8,6 +8,17 @@ import kotlin.math.roundToLong
 private const val METERS_PER_MILE = 1609.344
 private const val METERS_PER_FOOT = 0.3048
 
+/** A duration as `m:ss`, or `h:mm:ss` from one hour on. The same on both phones; it does not depend on the unit system. */
+fun formatDuration(ms: Long): String {
+    val total = (ms / 1000).coerceAtLeast(0)
+    val hours = total / 3600
+    val minutes = (total % 3600) / 60
+    val seconds = total % 60
+    val mm = if (hours > 0) minutes.toString().padStart(2, '0') else minutes.toString()
+    val ss = seconds.toString().padStart(2, '0')
+    return if (hours > 0) "$hours:$mm:$ss" else "$mm:$ss"
+}
+
 /**
  * How the phones write a distance, a pace, a speed and an elevation in the unit system of the profile
  * (TDD-0012). One implementation for both apps: the web has its own, with the same conversions

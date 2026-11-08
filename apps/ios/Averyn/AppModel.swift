@@ -243,9 +243,11 @@ final class AppModel {
 
     /// The activities recorded by an older build get their local summary, in the background (TDD-0011).
     func backfillLocalSummaries() {
+        // Read on the main actor, where the recorder lives: the activity being prepared right now is not that file.
+        let live = recorder.currentActivityId
         DispatchQueue.global(qos: .utility).async { [store] in
             // Killed before the first fix: nothing was recorded, and the file would stay for good.
-            store.discardEmptyPreparing(exceptId: nil)
+            store.discardEmptyPreparing(exceptId: live)
             store.backfillLocalSummaries(limit: 20)
         }
     }
