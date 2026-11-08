@@ -62,10 +62,12 @@ import dev.averyn.tracking.LiveSnapshot
 import dev.averyn.tracking.RecoveryResult
 import dev.averyn.tracking.ResumeAction
 import dev.averyn.tracking.planLaunchRecovery
+import dev.averyn.tracking.preparingTooLong
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.io.IOException
 import java.util.UUID
 
 class MainActivity : ComponentActivity() {
@@ -94,6 +96,7 @@ private fun RecordScreen(app: AverynApplication) {
     var recoveryWarning by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var permissionMessage by remember { mutableStateOf<String?>(null) }
+    var confirmingStop by remember { mutableStateOf(false) }
     // Reloads the history when something was finished or recovered.
     var historyVersion by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -301,6 +304,25 @@ private fun RecordScreen(app: AverynApplication) {
         )
     }
 
+    if (confirmingStop) {
+        StopDialog(
+            onDismiss = { confirmingStop = false },
+            onConfirm = {
+                confirmingStop = false
+                val (e, t) = now()
+                try {
+                    val completed = recorder.stop(e, t)
+                    context.stopService(Intent(context, TrackingService::class.java))
+                    completedDiagnostics = completed.diagnostics
+                    historyVersion++
+                    enqueueSync(context)
+                } catch (_: IOException) {
+                    notice = resources.getString(R.string.storage_failed)
+                }
+            },
+        )
+    }
+
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
             modifier = Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
@@ -314,6 +336,10 @@ private fun RecordScreen(app: AverynApplication) {
             Controls(
                 snapshot = snapshot,
                 onStart = { sport ->
+                    if (recoveryInFlight.get()) {
+                        notice = resources.getString(R.string.recovery_in_progress)
+                        return@Controls
+                    }
                     pendingSport = sport
                     if (hasPreciseLocation(context)) {
                         permissionMessage = null
@@ -337,12 +363,21 @@ private fun RecordScreen(app: AverynApplication) {
                 },
                 onPause = {
                     val (e, t) = now()
-                    recorder.pause(e, t)
+                    try {
+                        recorder.pause(e, t)
+                    } catch (_: IOException) {
+                        notice = resources.getString(R.string.storage_failed)
+                    }
                 },
                 onResume = {
                     if (hasPreciseLocation(context)) {
                         val (e, t) = now()
-                        recorder.resume(e, t)
+                        try {
+                            recorder.resume(e, t)
+                        } catch (_: IOException) {
+                            notice = resources.getString(R.string.storage_failed)
+                            return@Controls
+                        }
                         // The service may have stopped itself while the activity was paused for a missing
                         // permission or a disabled provider: starting it again is a no-op when it is running.
                         context.startForegroundService(Intent(context, TrackingService::class.java))
@@ -350,14 +385,8 @@ private fun RecordScreen(app: AverynApplication) {
                         requestPermissions()
                     }
                 },
-                onStop = {
-                    val (e, t) = now()
-                    val completed = recorder.stop(e, t)
-                    context.stopService(Intent(context, TrackingService::class.java))
-                    completedDiagnostics = completed.diagnostics
-                    historyVersion++
-                    enqueueSync(context)
-                },
+                onStop = { confirmingStop = true },
+                preparingSinceMs = recorder.currentMetadata()?.startedAtMs ?: 0L,
                 onCancel = {
                     recorder.cancel()
                     context.stopService(Intent(context, TrackingService::class.java))
@@ -794,6 +823,7 @@ private fun Controls(
     onResume: () -> Unit,
     onStop: () -> Unit,
     onCancel: () -> Unit,
+    preparingSinceMs: Long,
 ) {
     when (snapshot.state) {
         ActivityState.IDLE, ActivityState.FAILED, ActivityState.COMPLETED ->
@@ -803,6 +833,15 @@ private fun Controls(
         ActivityState.PREPARING ->
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(stringResource(R.string.waiting_for_gps))
+                // A notice, never a reason to give up (TDD-0006 5.7): a late fix still starts the activity.
+                var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        delay(10_000)
+                        nowMs = System.currentTimeMillis()
+                    }
+                }
+                if (preparingTooLong(nowMs, preparingSinceMs)) Text(stringResource(R.string.waiting_for_gps_long))
                 Button(onClick = onCancel) { Text(stringResource(R.string.cancel)) }
             }
         ActivityState.RECORDING ->
@@ -916,4 +955,18 @@ private fun startRecording(
     val (elapsedMs, timeMs) = now()
     app.recorder.start(UUID.randomUUID().toString(), sport, elapsedMs, timeMs)
     context.startForegroundService(Intent(context, TrackingService::class.java))
+}
+
+@Composable
+private fun StopDialog(
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.stop_confirm_title)) },
+        text = { Text(stringResource(R.string.stop_confirm_text)) },
+        confirmButton = { TextButton(onClick = onConfirm) { Text(stringResource(R.string.stop)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
 }

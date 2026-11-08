@@ -37,6 +37,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.io.IOException
 import java.util.concurrent.Executors
 
 private const val NOTIFICATION_CHANNEL_ID = "tracking"
@@ -125,7 +126,12 @@ class TrackingService : Service() {
         object : LocationListener {
             override fun onLocationChanged(location: Location) {
                 if (recorder.currentState == ActivityState.PREPARING) {
-                    recorder.gpsReady(SystemClock.elapsedRealtime(), System.currentTimeMillis())
+                    try {
+                        recorder.gpsReady(SystemClock.elapsedRealtime(), System.currentTimeMillis())
+                    } catch (_: IOException) {
+                        // The event could not be written: the recorder is still PREPARING, and the next fix retries.
+                        recorder.recordDroppedInput(DroppedInputReason.STORAGE_WRITE_FAILED)
+                    }
                 }
                 // Not only on the first fix: a recovered activity, or one resumed after an interruption, is
                 // RECORDING without ever passing through PREPARING, and its strap has to start too.
@@ -175,6 +181,9 @@ class TrackingService : Service() {
         removeRecorderListener =
             (application as AverynApplication).addRecorderListener { snapshot ->
                 if (snapshot.state.isTerminal) stopHr()
+                // A FAILED activity (the provider lost before the first fix, a full disk) has nothing left to feed: the
+                // service ends instead of sitting in the foreground with a notification and no recording.
+                if (snapshot.state == ActivityState.FAILED) stopSelf()
             }
     }
 
@@ -361,7 +370,12 @@ class TrackingService : Service() {
     }
 
     private fun interrupt(reason: Reason) {
-        recorder.interrupt(SystemClock.elapsedRealtime(), System.currentTimeMillis(), reason)
+        try {
+            recorder.interrupt(SystemClock.elapsedRealtime(), System.currentTimeMillis(), reason)
+        } catch (_: IOException) {
+            // The pause could not be written (full disk): counted, and the activity stays as it was.
+            recorder.recordDroppedInput(DroppedInputReason.STORAGE_WRITE_FAILED)
+        }
     }
 
     private fun Location.toSample() =

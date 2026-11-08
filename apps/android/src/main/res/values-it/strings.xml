@@ -130,6 +130,11 @@
     <string name="sport_walk">Camminata</string>
     <string name="sport_hike">Escursione</string>
     <string name="waiting_for_gps">In attesa del GPS…</string>
+    <string name="waiting_for_gps_long">Ancora nessun segnale GPS. Spostati all\'aperto, oppure annulla e riprova.</string>
+    <string name="stop_confirm_title">Fermare l\'attività?</string>
+    <string name="stop_confirm_text">Verrà salvata e non potrà essere ripresa.</string>
+    <string name="recovery_in_progress">Un attimo: sto ripristinando un\'attività interrotta.</string>
+    <string name="storage_failed">Il telefono non riesce a scrivere in memoria (piena?). Libera spazio e riprova.</string>
     <string name="pause">Pausa</string>
     <string name="stop">Stop</string>
     <string name="resume">Riprendi</string>

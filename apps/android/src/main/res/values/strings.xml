@@ -130,6 +130,11 @@
     <string name="sport_walk">Walk</string>
     <string name="sport_hike">Hike</string>
     <string name="waiting_for_gps">Waiting for GPS…</string>
+    <string name="waiting_for_gps_long">Still no GPS fix. Move to open sky, or cancel and start again.</string>
+    <string name="stop_confirm_title">Stop this activity?</string>
+    <string name="stop_confirm_text">It will be saved and cannot be continued.</string>
+    <string name="recovery_in_progress">Wait a moment: an interrupted activity is being restored.</string>
+    <string name="storage_failed">The phone could not write to its storage (full?). Free some space and try again.</string>
     <string name="pause">Pause</string>
     <string name="stop">Stop</string>
     <string name="resume">Resume</string>
