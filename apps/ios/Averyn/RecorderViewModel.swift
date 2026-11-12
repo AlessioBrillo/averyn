@@ -222,13 +222,28 @@ final class RecorderViewModel: ObservableObject {
         // would throw IllegalStateException (C3: double-tap / out-of-order tap must not kill the app).
         guard recorder.currentState == .idle || recorder.currentState.isTerminal else { return }
         let id = UUID().uuidString
-        recorder.start(activityId: id, sport: sport, elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs())
+        do {
+            try recorder.start(activityId: id, sport: sport, elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs())
+        } catch {
+            // The file could not be created (full disk): nothing started, and the app must not be killed for it.
+            notice = tr("The phone could not write to its storage (full?). Free some space and try again.")
+            return
+        }
         tracker.start()
+    }
+
+    /// A Kotlin `IOException` reaches Swift as an `Error` (`@Throws`); without the catch it would end the process.
+    private func storageFailed() {
+        notice = tr("The phone could not write to its storage (full?). Free some space and try again.")
     }
 
     func pause() {
         guard recorder.currentState == .recording else { return }
-        recorder.pause(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs(), reason: .user)
+        do {
+            try recorder.pause(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs(), reason: .user)
+        } catch {
+            storageFailed() // the recorder stays as it was: the user can try again
+        }
     }
 
     func resume() {
@@ -238,12 +253,23 @@ final class RecorderViewModel: ObservableObject {
             notice = tr("Precise location was turned off: the activity is paused. Turn Precise Location on to continue.")
             return
         }
-        recorder.resume(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs())
+        do {
+            try recorder.resume(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs())
+        } catch {
+            storageFailed()
+        }
     }
 
     func stop() {
         guard recorder.currentState == .recording || recorder.currentState == .paused else { return }
-        let completed = recorder.stop(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs())
+        let completed: CompletedActivity
+        do {
+            completed = try recorder.stop(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs())
+        } catch {
+            // The event could not be written: still recording, nothing lost; the user frees space and stops again.
+            storageFailed()
+            return
+        }
         tracker.stop()
         export(activityId: completed.activityId, diagnostics: completed.diagnostics)
     }
@@ -251,7 +277,12 @@ final class RecorderViewModel: ObservableObject {
     /// The user gave up while waiting for the first fix: nothing was recorded, so nothing is kept.
     func cancel() {
         guard recorder.currentState == .preparing else { return }
-        recorder.cancel()
+        do {
+            try recorder.cancel()
+        } catch {
+            storageFailed()
+            return
+        }
         tracker.stop()
     }
 
@@ -266,9 +297,11 @@ final class RecorderViewModel: ObservableObject {
         let timeMs = nowTimeMs()
         Task {
             let result = await Task.detached(priority: .userInitiated) {
-                recorder.recover(activityId: metadata.activityId, nowElapsedRealtimeMs: elapsedMs, nowTimeMs: timeMs)
+                try? recorder.recover(activityId: metadata.activityId, nowElapsedRealtimeMs: elapsedMs, nowTimeMs: timeMs)
             }.value
-            if let resumed = result as? RecoveryResult.Resumed {
+            if result == nil {
+                storageFailed() // the file stays interrupted: the dialog comes back at the next launch
+            } else if let resumed = result as? RecoveryResult.Resumed {
                 snapshot = resumed.snapshot
                 recoveryWarning = droppedRecordWarning(resumed.droppedRecordCount)
                 tracker.start()
@@ -286,23 +319,28 @@ final class RecorderViewModel: ObservableObject {
         let elapsedMs = nowElapsedRealtimeMs()
         let timeMs = nowTimeMs()
         Task {
-            let (result, closed) = await Task.detached(priority: .userInitiated) { () -> (RecoveryResult, CompletedActivity?) in
-                let result = recorder.recover(activityId: metadata.activityId, nowElapsedRealtimeMs: elapsedMs, nowTimeMs: timeMs)
+            let (result, closed) = await Task.detached(priority: .userInitiated) { () -> (RecoveryResult?, CompletedActivity?) in
+                guard let result = try? recorder.recover(activityId: metadata.activityId, nowElapsedRealtimeMs: elapsedMs, nowTimeMs: timeMs)
+                else { return (nil, nil) }
                 guard result is RecoveryResult.Resumed else { return (result, nil) }
                 // The last known activity time, not "now": the app can be reopened long after the kill, and
                 // stopping at wall-clock now would count that whole gap as moving time.
-                let completed = recorder.stop(
+                let completed = try? recorder.stop(
                     elapsedRealtimeMs: recorder.lastKnownElapsedRealtimeMs,
                     timeMs: recorder.lastKnownTimeMs
                 )
                 return (result, completed)
             }.value
-            if let completed = closed, let resumed = result as? RecoveryResult.Resumed {
+            if result == nil {
+                storageFailed()
+            } else if let completed = closed, let resumed = result as? RecoveryResult.Resumed {
                 recoveryWarning = droppedRecordWarning(resumed.droppedRecordCount)
                 export(activityId: completed.activityId, diagnostics: completed.diagnostics)
             } else if let completed = result as? RecoveryResult.Completed {
                 recoveryWarning = droppedRecordWarning(completed.droppedRecordCount)
                 export(activityId: completed.activity.activityId, diagnostics: completed.activity.diagnostics)
+            } else {
+                storageFailed() // recovered, but the closing events could not be written: it stays resumable
             }
         }
     }
