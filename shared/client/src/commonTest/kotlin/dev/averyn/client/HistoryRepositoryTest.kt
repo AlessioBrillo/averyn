@@ -116,7 +116,7 @@ class HistoryRepositoryTest {
         }
 
     @Test
-    fun `an imported file is an import whatever its format, a device recording is not`() =
+    fun `an imported file is an import whatever its format and a device recording is not`() =
         runTest {
             reader.page =
                 ActivityPage(
