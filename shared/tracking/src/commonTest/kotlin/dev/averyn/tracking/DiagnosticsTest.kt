@@ -62,6 +62,23 @@ class DiagnosticsTest {
     }
 
     @Test
+    fun recoveredEventAfterACutLineIsNotGluedOntoIt() {
+        val original = ActivityRecorder(store)
+        original.start("a1", Sport.RUN, 0, 0)
+        original.gpsReady(0, 0)
+        original.onSample(sample(0, 0.0))
+        val path = Path(dir, "a1.jsonl")
+        SystemFileSystem.sink(path, append = true).buffered().use { it.writeString("SAMPLE {\"timeMs\":1,\"elapsedRe") }
+
+        ActivityRecorder(store).recover("a1", 20_000, 20_000)
+
+        // The RECOVERED event is its own line: a later replay counts one recovery and one loss (the cut line).
+        val replayed = replay(store, "a1")
+        assertEquals(1, replayed.recoveries)
+        assertEquals(mapOf(RecordLossReason.TRUNCATED_RECORD to 1), replayed.recordLosses)
+    }
+
+    @Test
     fun recoveryTracksLossesByReasonAndRecoveryCount() {
         val original = ActivityRecorder(store)
         original.start("a1", Sport.RUN, 0, 0)

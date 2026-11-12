@@ -478,6 +478,7 @@ class ActivityRecorder(
         nowTimeMs: Long,
     ): RecoveryResult {
         val replayed = replay(store, activityId)
+        store.sealTruncatedTail(activityId) // after the replay, which counts the cut line; before any append
         val metadata = replayed.metadata
         this.activityId = activityId
         this.sport = metadata.sport
