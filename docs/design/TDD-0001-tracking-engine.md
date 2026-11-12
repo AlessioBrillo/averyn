@@ -68,6 +68,8 @@ Rule: everything in `shared/` is pure Kotlin and unit-testable on the JVM agains
 
 States: `IDLE, PREPARING, RECORDING, PAUSED, STOPPING, COMPLETED, FAILED`. Implemented in `shared/domain` (`ActivityState.transitionTo`).
 
+"Gps ready" (PREPARING → RECORDING) is a fix with accuracy ≤ 50 m and age ≤ 10 s (`isUsableFirstFix`, shared by both platforms). A coarse or cached fix is still stored as a raw sample but does not start the recording; the thresholds are provisional until the campaign (S1) gives cold-start data. The diagram below is unchanged.
+
 ```mermaid
 stateDiagram-v2
   [*] --> IDLE
