@@ -11,6 +11,7 @@ import dev.averyn.backend.privacy.PrivacyZoneStore
 import dev.averyn.backend.privacy.hideZonesIn
 import dev.averyn.backend.profile.ProfileStore
 import dev.averyn.backend.storage.RawObjectStore
+import dev.averyn.tracking.ActivityMetadata
 import io.ktor.http.ContentDisposition
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -40,6 +41,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import java.nio.channels.Channels
 import java.nio.file.Files
@@ -70,6 +73,9 @@ const val DEFAULT_REQUESTS_PER_MINUTE = 120
 /** The rate limit every authenticated call shares, whatever it does. */
 internal val PER_USER = RateLimitName("per-user")
 private val exportLog = LoggerFactory.getLogger("dev.averyn.backend.activities.Export")
+
+/** Reads the `META` line of a sidecar: a newer client may add fields, which are not an error. */
+private val rrMetaJson = Json { ignoreUnknownKeys = true }
 
 /**
  * Installs the [PER_USER] limiter once. Every module that serves authenticated routes calls it before it uses
@@ -247,6 +253,24 @@ fun Application.activities(
                                     call.respond(
                                         HttpStatusCode.UnprocessableEntity,
                                         errorBody("the sidecar has no metadata line"),
+                                    )
+                                    return@withContext
+                                }
+                                // Like the main upload: the file must say it belongs to the activity of the URL.
+                                val declared =
+                                    try {
+                                        rrMetaJson
+                                            .decodeFromString(
+                                                ActivityMetadata.serializer(),
+                                                header.removePrefix("META "),
+                                            ).activityId
+                                    } catch (_: SerializationException) {
+                                        null
+                                    }
+                                if (declared == null || !declared.equals(clientId.toString(), ignoreCase = true)) {
+                                    call.respond(
+                                        HttpStatusCode.UnprocessableEntity,
+                                        errorBody("the sidecar's metadata line does not match the activity"),
                                     )
                                     return@withContext
                                 }
