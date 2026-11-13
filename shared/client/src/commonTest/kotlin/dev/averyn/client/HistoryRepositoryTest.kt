@@ -116,6 +116,26 @@ class HistoryRepositoryTest {
         }
 
     @Test
+    fun `an imported file is an import whatever its format and a device recording is not`() =
+        runTest {
+            reader.page =
+                ActivityPage(
+                    listOf(
+                        summary("d"),
+                        summary("g", source = "gpx"),
+                        summary("f", source = "fit"),
+                        summary("t", source = "tcx"),
+                    ),
+                    null,
+                )
+            val sources = repository.refresh("token").items.associate { it.serverId to it.source }
+            assertEquals(HistorySource.DEVICE, sources["d"])
+            assertEquals(HistorySource.GPX, sources["g"])
+            assertEquals(HistorySource.GPX, sources["f"])
+            assertEquals(HistorySource.GPX, sources["t"])
+        }
+
+    @Test
     fun `an activity of the device that is not on the server yet is in the list`() =
         runTest {
             localActivity("local1")

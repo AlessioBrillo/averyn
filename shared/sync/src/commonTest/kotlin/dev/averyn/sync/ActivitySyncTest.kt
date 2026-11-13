@@ -257,6 +257,19 @@ class ActivitySyncTest {
         }
 
     @Test
+    fun anActivityRefusedForQuotaIsRetriedOnceTheUserFreedSpace() =
+        runTest {
+            finishedActivity("a1")
+
+            val full = sync(failing(HttpStatusCode.InsufficientStorage)).syncPending("tok")
+
+            assertEquals(1, full.retryable) // TDD-0002: 507 is retryable, nothing was stored
+            assertEquals(SyncState.FAILED_RETRYABLE, statuses.statusOf("a1").state)
+            assertEquals(1, sync(created).syncPending("tok").uploaded)
+            assertEquals(SyncState.READY, statuses.statusOf("a1").state)
+        }
+
+    @Test
     fun aRejectedActivityIsPermanentAndNotRetried() =
         runTest {
             finishedActivity("a1")

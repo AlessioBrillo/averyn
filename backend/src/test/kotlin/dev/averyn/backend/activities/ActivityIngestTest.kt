@@ -799,11 +799,21 @@ class ActivityIngestTest {
 
             // With the consent but without an activity to belong to.
             post("/v1/consents/${ConsentScope.RR_RECORDING}") { bearerAuth(alice) }
+            val missing = UUID.randomUUID()
             assertEquals(
                 HttpStatusCode.NotFound,
-                put("/v1/activities/${UUID.randomUUID()}/rr") {
+                put("/v1/activities/$missing/rr") {
                     bearerAuth(alice)
-                    setBody(sidecar.toByteArray())
+                    setBody(sidecar.replace(rec.id.toString(), missing.toString()).toByteArray())
+                }.status,
+            )
+
+            // A sidecar whose own metadata names another activity is refused, like the main upload.
+            assertEquals(
+                HttpStatusCode.UnprocessableEntity,
+                put("/v1/activities/${rec.id}/rr") {
+                    bearerAuth(alice)
+                    setBody(sidecar.replace(rec.id.toString(), missing.toString()).toByteArray())
                 }.status,
             )
         }

@@ -213,6 +213,25 @@ class ActivityStore(
         sample: HeartRateSample,
     ) = appendLine(activityId, HR_PREFIX + json.encodeToString(HeartRateSample.serializer(), sample))
 
+    /**
+     * A kill mid-write leaves the last line without its `\n`. The next append would glue onto it and lose both
+     * records (the cut SAMPLE and, in a recovery, the RECOVERED event with its clock offset). Ends that line
+     * first; the cut record itself is still counted as a loss when read. A no-op on a file that ends cleanly.
+     */
+    fun sealTruncatedTail(activityId: String) {
+        val path = pathFor(activityId)
+        val size = SystemFileSystem.metadataOrNull(path)?.size ?: 0L
+        if (size == 0L) return
+        val last =
+            SystemFileSystem.source(path).buffered().use { source ->
+                source.skip(size - 1)
+                source.readByte()
+            }
+        if (last != '\n'.code.toByte()) {
+            SystemFileSystem.sink(path, append = true).buffered().use { it.writeString("\n") }
+        }
+    }
+
     private fun appendLine(
         activityId: String,
         line: String,

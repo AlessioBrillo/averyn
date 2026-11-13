@@ -31,6 +31,7 @@ import dev.averyn.tracking.ActivityRecorder
 import dev.averyn.tracking.DroppedInputReason
 import dev.averyn.tracking.RecoveryResult
 import dev.averyn.tracking.ResumeAction
+import dev.averyn.tracking.isUsableFirstFix
 import dev.averyn.tracking.planLaunchRecovery
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -125,7 +126,11 @@ class TrackingService : Service() {
     private val listener =
         object : LocationListener {
             override fun onLocationChanged(location: Location) {
-                if (recorder.currentState == ActivityState.PREPARING) {
+                // A coarse or cached first fix is stored like any other, but does not start the recording.
+                val ageMs = (SystemClock.elapsedRealtimeNanos() - location.elapsedRealtimeNanos) / 1_000_000
+                if (recorder.currentState == ActivityState.PREPARING &&
+                    isUsableFirstFix(location.takeIf { it.hasAccuracy() }?.accuracy?.toDouble(), ageMs)
+                ) {
                     try {
                         recorder.gpsReady(SystemClock.elapsedRealtime(), System.currentTimeMillis())
                     } catch (_: IOException) {

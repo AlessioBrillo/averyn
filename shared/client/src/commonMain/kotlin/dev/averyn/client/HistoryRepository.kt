@@ -625,7 +625,8 @@ private fun ActivitySummary.toHistoryItem(): HistoryItem =
         droppedRecords = droppedRecords,
         avgHrBpm = avgHrBpm,
         maxHrBpm = maxHrBpm,
-        source = if (source == "gpx") HistorySource.GPX else HistorySource.DEVICE,
+        // 'gpx', 'fit' and 'tcx' (V9) are all imports; the enum name predates the other two formats.
+        source = if (source == "device") HistorySource.DEVICE else HistorySource.GPX,
         syncState = null,
         localEstimate = false,
     )
