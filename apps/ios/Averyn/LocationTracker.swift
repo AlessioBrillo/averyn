@@ -95,7 +95,15 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
         guard denied || reduced else { return }
         let reason: Reason = denied ? .permissionRevoked : .permissionDowngraded
         let was = recorder.currentState
-        guard recorder.interrupt(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs(), reason: reason) != nil else { return }
+        let next: ActivityState?
+        do {
+            next = try recorder.interrupt(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs(), reason: reason)
+        } catch {
+            // The event could not be written (full disk): the activity stays as it was; counted, not fatal.
+            recorder.recordDroppedInput(reason: .storageWriteFailed)
+            return
+        }
+        guard next != nil else { return }
         // No fix will ever arrive: stop CoreLocation so the blue indicator and GPS turn off.
         if was == .preparing { stop() }
         onIssue?(denied
@@ -105,8 +113,16 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         for location in locations {
-            if recorder.currentState == .preparing {
-                recorder.gpsReady(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs())
+            // A coarse (cell-based) or cached first fix is stored like any other, but does not start the recording.
+            let accuracy: KotlinDouble? = location.horizontalAccuracy >= 0 ? KotlinDouble(double: location.horizontalAccuracy) : nil
+            let ageMs = Int64(max(0, Date().timeIntervalSince(location.timestamp)) * 1000)
+            if recorder.currentState == .preparing, FirstFixKt.isUsableFirstFix(accuracyM: accuracy, ageMs: ageMs) {
+                do {
+                    try recorder.gpsReady(elapsedRealtimeMs: nowElapsedRealtimeMs(), timeMs: nowTimeMs())
+                } catch {
+                    // Still PREPARING; the next fix retries (same as Android).
+                    recorder.recordDroppedInput(reason: .storageWriteFailed)
+                }
             }
             // The strap starts on the fixes of a RECORDING activity, once (`AppModel` ignores the repeats): also
             // after a recovery, which is RECORDING without ever passing through PREPARING.

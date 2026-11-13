@@ -282,11 +282,13 @@ final class AppModel {
     }
 
     private func applyRecovery(_ decision: ResumeDecision, elapsedMs: Int64, timeMs: Int64) {
-        let result = recorder.recover(
+        // A full disk makes the replay's RECOVERED event fail: the file stays interrupted and the user is asked at
+        // the next launch, instead of the app being killed for it.
+        guard let result = try? recorder.recover(
             activityId: decision.metadata.activityId,
             nowElapsedRealtimeMs: elapsedMs,
             nowTimeMs: timeMs
-        )
+        ) else { return }
         if result is RecoveryResult.Resumed {
             tracker.start()
             resumedAtLaunch = true

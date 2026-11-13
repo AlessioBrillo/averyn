@@ -194,6 +194,7 @@ class ActivityRecorder(
     /** Current numbers, callable anytime (not just from [listener]) — e.g. right after [start] or [recover]. */
     fun snapshot(): LiveSnapshot = LiveSnapshot(state, metrics.snapshot(), qualityAccumulator.build())
 
+    @Throws(IOException::class)
     fun start(
         activityId: String,
         sport: Sport,
@@ -229,6 +230,7 @@ class ActivityRecorder(
      * The user gave up while waiting for the first fix (PREPARING -> IDLE, TDD-0001 §5.2): nothing was recorded,
      * so nothing is kept and the activity file is removed.
      */
+    @Throws(IOException::class)
     fun cancel() {
         state = state.transitionTo(ActivityState.IDLE)
         activityId?.let { store.delete(it) }
@@ -237,6 +239,7 @@ class ActivityRecorder(
     }
 
     /** The native adapter calls this on the first fix after [start], or [fail] if none arrives. */
+    @Throws(IOException::class)
     fun gpsReady(
         elapsedRealtimeMs: Long,
         timeMs: Long,
@@ -314,6 +317,7 @@ class ActivityRecorder(
      * the activity fails; once recording it is paused with the reason and the data stays resumable. Never throws for
      * a state with nothing to interrupt (IDLE, PAUSED, STOPPING, terminal): returns the new state, or null then.
      */
+    @Throws(IOException::class)
     fun interrupt(
         elapsedRealtimeMs: Long,
         timeMs: Long,
@@ -325,6 +329,7 @@ class ActivityRecorder(
             else -> null
         }?.let { state }
 
+    @Throws(IOException::class)
     fun pause(
         elapsedRealtimeMs: Long,
         timeMs: Long,
@@ -340,6 +345,7 @@ class ActivityRecorder(
         emit()
     }
 
+    @Throws(IOException::class)
     fun resume(
         elapsedRealtimeMs: Long,
         timeMs: Long,
@@ -353,6 +359,7 @@ class ActivityRecorder(
     }
 
     /** Finalization (STOPPING → COMPLETED) is synchronous in MVP-0: no upload/processing step to wait for. */
+    @Throws(IOException::class)
     fun stop(
         elapsedRealtimeMs: Long,
         timeMs: Long,
@@ -373,6 +380,7 @@ class ActivityRecorder(
         return result
     }
 
+    @Throws(IOException::class)
     fun fail(
         elapsedRealtimeMs: Long,
         timeMs: Long,
@@ -472,6 +480,7 @@ class ActivityRecorder(
      * kill/crash/reboot, and logs a RECOVERED event at [nowElapsedRealtimeMs]. Call on a fresh
      * [ActivityRecorder]; [store]`.interrupted()` finds which activity ids need this.
      */
+    @Throws(IOException::class)
     fun recover(
         activityId: String,
         nowElapsedRealtimeMs: Long,
