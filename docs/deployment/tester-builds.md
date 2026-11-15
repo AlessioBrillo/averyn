@@ -60,7 +60,7 @@ With several phones, run `adb -s <serial> install -r apps/android/build/outputs/
 
 HealthKit and the background location mode need a real device and the capability enabled for your team; if Xcode reports a missing capability, enable it in *Signing & Capabilities* and note it.
 
-**The server for S12–S14 and later rows.** The phone must reach a backend over TLS. Use the Compose stack of [self-hosting.md](self-hosting.md) with its [TLS overlay](self-hosting.md#tls-public-instance): it needs two public names with working certificates (the issuer is fixed once chosen), so it runs on a small rented host or on a machine with a domain pointing at it, not on a bare local address. This is the first thing that needs a decision from the owner (the host); until then S1–S11 and S25 need no server. The address goes in the app under the account section (later under *Advanced*).
+**The server for S12–S14 and later rows** (S25 too, for its last step: after the upload the numbers of the server must match). The phone must reach a backend over TLS. Use the Compose stack of [self-hosting.md](self-hosting.md) with its [TLS overlay](self-hosting.md#tls-public-instance): it needs two public names with working certificates (the issuer is fixed once chosen), so it runs on a small rented host or on a machine with a domain pointing at it, not on a bare local address. This is the first thing that needs a decision from the owner (the host); until then S1–S11 and S25 need no server. The address goes in the app under the account section (later under *Advanced*).
 
 **Order of the first run.** One phone, S1, S2 and S5 first: if the recording itself is wrong, nothing else matters. Fill a row the same day, with the exported diagnostics, in a private folder.
 

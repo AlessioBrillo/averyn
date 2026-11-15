@@ -93,7 +93,7 @@ The recovery loop in `ActivityRecorder.recover()` is extracted into a read-only 
 
 ### 5.5 Data model
 
-`activities` (Flyway `V3`): owner, `client_activity_id` (unique per owner), sport, `started_at`, `final_state`, raw object key / SHA-256 / size, `distance_m`, `elapsed_ms`, `moving_ms`, `paused_ms`, quality grade, `dropped_records` (lines the store could not read, F5), `metrics_algorithm_version` (`distance-v1,time-v1,speed-v1`), `quality_algorithm_version`, `track geometry(LineString, 4326)` (the samples that counted towards the distance, in order, i.e. recorded while `RECORDING` and not duplicate / out of order / a jump; `NULL` if fewer than 2), `visibility` default `private`. `users` (`V2`) is keyed by `(oidc_issuer, oidc_subject)`.
+`activities` (Flyway `V3`): owner, `client_activity_id` (unique per owner), sport, `started_at`, `final_state`, raw object key / SHA-256 / size, `distance_m`, `elapsed_ms`, `moving_ms`, `paused_ms`, quality grade, `dropped_records` (lines the store could not read, F5), `metrics_algorithm_version` (`distance-v1,time-v1,speed-v1`), `quality_algorithm_version`, `track geometry(MultiLineString, 4326)` (one line per recording interval, `V9`) (the samples that counted towards the distance, in order, i.e. recorded while `RECORDING` and not duplicate / out of order / a jump; `NULL` if fewer than 2), `visibility` default `private`. `users` (`V2`) is keyed by `(oidc_issuer, oidc_subject)`.
 
 ### 5.6 Conflicts ([report §9.1](../product/reference-report-v0.1.md))
 

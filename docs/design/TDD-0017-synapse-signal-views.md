@@ -1,6 +1,6 @@
 # TDD-0017: The band's signals on the activity page
 
-- **Status:** draft (server, shared code and web page implemented with tests; the phone side, the mobile screens and every check on a real band, phone and browser wait)
+- **Status:** implemented, partly (server, shared code and web page implemented with tests; the phone side, the mobile screens and every check on a real band, phone and browser wait)
 - **Version:** 0.1
 - **Author:** @AlessioBrillo
 - **Date:** 2026-11-07

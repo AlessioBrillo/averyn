@@ -105,6 +105,21 @@ From a checkout it is `./gradlew :backend:backfillAnalysis`. The command prints 
 
 The Records page shows the fastest kilometre, the fastest five and the fastest ten of the account, with the activity that holds them. A record is the fastest eligible effort of the account: an activity holds one when it finished, when it comes from Averyn or from an imported GPX file, and when its quality is not `POOR` (the platform says the distance of such an activity is not reliable). The records are not stored: they are read from the best efforts of the activities, so deleting the activity that holds a record promotes the next one by itself.
 
+## What each decision fills
+
+The stack does not depend on a provider or a region ([ADR-0027](../adr/0027-managed-cloud-baseline.md) is still `proposed`): every decision of the owner lands in one variable or one hook, none in the code.
+
+| Decision | Where it goes | State |
+|---|---|---|
+| The host and its region | nowhere: any machine with Docker runs the stack | nothing to prepare |
+| The public names | `AVERYN_DOMAIN` and `IDP_HOST` in `.env`, then the [TLS overlay](#tls-public-instance) | ready |
+| The off-site backup target | `BACKUP_UPLOAD_CMD` of `backup.sh` (any command that sends the directory away, for example `restic` or `rclone`); `restore.sh` reads the same directory | ready; the restore drill on the real host is #73 |
+| The map tiles | `AVERYN_MAP_STYLE_URL` and `AVERYN_MAP_ORIGINS` | ready |
+| The privacy notice and the terms | `AVERYN_PRIVACY_POLICY_URL` and `AVERYN_TERMS_URL` (the apps link to them) | ready; the texts are #74 |
+| Open sign-up | `AVERYN_OPEN_SIGNUP=true` (closed by default; checked on a fresh instance: the login policy of the IdP follows it) | ready; email verification needs the next row |
+| The mail server (SMTP) for verification and password reset | the identity provider's SMTP settings | **not wired**: the stack passes no SMTP setting to Zitadel yet, so it is set by hand in the console; wiring it from `.env` is part of #73 and must be tried on a fresh instance before it is relied on |
+| The limits per account | `AVERYN_USER_QUOTA_BYTES`, `AVERYN_RATE_LIMIT_PER_MINUTE` | ready (anti-abuse, [ADR-0032](../adr/0032-revenue-model.md)) |
+
 ## Backups and upgrades
 
 Runbooks: [back up](../runbooks/backup-database.md), [restore](../runbooks/restore-database.md), [upgrade](../runbooks/upgrade-self-hosted.md). Back up before every upgrade: migrations only go forward.

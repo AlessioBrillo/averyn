@@ -1,6 +1,6 @@
 # Documentation system
 
-Docs live in the repo, are reviewed like code, and are checked in CI (markdownlint + link check).
+Docs live in the repo, are reviewed like code, and are checked in CI (markdownlint in both pipelines; the link check only in the GitHub one).
 
 | Type | Where | Purpose | Lifecycle |
 |---|---|---|---|
@@ -36,8 +36,9 @@ Docs live in the repo, are reviewed like code, and are checked in CI (markdownli
 | [0013](design/TDD-0013-fit-import.md) | FIT import and archive import | implemented, not verified |
 | [0014](design/TDD-0014-health-platforms.md) | Saving an activity to HealthKit and Health Connect | implemented, not verified |
 | [0015](design/TDD-0015-consumer-ux.md) | The consumer experience: design system and the three moments | draft, waiting for the owner's approval of the mockups |
-| [0016](design/TDD-0016-privacy-zones.md) | Privacy zones: the cut, the API, the phone's store | draft: server, shared code and phone store implemented with tests; the screens and S42 wait |
-| [0017](design/TDD-0017-synapse-signal-views.md) | The band's signals on the activity page: sidecars, windows, consent that deletes | draft: server, shared code and web page implemented with tests; the phone side, the mobile screens and every check on a band wait |
+| [0016](design/TDD-0016-privacy-zones.md) | Privacy zones: the cut, the API, the phone's store | implemented, partly: server, shared code and phone store with tests; the screens and S42 wait |
+| [0017](design/TDD-0017-synapse-signal-views.md) | The band's signals on the activity page: sidecars, windows, consent that deletes | implemented, partly: server, shared code, web page and the phone adapters (never run on a band); the mobile screens and every check on a band wait |
+| [0018](design/TDD-0018-social-graph.md) | The social graph: profiles, follows, groups, segments | draft, no code: slices start after MVP-L and a green campaign |
 
 Nothing is `verified` yet: the device matrix has no filled row ([ADR-0028](adr/0028-consumer-launch-target.md)). The status line inside each design doc keeps saying `implemented` until its rows are green.
 

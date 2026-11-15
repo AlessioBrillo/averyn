@@ -6,7 +6,7 @@ Rule: **vertical slices, GPS validated on real devices first.** The biggest risk
 |---|---|---|
 | **MVP-0** Tracking PoC | Prove native tracking is reliable | Record ≥ 3 h outdoor activities on ≥ 2 real Android and ≥ 2 real iOS devices with screen locked; force-kill and reboot recovery loses ≤ 1 sample interval; GPX export validates; diagnostics report shows quality; results logged in the device matrix |
 | **MVP-1** Core | Account, sync, backend, web detail page | Activity recorded offline syncs idempotently and is visible on the web with map + basic metrics; self-host via Compose works from a clean machine |
-| **MVP-2** Analysis & interop | Import/export and analysis | GPX/FIT/TCX import with duplicate detection; charts, elevation, laps, PRs; BLE HR; HealthKit / Health Connect; versioned metrics |
+| **MVP-2** Analysis & interop | Import/export and analysis | GPX/FIT import with duplicate detection (TCX after MVP-L); charts, elevation, laps, PRs; BLE HR; HealthKit / Health Connect; versioned metrics |
 | **MVP-L** Launch | A free, privacy-first public release built around three moments, proved on real devices ([ADR-0028](../adr/0028-consumer-launch-target.md)) | See [below](#mvp-l-launch) and the live checklist in [mvp-launch.md](mvp-launch.md) |
 | **MVP-4** Social & segments | Community, **before MVP-3** since 2026-11-15 ([ADR-0031](../adr/0031-social-and-community.md)) | In this order: profiles and follow with approval, visibility on every read, feed (with title and description), likes, comments and notifications, block, report and moderation, athlete search, gear and goals, photos, groups and clubs, "trained together", segments and leaderboards, challenges, live safety tracking, global heatmap ([TDD-0018](../design/TDD-0018-social-graph.md), draft; additions in [ADR-0034](../adr/0034-social-scope-and-device-openness.md)). Starts only after MVP-L and the campaign rows it touches are green |
 | **MVP-3** Maps & navigation | Route editor, offline maps | Pilot-region routing, offline track following, deviation alerts |
@@ -66,11 +66,11 @@ Optional third-party sensor integration. The rules are [ADR-0010](../adr/0010-ec
 
 | Level | What | Averyn code | When |
 |---|---|---|---|
-| L0 | The band as a standard HR strap (`0x180D`/`0x2A37` with RR, Battery, Device Information) | none | When the prototype arrives: matrix row S15 with the band next to the reference strap |
-| L1 | Feature frame v2.2 from the consumer service (heart rate, SQI, motion artifact, stress class; RR/RMSSD/SDNN once real) | **done:** parsers and vectors in `shared/sensors`, the consent scopes, the sidecar store, the summary endpoint and the web view; **not done:** the phone adapters and the sidecar writer/upload | MVP-L, beta, first on the cut line |
+| L0 | The band as a standard HR strap (`0x180D`/`0x2A37` with RR, Battery, Device Information) | none | When the prototype arrives: matrix row S29 with the band next to the reference strap |
+| L1 | Feature frame v2.2 from the consumer service (heart rate, SQI, motion artifact, stress class; RR/RMSSD/SDNN once real) | **done:** parsers and vectors in `shared/sensors`, the consent scopes, the sidecar store, the summary endpoint and the web view; **written, never run on a band:** the phone adapters (`SynapseBleAdapter`, `SynapseBand.swift`), the sidecar writer and the upload (rows S30, S31) | MVP-L, beta, first on the cut line |
 | L2 | `synapse_*` FIT developer fields read by the FIT import as imported data | field mapping in the FIT decoder | With the FIT import if time allows, otherwise after launch |
 | L3 | Job/result plumbing to a stateless worker (HRV trends, daily stress) | queue and per-job credentials | After launch, after the DPIA covers it |
-| L1R | The research raw streams (ECG 500 Hz, PPG, IMU) shown as signals in Averyn, behind their own scope `raw_signals` ([ADR-0030](../adr/0030-synapse-contract-v2-1-and-raw-signals.md), accepted) | **done:** raw-frame decoder, session account, `<id>.synapse-raw.bin` store, min/max windows and the web viewer with zoom; **not done:** the phone adapters, a live screen, mobile views | After L1, with the same beta |
+| L1R | The research raw streams (ECG 500 Hz, PPG, IMU) shown as signals in Averyn, behind their own scope `raw_signals` ([ADR-0030](../adr/0030-synapse-contract-v2-1-and-raw-signals.md), accepted) | **done:** raw-frame decoder, session account, `<id>.synapse-raw.bin` store, min/max windows and the web viewer with zoom; **written, never run on a band:** the phone adapters; **not done:** a live screen, mobile views | After L1, with the same beta |
 
 ## MVP-0 and MVP-1 gates still open
 
@@ -86,10 +86,10 @@ Tracked here until they become ADRs (report §24).
 - ~~Mobile local database~~ → resolved, append-only file not a DB, [ADR-0015](../adr/0015-local-activity-store.md)
 - ~~Sports supported in MVP~~ → resolved: run, ride, walk, hike, [TDD-0001 §5.3](../design/TDD-0001-tracking-engine.md)
 - **The gap policy of the distance** (`distance-v2`): the metric has none, and the best efforts inherit the limit. It is not guessed: the real-device campaign produces the data that says how long a silence has to be before it is a gap. Until then, the best efforts break on a silence of their own.
-- **Final public project name** (the technical identifiers are fixed) → [ADR-0008](../adr/0008-project-codename.md). Gate of the store listing, to decide by week 10.
+- **Final public project name** (the technical identifiers are fixed) → [ADR-0008](../adr/0008-project-codename.md). Gate of the store listing, to decide before it (no fixed date).
 - ~~CLA vs DCO~~ → resolved, [ADR-0012](../adr/0012-cla-and-store-distribution.md)
 - ~~Default bundled IdP~~ → resolved: Zitadel, [ADR-0011](../adr/0011-identity-oidc.md); passkeys/MFA timing still open
-- ~~Cloud provider, map tile source for the managed cloud~~ → proposed, [ADR-0027](../adr/0027-managed-cloud-baseline.md)
+- Cloud provider and region, map tile source for the managed cloud → still open: [ADR-0027](../adr/0027-managed-cloud-baseline.md) is `proposed` and the owner has not chosen yet. The stack takes every one of these decisions from the environment (see "What each decision fills" in the [self-hosting guide](../deployment/self-hosting.md))
 - Routing engine (Valhalla vs. GraphHopper), DEM source, pilot region (MVP-3)
 - Notification strategy; moderation policy (retention of user data: resolved, [ADR-0017](../adr/0017-data-deletion-and-retention.md))
 - Anti-abuse limit thresholds → [business-model.md](business-model.md)

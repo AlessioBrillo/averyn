@@ -1,6 +1,6 @@
 # TDD-0016: Privacy zones
 
-- **Status:** draft (the server, the shared code and the phone's store are implemented with tests; the screens of both phones and the share card wait for the approved design of [TDD-0015](TDD-0015-consumer-ux.md), and the matrix row S42 is not run)
+- **Status:** implemented, partly (the server, the shared code and the phone's store are implemented with tests; the screens of both phones and the share card wait for the approved design of [TDD-0015](TDD-0015-consumer-ux.md), and the matrix row S42 is not run)
 - **Version:** 0.1
 - **Author:** @AlessioBrillo
 - **Date:** 2026-11-05
