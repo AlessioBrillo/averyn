@@ -51,3 +51,16 @@ internal fun deviceInfo(context: Context): DeviceInfo {
         batteryOptimisationExempt = power.isIgnoringBatteryOptimizations(context.packageName),
     )
 }
+
+/**
+ * True when a fix can arrive while the app is in the background (a restart by the system): precise location and,
+ * from Android 10, "Allow all the time". Without it a resumed recording would count the interruption as recording
+ * time while no fix reaches it, so such a restart asks the user instead (S5).
+ */
+internal fun canRecordInBackground(context: Context): Boolean =
+    hasPreciseLocation(context) &&
+        (
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+        )

@@ -203,7 +203,7 @@ class ActivityRecorder(
         // One recorder serves many activities (the apps keep one for the process lifetime): a finished one
         // starts over, and each activity gets its own quality/metrics accumulators.
         if (state.isTerminal) state = ActivityState.IDLE
-        state = state.transitionTo(ActivityState.PREPARING)
+        val next = state.transitionTo(ActivityState.PREPARING)
         clockOffsetMs = 0
         recoveryGaps = RecoveryGapTracker()
         timeline.clear()
@@ -220,8 +220,15 @@ class ActivityRecorder(
         trackLastKnown(elapsedRealtimeMs, timeMs)
         // New files are always format version 2 (ADR-0020): the reader accepts `HR ` records, whether or not
         // this particular activity ends up having any. Version 1 is only for files written before that.
-        store.create(ActivityMetadata(activityId, sport, timeMs, formatVersion = CURRENT_FORMAT_VERSION))
-        logEvent(elapsedRealtimeMs, timeMs, ActivityState.PREPARING, Reason.USER)
+        try {
+            store.create(ActivityMetadata(activityId, sport, timeMs, formatVersion = CURRENT_FORMAT_VERSION))
+            logEvent(elapsedRealtimeMs, timeMs, ActivityState.PREPARING, Reason.USER)
+        } catch (e: IOException) {
+            // The disk refused the file: no activity exists, and a fix arriving now must not be appended to one.
+            this.activityId = null
+            throw e
+        }
+        state = next
         emit()
     }
 
@@ -241,9 +248,11 @@ class ActivityRecorder(
         elapsedRealtimeMs: Long,
         timeMs: Long,
     ) {
-        state = state.transitionTo(ActivityState.RECORDING)
-        trackLastKnown(elapsedRealtimeMs, timeMs)
+        // Event first, state after (as pause() does): a full disk leaves the recorder PREPARING, as the file says.
+        val next = state.transitionTo(ActivityState.RECORDING)
         logEvent(elapsedRealtimeMs, timeMs, ActivityState.RECORDING, Reason.GPS_READY)
+        state = next
+        trackLastKnown(elapsedRealtimeMs, timeMs)
         emit()
     }
 
@@ -476,6 +485,21 @@ class ActivityRecorder(
         activityId: String,
         nowElapsedRealtimeMs: Long,
         nowTimeMs: Long,
+    ): RecoveryResult =
+        try {
+            recoverUnchecked(activityId, nowElapsedRealtimeMs, nowTimeMs)
+        } catch (e: Exception) {
+            // A full disk or an unreadable file: this recorder serves no activity, so a fix arriving now is counted
+            // as dropped instead of being appended to a half-rebuilt one. The files stay on disk for the next launch.
+            this.activityId = null
+            state = ActivityState.IDLE
+            throw e
+        }
+
+    private fun recoverUnchecked(
+        activityId: String,
+        nowElapsedRealtimeMs: Long,
+        nowTimeMs: Long,
     ): RecoveryResult {
         val replayed = replay(store, activityId)
         store.sealTruncatedTail(activityId) // after the replay, which counts the cut line; before any append
@@ -526,10 +550,12 @@ class ActivityRecorder(
 
         val lastState = replayed.lastState
         val droppedRecordCount = replayed.recordLosses.values.sum()
-        state = lastState
         recoveries++ // this recovery itself; past ones were counted from the replayed RECOVERED events
         recoveryGaps.onRecovered(nowTimeMs, rebootDetected = clockOffsetMs != previousOffsetMs)
         logEvent(nowElapsedRealtimeMs, nowTimeMs, lastState, Reason.RECOVERED)
+        // The recorder takes the state only once the RECOVERED event is on disk: a thread feeding fixes meanwhile
+        // sees IDLE, not a half-recovered RECORDING.
+        state = lastState
 
         return if (lastState == ActivityState.STOPPING) {
             state = state.transitionTo(ActivityState.COMPLETED)

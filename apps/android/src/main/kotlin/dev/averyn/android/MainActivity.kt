@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.provider.Settings
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -63,6 +64,7 @@ import dev.averyn.tracking.RecoveryResult
 import dev.averyn.tracking.ResumeAction
 import dev.averyn.tracking.planLaunchRecovery
 import dev.averyn.tracking.preparingTooLong
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -148,6 +150,12 @@ private fun RecordScreen(app: AverynApplication) {
             // The "tap to resume" notification is no longer needed once the activity has been recovered.
             NotificationManagerCompat.from(context).cancel(INTERRUPTED_NOTIFICATION_ID)
             return result
+        } catch (e: RuntimeException) {
+            if (e is CancellationException) throw e
+            // A full disk or an unreadable file: the activity stays interrupted on disk, the app stays up.
+            Log.w("Averyn", "recovery failed: ${e.javaClass.simpleName}")
+            notice = resources.getString(R.string.recovery_unreadable)
+            return null
         } finally {
             recoveryInFlight.set(false)
         }
@@ -168,8 +176,17 @@ private fun RecordScreen(app: AverynApplication) {
             return@LaunchedEffect
         }
         val (elapsedMs, timeMs) = now()
+        // The tracking service restarted by the system runs the same plan; two at once would finish the same
+        // older activity twice. The service's own recovery decides (its notification covers the user's choice).
+        if (!recoveryInFlight.compareAndSet(false, true)) return@LaunchedEffect
         val plan =
-            withContext(Dispatchers.IO) { app.store.planLaunchRecovery(elapsedMs, timeMs, hasPreciseLocation(context)) }
+            try {
+                withContext(Dispatchers.IO) {
+                    app.store.planLaunchRecovery(elapsedMs, timeMs, hasPreciseLocation(context))
+                }
+            } finally {
+                recoveryInFlight.set(false)
+            }
         if (plan.failure != null) notice = resources.getString(R.string.recovery_unreadable)
         val decision = plan.decision ?: return@LaunchedEffect
         if (plan.finishedOlder > 0) {
@@ -186,8 +203,8 @@ private fun RecordScreen(app: AverynApplication) {
             val result = applyRecovery(decision.metadata, finishNow = false)
             if (result is RecoveryResult.Resumed) {
                 context.startForegroundService(Intent(context, TrackingService::class.java))
+                notice = resources.getString(R.string.resumed_notice)
             }
-            notice = resources.getString(R.string.resumed_notice)
         } else {
             pendingRecovery = decision.metadata
         }

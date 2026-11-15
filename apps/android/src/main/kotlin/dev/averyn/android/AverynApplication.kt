@@ -193,7 +193,12 @@ class AverynApplication : Application() {
         appScope.launch {
             // Killed before the first fix: nothing was recorded, and the file would stay for good.
             // The activity this process is recording (a Start tapped at once) is not that file.
-            store.discardEmptyPreparing(exceptId = recorder.currentActivityId)
+            val liveId = recorder.currentActivityId
+            store.discardEmptyPreparing(exceptId = liveId, nowTimeMs = System.currentTimeMillis())
+            // Killed before the first usable fix but holding data: closed as FAILED, kept, and now due for sync.
+            if (store.failOrphanedPreparing(exceptId = liveId, nowTimeMs = System.currentTimeMillis()) > 0) {
+                enqueueSync(this@AverynApplication)
+            }
             store.backfillLocalSummaries()
         }
     }
