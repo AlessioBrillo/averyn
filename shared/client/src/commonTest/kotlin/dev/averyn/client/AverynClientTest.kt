@@ -49,6 +49,22 @@ class AverynClientTest {
     }
 
     @Test
+    fun `a revoked consent is not a grant`() =
+        runTest {
+            val (client, _) =
+                client {
+                    respond(
+                        """[{"scope":"rr_recording","grantedAt":"2026-01-01T00:00:00Z","revokedAt":"2026-01-02T00:00:00Z"},
+                        {"scope":"synapse_sidecar","grantedAt":"2026-01-01T00:00:00Z","revokedAt":null}]""",
+                        HttpStatusCode.OK,
+                        headersOf(HttpHeaders.ContentType, "application/json"),
+                    )
+                }
+            val scopes = client.consents("token").value?.map { it.scope }
+            assertEquals(listOf("synapse_sidecar"), scopes)
+        }
+
+    @Test
     fun `the list is read with the token`() =
         runTest {
             var seen: HttpRequestData? = null
