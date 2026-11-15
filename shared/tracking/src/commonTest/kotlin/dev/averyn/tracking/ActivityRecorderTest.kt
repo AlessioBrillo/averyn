@@ -36,6 +36,32 @@ class ActivityRecorderTest {
     ) = LocationSample(elapsedMs, elapsedMs, lat, 0.0, 5.0)
 
     @Test
+    fun aFailedRecoveryLeavesTheRecorderIdleAndCountsLateFixesAsDropped() {
+        val recorder = ActivityRecorder(store)
+
+        assertFailsWith<Exception> { recorder.recover("missing", 1_000, 1_000) }
+
+        assertEquals(ActivityState.IDLE, recorder.currentState)
+        assertEquals(null, recorder.currentActivityId)
+        recorder.onSample(sample(1_100, 0.0)) // a fix that arrives meanwhile is not appended to a ghost
+        assertEquals(emptyList(), store.interrupted())
+    }
+
+    @Test
+    fun theStateIsTakenOnlyAfterTheRecoveredEventIsStored() {
+        val first = ActivityRecorder(store)
+        first.start("a1", Sport.RUN, 0, 0)
+        first.gpsReady(10, 10)
+        first.onSample(sample(20, 0.0))
+
+        val recovered = ActivityRecorder(store)
+        recovered.recover("a1", 1_000, 1_000)
+
+        assertEquals(ActivityState.RECORDING, recovered.currentState)
+        assertEquals(ActivityState.RECORDING, store.interrupted().single().let { store.lastStateOf(it.activityId) })
+    }
+
+    @Test
     fun interruptFailsBeforeTheFirstFixPausesWhileRecordingAndIgnoresTheRest() {
         val recorder = ActivityRecorder(store)
         assertEquals(null, recorder.interrupt(0, 0, Reason.PROVIDER_DISABLED))

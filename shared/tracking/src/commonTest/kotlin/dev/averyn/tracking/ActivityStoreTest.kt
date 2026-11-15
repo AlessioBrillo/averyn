@@ -274,6 +274,35 @@ class ActivityStoreTest {
     }
 
     @Test
+    fun aPreparingFileStartedJustNowIsNotDiscardedUnderTheRecorder() {
+        store.create(ActivityMetadata("fresh", Sport.RUN, 1_000_000, formatVersion = 2))
+        store.appendEvent("fresh", StateEvent(0, 1_000_000, ActivityState.PREPARING, Reason.USER))
+        store.create(ActivityMetadata("old", Sport.RUN, 0, formatVersion = 2))
+        store.appendEvent("old", StateEvent(0, 0, ActivityState.PREPARING, Reason.USER))
+
+        val removed = store.discardEmptyPreparing(exceptId = null, nowTimeMs = 1_000_000 + 60_000)
+
+        assertEquals(1, removed)
+        assertEquals(setOf("fresh"), store.list().map { it.activityId }.toSet())
+    }
+
+    @Test
+    fun anOrphanedPreparingFileWithDataIsClosedAsFailedAndKept() {
+        store.create(ActivityMetadata("data", Sport.RUN, 0, formatVersion = 2))
+        store.appendEvent("data", StateEvent(0, 0, ActivityState.PREPARING, Reason.USER))
+        store.appendSample("data", LocationSample(10, 10, 0.0, 0.0, 5.0))
+        store.create(ActivityMetadata("fresh", Sport.RUN, 9_000_000, formatVersion = 2))
+        store.appendEvent("fresh", StateEvent(0, 9_000_000, ActivityState.PREPARING, Reason.USER))
+        store.appendSample("fresh", LocationSample(10, 9_000_010, 0.0, 0.0, 5.0))
+
+        assertEquals(1, store.failOrphanedPreparing(exceptId = null, nowTimeMs = 9_000_000 + 60_000))
+
+        assertEquals(ActivityState.FAILED, store.lastStateOf("data"))
+        assertEquals(ActivityState.PREPARING, store.lastStateOf("fresh"))
+        assertEquals(setOf("data", "fresh"), store.list().map { it.activityId }.toSet())
+    }
+
+    @Test
     fun rrSidecarHeaderIsTheActivityItBelongsTo() {
         val metadata = ActivityMetadata("a1", Sport.RIDE, 12_345, formatVersion = 2)
         store.createRrMetadata(metadata)

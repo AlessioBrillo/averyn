@@ -19,6 +19,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
@@ -282,14 +283,24 @@ class TrackingService : Service() {
         val app = application as AverynApplication
         val elapsedMs = SystemClock.elapsedRealtime()
         val timeMs = System.currentTimeMillis()
-        val plan = app.store.planLaunchRecovery(elapsedMs, timeMs, hasPrecisePermission = hasPreciseLocation())
+        val plan = app.store.planLaunchRecovery(elapsedMs, timeMs, hasPrecisePermission = canRecordInBackground(this))
         if (plan.finishedOlder > 0) enqueueSync(this)
         val decision = plan.decision ?: return false
         if (decision.action == ResumeAction.ASK_USER) {
             postInterruptedNotification(this)
             return false
         }
-        return when (recorder.recover(decision.metadata.activityId, elapsedMs, timeMs)) {
+        // An activity file that cannot be recovered (a full disk, a corrupt first line) must not end the process:
+        // START_STICKY would restart it into the same crash. It stays interrupted on disk; the user is told.
+        val result =
+            try {
+                recorder.recover(decision.metadata.activityId, elapsedMs, timeMs)
+            } catch (e: Exception) {
+                Log.w("Averyn", "recovery failed: ${e.javaClass.simpleName}")
+                postInterruptedNotification(this)
+                return false
+            }
+        return when (result) {
             is RecoveryResult.Resumed -> true
             is RecoveryResult.Completed -> {
                 enqueueSync(this)

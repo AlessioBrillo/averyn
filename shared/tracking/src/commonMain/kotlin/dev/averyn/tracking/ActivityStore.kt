@@ -2,6 +2,7 @@ package dev.averyn.tracking
 
 import dev.averyn.domain.ActivityState
 import dev.averyn.domain.LocationSample
+import dev.averyn.domain.Reason
 import dev.averyn.domain.Sport
 import dev.averyn.domain.StateEvent
 import dev.averyn.sensors.HeartRateSample
@@ -84,6 +85,9 @@ sealed interface ActivityRecord {
         val sample: HeartRateSample,
     ) : ActivityRecord
 }
+
+/** A PREPARING file younger than this may belong to an activity being started right now (10 minutes). */
+const val STALE_PREPARING_MS = 10L * 60 * 1000
 
 private const val META_PREFIX = "META "
 private const val SAMPLE_PREFIX = "SAMPLE "
@@ -419,6 +423,60 @@ class ActivityStore(
             removed++
         }
         return removed
+    }
+
+    /**
+     * [discardEmptyPreparing] for a process that may be starting an activity right now: a file started less than
+     * [minAgeMs] ago is left alone, so a Start tapped during the scan is not deleted under the recorder (its next
+     * append would recreate the file without the metadata line, and the activity would vanish silently).
+     */
+    fun discardEmptyPreparing(
+        exceptId: String?,
+        nowTimeMs: Long,
+        minAgeMs: Long = STALE_PREPARING_MS,
+    ): Int {
+        var removed = 0
+        for (metadata in list()) {
+            val id = metadata.activityId
+            if (id == exceptId || nowTimeMs - metadata.startedAtMs < minAgeMs) continue
+            if (lastStateOf(id) != ActivityState.PREPARING || hasSample(id)) continue
+            delete(id)
+            removed++
+        }
+        return removed
+    }
+
+    /**
+     * Closes as FAILED the activities killed while PREPARING that did store a sample (coarse or cached fixes before
+     * the first usable one): [discardEmptyPreparing] keeps them because they hold data, [interrupted] does not list
+     * them because nothing was recording, so without this they stay forever unfinished and are never synced. The
+     * data is kept (TDD-0001 F5); the event is written at the time of the last thing the file recorded.
+     *
+     * @return how many were closed.
+     */
+    fun failOrphanedPreparing(
+        exceptId: String?,
+        nowTimeMs: Long,
+        minAgeMs: Long = STALE_PREPARING_MS,
+    ): Int {
+        var closed = 0
+        for (metadata in list()) {
+            val id = metadata.activityId
+            if (id == exceptId || nowTimeMs - metadata.startedAtMs < minAgeMs) continue
+            if (lastStateOf(id) != ActivityState.PREPARING || !hasSample(id)) continue
+            val replayed = replay(this, id)
+            appendEvent(
+                id,
+                StateEvent(
+                    replayed.lastKnownElapsedRealtimeMs,
+                    replayed.lastKnownTimeMs,
+                    ActivityState.FAILED,
+                    Reason.ERROR,
+                ),
+            )
+            closed++
+        }
+        return closed
     }
 
     private fun hasSample(activityId: String): Boolean {
