@@ -8,8 +8,10 @@ Rule: **vertical slices, GPS validated on real devices first.** The biggest risk
 | **MVP-1** Core | Account, sync, backend, web detail page | Activity recorded offline syncs idempotently and is visible on the web with map + basic metrics; self-host via Compose works from a clean machine |
 | **MVP-2** Analysis & interop | Import/export and analysis | GPX/FIT/TCX import with duplicate detection; charts, elevation, laps, PRs; BLE HR; HealthKit / Health Connect; versioned metrics |
 | **MVP-L** Launch | A free, privacy-first public release built around three moments, proved on real devices ([ADR-0028](../adr/0028-consumer-launch-target.md)) | See [below](#mvp-l-launch) and the live checklist in [mvp-launch.md](mvp-launch.md) |
+| **MVP-4** Social & segments | Community, **before MVP-3** since 2026-11-15 ([ADR-0031](../adr/0031-social-and-community.md)) | Profiles, follow with approval, visibility on every read, feed, likes and comments, block and report, groups, segments, leaderboards, challenges ([TDD-0018](../design/TDD-0018-social-graph.md), draft). Starts only after MVP-L and the campaign rows it touches are green |
 | **MVP-3** Maps & navigation | Route editor, offline maps | Pilot-region routing, offline track following, deviation alerts |
-| **MVP-4** Social & segments | Community | Profiles, follow, feed, segments, leaderboards, moderation (privacy zones moved to MVP-L) |
+
+After MVP-4, one at a time and each with its own ADR or design doc: gym and strength, team sports, coach-athlete, finding training partners (coarse area, opt-in).
 
 Later (Phase 6): standalone smartwatch, training load / fitness-fatigue, challenges, events, public API and plugins, club features, automated cloud deployment.
 

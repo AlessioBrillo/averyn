@@ -75,7 +75,7 @@ What the notice has to be able to say truthfully, from the system as it is:
 
 - Who we are and how to reach us **[controller]**.
 - What we collect: the table in section 1, in plain words. What we do not: advertising ids, contacts, third-party analytics.
-- Why: to record, show and analyse your activities; nothing else. We do not sell data and there is no profiling for advertising.
+- Why: to record, show and analyse your activities; nothing else. We do not sell data and there is no profiling for advertising ([ADR-0032](../adr/0032-revenue-model.md)).
 - Who sees your data: you. Our hosting and email providers process it for us under agreements **[controller]**. There is no sharing with other users in this version.
 - How long: until you delete it; deletion is immediate in our storage; backups expire within **[period]**.
 - Your rights and how to use them in the app and on the web: export, delete an activity, delete the account, edit your settings, withdraw a consent.

@@ -20,7 +20,7 @@ class ApiContractTest {
         "elapsedMs":1800000,"movingMs":1500000,"pausedMs":120000,"stationaryMs":180000,
         "averageSpeedMps":3.4876,"paceSecPerKm":286.7,"qualityGrade":"GOOD","droppedRecords":0,
         "metricsAlgorithmVersion":"distance-v1,time-v1,speed-v1","qualityAlgorithmVersion":"quality-v2",
-        "visibility":"PRIVATE","avgHrBpm":148,"maxHrBpm":171,"hrSource":"ble-hr",
+        "visibility":"private","avgHrBpm":148,"maxHrBpm":171,"hrSource":"ble-hr",
         "hrAlgorithmVersion":"hr-v2","source":"device"}
         """.trimIndent()
 
