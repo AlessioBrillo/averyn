@@ -8,8 +8,10 @@ Rule: **vertical slices, GPS validated on real devices first.** The biggest risk
 | **MVP-1** Core | Account, sync, backend, web detail page | Activity recorded offline syncs idempotently and is visible on the web with map + basic metrics; self-host via Compose works from a clean machine |
 | **MVP-2** Analysis & interop | Import/export and analysis | GPX/FIT/TCX import with duplicate detection; charts, elevation, laps, PRs; BLE HR; HealthKit / Health Connect; versioned metrics |
 | **MVP-L** Launch | A free, privacy-first public release built around three moments, proved on real devices ([ADR-0028](../adr/0028-consumer-launch-target.md)) | See [below](#mvp-l-launch) and the live checklist in [mvp-launch.md](mvp-launch.md) |
-| **MVP-4** Social & segments | Community, **before MVP-3** since 2026-11-15 ([ADR-0031](../adr/0031-social-and-community.md)) | Profiles, follow with approval, visibility on every read, feed, likes and comments, block and report, groups, segments, leaderboards, challenges ([TDD-0018](../design/TDD-0018-social-graph.md), draft). Starts only after MVP-L and the campaign rows it touches are green |
+| **MVP-4** Social & segments | Community, **before MVP-3** since 2026-11-15 ([ADR-0031](../adr/0031-social-and-community.md)) | In this order: profiles and follow with approval, visibility on every read, feed (with title and description), likes, comments and notifications, block, report and moderation, athlete search, gear and goals, photos, groups and clubs, "trained together", segments and leaderboards, challenges, live safety tracking, global heatmap ([TDD-0018](../design/TDD-0018-social-graph.md), draft; additions in [ADR-0034](../adr/0034-social-scope-and-device-openness.md)). Starts only after MVP-L and the campaign rows it touches are green |
 | **MVP-3** Maps & navigation | Route editor, offline maps | Pilot-region routing, offline track following, deviation alerts |
+
+**Devices, after MVP-L** ([ADR-0034](../adr/0034-social-scope-and-device-openness.md)): reading from HealthKit / Health Connect, standard Bluetooth speed, cadence and power profiles, TCX import, and heart-rate, cadence and power from GPX/FIT fields, so any device connects without vendor code. No paywall; a feature tied to the band needs a signal no other source gives accurately.
 
 After MVP-4, one at a time and each with its own ADR or design doc: gym and strength, team sports, coach-athlete, finding training partners (coarse area, opt-in).
 
@@ -26,7 +28,7 @@ Exit criteria (each one is verifiable; the checklist with owners and issues is [
 3. **Privacy you can see.** Recording and viewing work with no account; private zones hide the start and the end in every view and in the card; export and deletion are in the app.
 4. **Data in and out.** GPX and FIT import (single files and an exported archive), full export, write-only HealthKit / Health Connect.
 5. **Sensors.** Standard BLE HR on both platforms (a Synapse band works as a plain strap, level L0). The Synapse feature frame stays a beta that starts when the prototype exists.
-6. **Managed cloud.** Open sign-up with email verification, an EU instance, off-site backups proven by a restore, monitoring and alerting, per-account quota.
+6. **Managed cloud.** Open sign-up with email verification, an EU instance, off-site backups proven by a restore, monitoring and alerting, a high published anti-abuse limit per account ([ADR-0032](../adr/0032-revenue-model.md)).
 7. **Legal and stores.** Privacy policy and terms, Apple privacy label, Play data safety, in-app account deletion, store accounts (personal), the closed test that a new personal Play account requires.
 8. **Quality.** The checks of the [CI gate](../../CLAUDE.md) are green on the final tree, the iOS job and the signed-in round trip included.
 
@@ -90,5 +92,5 @@ Tracked here until they become ADRs (report §24).
 - ~~Cloud provider, map tile source for the managed cloud~~ → proposed, [ADR-0027](../adr/0027-managed-cloud-baseline.md)
 - Routing engine (Valhalla vs. GraphHopper), DEM source, pilot region (MVP-3)
 - Notification strategy; moderation policy (retention of user data: resolved, [ADR-0017](../adr/0017-data-deletion-and-retention.md))
-- Fair-use quota thresholds and club/team plan pricing → [business-model.md](business-model.md)
+- Anti-abuse limit thresholds → [business-model.md](business-model.md)
 - Device compatibility beyond generic BLE HR → the Synapse track above

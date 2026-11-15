@@ -29,7 +29,7 @@ A feature is added when it serves one of the three moments, the privacy promise 
 
 ## Never locked behind a paywall
 
-Access to personal data · export · basic tracking · fundamental metrics · security features · the ability to migrate to a self-hosted install.
+Access to personal data · export · basic tracking · fundamental metrics · security features · the ability to migrate to a self-hosted install. There is no paid tier. A feature may need the Synapse band only when it needs a signal no other supported source gives accurately, and it opens to any device that meets the bar; every device connects through open formats ([ADR-0034](../adr/0034-social-scope-and-device-openness.md)).
 
 ## Independence from third parties
 

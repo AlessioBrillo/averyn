@@ -37,5 +37,6 @@ Format: [MADR](https://adr.github.io/madr/)-style, see [template](template.md). 
 | [0031](0031-social-and-community.md) | Social and community come after the launch, inside one instance, private by default | accepted |
 | [0032](0032-revenue-model.md) | The users' data is never the product; the band is sold in the open; limits only against abuse | accepted |
 | [0033](0033-no-federation.md) | The social graph lives inside one instance; no federation for now | accepted |
+| [0034](0034-social-scope-and-device-openness.md) | Social scope additions; features follow the signal, never the brand; any device connects through open formats | accepted |
 
 Open decisions still without an ADR are tracked in [product/roadmap.md](../product/roadmap.md#open-decisions).
