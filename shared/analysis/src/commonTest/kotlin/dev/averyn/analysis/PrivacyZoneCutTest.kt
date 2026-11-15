@@ -43,6 +43,21 @@ class PrivacyZoneCutTest {
     }
 
     @Test
+    fun twoDistantPointsOutsideAZoneDoNotDrawALineAcrossIt() {
+        // A sparse file (smart recording of a watch, a coarse GPX): steps 0 and 8 are outside, the segment passes over the zone.
+        val zone = PrivacyZone(45.0 + 4 * 0.001, 9.0, 120)
+        val sparse = track(listOf(at(0), at(8), at(9), at(10)))
+
+        assertEquals(listOf(listOf(at(8), at(9), at(10))), sparse.hidingZones(listOf(zone)).geometry?.coordinates)
+        // The same two points with the zone beside the segment (a 400 m side step) keep their line.
+        val beside = PrivacyZone(45.0 + 4 * 0.001, 9.0 + 0.006, 120)
+        assertEquals(
+            listOf(listOf(at(0), at(8), at(9), at(10))),
+            sparse.hidingZones(listOf(beside)).geometry?.coordinates,
+        )
+    }
+
+    @Test
     fun everyLineIsCutOnItsOwnAndNoZoneChangesNothing() {
         val first = List(6) { at(it) }
         val second = List(4) { at(it + 20) }

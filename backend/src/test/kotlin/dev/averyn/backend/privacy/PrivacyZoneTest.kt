@@ -14,11 +14,13 @@ import dev.averyn.backend.content
 import io.ktor.client.HttpClient
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.auth.jwt.JWTPrincipal
@@ -105,6 +107,38 @@ class PrivacyZoneTest {
             save(PrivacyZones())
             assertEquals(PrivacyZones(), zonesOf(alice))
             assertEquals(0L, count("SELECT count(*) FROM privacy_zones"))
+        }
+
+    @Test
+    fun aSaveThatNamesWhatItReadIsRefusedWhenAnotherDeviceChangedTheListMeanwhile() =
+        app {
+            save(PrivacyZones(listOf(home)))
+            val read = get("/v1/privacy-zones") { bearerAuth(alice) }
+            val etag = read.headers[HttpHeaders.ETag]
+            assertTrue(etag != null && etag.startsWith("\""))
+            // Another device saves a second zone.
+            save(PrivacyZones(listOf(home, work)))
+
+            val stale =
+                put("/v1/privacy-zones") {
+                    bearerAuth(alice)
+                    header(HttpHeaders.IfMatch, etag)
+                    contentType(ContentType.Application.Json)
+                    setBody(json.encodeToString(PrivacyZones.serializer(), PrivacyZones(listOf(work))))
+                }
+
+            assertEquals(HttpStatusCode.PreconditionFailed, stale.status)
+            assertEquals(PrivacyZones(listOf(home, work)), zonesOf(alice), "nothing was wiped")
+            val fresh = get("/v1/privacy-zones") { bearerAuth(alice) }.headers[HttpHeaders.ETag]
+            val ok =
+                put("/v1/privacy-zones") {
+                    bearerAuth(alice)
+                    header(HttpHeaders.IfMatch, fresh)
+                    contentType(ContentType.Application.Json)
+                    setBody(json.encodeToString(PrivacyZones.serializer(), PrivacyZones(listOf(work))))
+                }
+            assertEquals(HttpStatusCode.OK, ok.status)
+            assertEquals(PrivacyZones(listOf(work)), zonesOf(alice))
         }
 
     @Test
