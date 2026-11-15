@@ -335,6 +335,8 @@ private fun RecordScreen(app: AverynApplication) {
                     enqueueSync(context)
                 } catch (_: IOException) {
                     notice = resources.getString(R.string.storage_failed)
+                } catch (_: IllegalStateException) {
+                    // The state moved between the dialog and the tap (an interruption): the screen shows the new one.
                 }
             },
         )
@@ -384,6 +386,8 @@ private fun RecordScreen(app: AverynApplication) {
                         recorder.pause(e, t)
                     } catch (_: IOException) {
                         notice = resources.getString(R.string.storage_failed)
+                    } catch (_: IllegalStateException) {
+                        // An interruption paused it first: nothing to do, the screen already shows PAUSED.
                     }
                 },
                 onResume = {
@@ -394,6 +398,8 @@ private fun RecordScreen(app: AverynApplication) {
                         } catch (_: IOException) {
                             notice = resources.getString(R.string.storage_failed)
                             return@Controls
+                        } catch (_: IllegalStateException) {
+                            return@Controls // already recording again: nothing to resume
                         }
                         // The service may have stopped itself while the activity was paused for a missing
                         // permission or a disabled provider: starting it again is a no-op when it is running.
@@ -405,7 +411,12 @@ private fun RecordScreen(app: AverynApplication) {
                 onStop = { confirmingStop = true },
                 preparingSinceMs = recorder.currentMetadata()?.startedAtMs ?: 0L,
                 onCancel = {
-                    recorder.cancel()
+                    try {
+                        recorder.cancel()
+                    } catch (_: IllegalStateException) {
+                        // The first fix arrived meanwhile and the recording started: the screen shows it, Cancel is gone.
+                        return@Controls
+                    }
                     context.stopService(Intent(context, TrackingService::class.java))
                     historyVersion++
                 },
@@ -871,7 +882,12 @@ private fun Controls(
                 Button(onClick = onResume) { Text(stringResource(R.string.resume)) }
                 Button(onClick = onStop) { Text(stringResource(R.string.stop)) }
             }
-        ActivityState.STOPPING -> Text(stringResource(R.string.finishing))
+        ActivityState.STOPPING ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.finishing))
+                // Only stays here when the last write failed (a full disk): Stop tries to close the activity again.
+                Button(onClick = onStop) { Text(stringResource(R.string.stop)) }
+            }
     }
 }
 

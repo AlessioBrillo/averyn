@@ -262,12 +262,28 @@ class BleHrAdapter(
                         }
                     }
 
+                    // Android 13+ hands the value as an argument: reading `characteristic.value` there can see the
+                    // next notification's bytes if one arrives meanwhile. Older systems call the deprecated overload.
+                    override fun onCharacteristicChanged(
+                        gatt: BluetoothGatt,
+                        characteristic: BluetoothGattCharacteristic,
+                        value: ByteArray,
+                    ) {
+                        if (characteristic.uuid == HEART_RATE_MEASUREMENT) handleFrame(value)
+                    }
+
+                    @Deprecated("Deprecated in Java")
                     override fun onCharacteristicChanged(
                         gatt: BluetoothGatt,
                         characteristic: BluetoothGattCharacteristic,
                     ) {
+                        // Android 13+ calls the overload above, with the value as an argument.
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) return
                         if (characteristic.uuid != HEART_RATE_MEASUREMENT) return
-                        val data = characteristic.value ?: return
+                        handleFrame(characteristic.value ?: return)
+                    }
+
+                    private fun handleFrame(data: ByteArray) {
                         val now = System.currentTimeMillis()
                         val elapsed = android.os.SystemClock.elapsedRealtime()
                         val (results, _) = parseHeartRateFrames(data, 0, elapsed, now)
