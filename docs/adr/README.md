@@ -34,5 +34,8 @@ Format: [MADR](https://adr.github.io/madr/)-style, see [template](template.md). 
 | [0028](0028-consumer-launch-target.md) | The launch target: a free, privacy-first consumer app built around three moments, proved on devices first | accepted |
 | [0029](0029-upload-keeps-valid-lines.md) | An upload with unusable lines keeps the valid ones and counts the rest | accepted |
 | [0030](0030-synapse-contract-v2-1-and-raw-signals.md) | Synapse contract v2.2 (written as v2.1), and the raw signals shown only in Averyn (L1R, scope `raw_signals`) | accepted |
+| [0031](0031-social-and-community.md) | Social and community come after the launch, inside one instance, private by default | accepted |
+| [0032](0032-revenue-model.md) | The users' data is never the product; the band is sold in the open; limits only against abuse | accepted |
+| [0033](0033-no-federation.md) | The social graph lives inside one instance; no federation for now | accepted |
 
 Open decisions still without an ADR are tracked in [product/roadmap.md](../product/roadmap.md#open-decisions).

@@ -81,7 +81,7 @@ class HistoryRepositoryTest {
         droppedRecords = 0,
         metricsAlgorithmVersion = "distance-v1,time-v1,speed-v1",
         qualityAlgorithmVersion = "quality-v2",
-        visibility = "PRIVATE",
+        visibility = "private",
         avgHrBpm = 140,
         maxHrBpm = 160,
         hrSource = "ble-hr",

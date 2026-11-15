@@ -9,9 +9,10 @@ Averyn (codename) is an open-source, self-hostable sports platform for iOS, Andr
 3. Privacy that the user can see: no account needed to record, private zones, one-tap export and deletion
 4. Everything free, with a managed cloud that costs the user nothing
 5. Sensors that just work: any standard heart-rate strap, and the Synapse band as a companion
-6. Advanced analysis, then offline maps and navigation, then social and community
+6. Social and community, free and private by default, right after the launch ([ADR-0031](../adr/0031-social-and-community.md)): profiles, follow, feed, groups, segments, challenges, then sections for more kinds of athlete
+7. Advanced analysis, then offline maps and navigation
 
-Broad feature parity with established platforms is no longer a goal in itself: a feature is added when it serves one of the three moments or the privacy promise ([ADR-0028](../adr/0028-consumer-launch-target.md)).
+A feature is added when it serves one of the three moments, the privacy promise or the community ([ADR-0028](../adr/0028-consumer-launch-target.md), [ADR-0031](../adr/0031-social-and-community.md)). The users' data is never the product: no profiling, no advertising built on it ([ADR-0032](../adr/0032-revenue-model.md)).
 
 ## Principles
 

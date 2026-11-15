@@ -28,7 +28,7 @@ class AverynClientTest {
         "finalState":"COMPLETED","distanceM":1000.0,"elapsedMs":600000,"movingMs":500000,"pausedMs":60000,
         "stationaryMs":40000,"averageSpeedMps":2.0,"paceSecPerKm":500.0,"qualityGrade":"GOOD","droppedRecords":0,
         "metricsAlgorithmVersion":"distance-v1,time-v1,speed-v1","qualityAlgorithmVersion":"quality-v2",
-        "visibility":"PRIVATE","avgHrBpm":0,"maxHrBpm":0,"hrSource":"none","hrAlgorithmVersion":"hr-v2"}
+        "visibility":"private","avgHrBpm":0,"maxHrBpm":0,"hrSource":"none","hrAlgorithmVersion":"hr-v2"}
         """.trimIndent()
 
     private fun client(
