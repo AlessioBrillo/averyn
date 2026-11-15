@@ -95,6 +95,16 @@ class UserData(
                 stmt.setObject(2, found)
                 stmt.executeUpdate()
             }
+            // The same for the band sidecars: without it a phone still holding one gets 404 on every pass and re-sends
+            // up to 48 MB each time; with it, the server answers 410 and the phone drops its copy.
+            val synapseTombstone =
+                "INSERT INTO deleted_synapse (owner_id, client_activity_id, kind) " +
+                    "SELECT ?, ?, k FROM (VALUES ('features'), ('raw')) AS t (k) ON CONFLICT DO NOTHING"
+            conn.prepareStatement(synapseTombstone).use { stmt ->
+                stmt.setObject(1, ownerId)
+                stmt.setObject(2, found)
+                stmt.executeUpdate()
+            }
         }
         return true
     }

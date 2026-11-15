@@ -2,6 +2,7 @@ package dev.averyn.backend.synapse
 
 import dev.averyn.api.SynapseSummaryDto
 import dev.averyn.backend.activities.DEFAULT_REQUESTS_PER_MINUTE
+import dev.averyn.backend.activities.MAX_CONCURRENT_UPLOADS
 import dev.averyn.backend.activities.PER_USER
 import dev.averyn.backend.activities.errorBody
 import dev.averyn.backend.activities.owner
@@ -13,17 +14,20 @@ import dev.averyn.backend.consent.ConsentStore
 import dev.averyn.backend.storage.RawObjectStore
 import dev.averyn.sensors.SynapseRawStream
 import dev.averyn.sensors.readSynapseSidecar
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.auth.authenticate
 import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.request.contentLength
+import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.get
 import io.ktor.server.routing.put
 import io.ktor.server.routing.routing
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
 import java.nio.file.Files
 import java.util.UUID
@@ -55,6 +59,7 @@ fun Application.synapse(
     quotaBytes: Long,
     requestsPerMinute: Int = DEFAULT_REQUESTS_PER_MINUTE,
     store: SynapseStore = SynapseStore(db, raw),
+    uploadSlots: Semaphore = Semaphore(MAX_CONCURRENT_UPLOADS),
 ) {
     perUserRateLimit(requestsPerMinute)
     val cache =
@@ -101,56 +106,74 @@ fun Application.synapse(
                             errorBody("${kind.wireName} file too large"),
                         )
                     }
-                    withContext(Dispatchers.IO) {
-                        val dir = Files.createTempDirectory("averyn-synapse-")
-                        try {
-                            val file = dir.resolve("$clientId.${kind.wireName}.bin")
-                            var sha256 =
-                                call.receiveToFile(file, limit)
-                                    ?: return@withContext call.respond(
-                                        HttpStatusCode.PayloadTooLarge,
-                                        errorBody("file too large"),
+                    // A raw sidecar is read whole (up to 48 MB) to be checked: as for the activity file, only so many at a time.
+                    if (!uploadSlots.tryAcquire()) {
+                        call.response.header(HttpHeaders.RetryAfter, "5")
+                        return@put call.respond(
+                            HttpStatusCode.ServiceUnavailable,
+                            errorBody("too many uploads, retry later"),
+                        )
+                    }
+                    try {
+                        withContext(Dispatchers.IO) {
+                            val dir = Files.createTempDirectory("averyn-synapse-")
+                            try {
+                                val file = dir.resolve("$clientId.${kind.wireName}.bin")
+                                var sha256 =
+                                    call.receiveToFile(file, limit)
+                                        ?: return@withContext call.respond(
+                                            HttpStatusCode.PayloadTooLarge,
+                                            errorBody("file too large"),
+                                        )
+                                var bytes = Files.readAllBytes(file)
+                                // A whole record at least; a cut tail (the app was killed mid-write) is allowed and ignored.
+                                if (readSynapseSidecar(bytes).records.isEmpty()) {
+                                    return@withContext call.respond(
+                                        HttpStatusCode.UnprocessableEntity,
+                                        errorBody("the sidecar has no whole record"),
                                     )
-                            var bytes = Files.readAllBytes(file)
-                            // A whole record at least; a cut tail (the app was killed mid-write) is allowed and ignored.
-                            if (readSynapseSidecar(bytes).records.isEmpty()) {
-                                return@withContext call.respond(
-                                    HttpStatusCode.UnprocessableEntity,
-                                    errorBody("the sidecar has no whole record"),
-                                )
-                            }
-                            if (kind == SynapseKind.FEATURES) {
-                                // signal_quality lets the sidecar in; stress, RR and the band's HRV are separate
-                                // consents (ADR-0021), so the fields of a scope not granted are never written.
-                                val ungranted = ungrantedFields { consentStore.isGranted(owner, it) }
-                                if (ungranted.isNotEmpty()) {
-                                    bytes = maskFeatureSidecar(bytes, ungranted)
-                                    Files.write(file, bytes)
-                                    sha256 = sha256Hex(bytes)
                                 }
+                                if (kind == SynapseKind.FEATURES) {
+                                    // signal_quality lets the sidecar in; stress, RR and the band's HRV are separate
+                                    // consents (ADR-0021), so the fields of a scope not granted are never written.
+                                    val ungranted = ungrantedFields { consentStore.isGranted(owner, it) }
+                                    if (ungranted.isNotEmpty()) {
+                                        bytes = maskFeatureSidecar(bytes, ungranted)
+                                        Files.write(file, bytes)
+                                        sha256 = sha256Hex(bytes)
+                                    }
+                                }
+                                val previous = store.get(owner, clientId, kind)
+                                val stored = store.storedBytes(owner) - (previous?.sizeBytes ?: 0L)
+                                if (stored + bytes.size > quotaBytes) {
+                                    return@withContext call.respond(
+                                        HttpStatusCode.InsufficientStorage,
+                                        errorBody("storage quota exceeded"),
+                                    )
+                                }
+                                val key = store.keyOf(owner, clientId, kind, sha256)
+                                raw.put(key, file)
+                                if (!store.record(
+                                        owner,
+                                        clientId,
+                                        kind,
+                                        StoredSidecar(key, sha256, bytes.size.toLong()),
+                                    )
+                                ) {
+                                    raw.delete(key)
+                                    return@withContext call.respond(
+                                        HttpStatusCode.NotFound,
+                                        errorBody("the activity does not exist"),
+                                    )
+                                }
+                                if (previous != null && previous.objectKey != key) raw.delete(previous.objectKey)
+                                call.respond(HttpStatusCode.NoContent)
+                            } finally {
+                                dir.toFile().deleteRecursively()
                             }
-                            val previous = store.get(owner, clientId, kind)
-                            val stored = store.storedBytes(owner) - (previous?.sizeBytes ?: 0L)
-                            if (stored + bytes.size > quotaBytes) {
-                                return@withContext call.respond(
-                                    HttpStatusCode.InsufficientStorage,
-                                    errorBody("storage quota exceeded"),
-                                )
-                            }
-                            val key = store.keyOf(owner, clientId, kind, sha256)
-                            raw.put(key, file)
-                            if (!store.record(owner, clientId, kind, StoredSidecar(key, sha256, bytes.size.toLong()))) {
-                                raw.delete(key)
-                                return@withContext call.respond(
-                                    HttpStatusCode.NotFound,
-                                    errorBody("the activity does not exist"),
-                                )
-                            }
-                            if (previous != null && previous.objectKey != key) raw.delete(previous.objectKey)
-                            call.respond(HttpStatusCode.NoContent)
-                        } finally {
-                            dir.toFile().deleteRecursively()
                         }
+                    } finally {
+                        uploadSlots.release()
                     }
                 }
 

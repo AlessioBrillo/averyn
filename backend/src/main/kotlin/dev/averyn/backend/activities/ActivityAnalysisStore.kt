@@ -279,6 +279,7 @@ class ActivityAnalysisStore(
                         OR an.analysis_schema_version <> ?::integer
                         OR an.hr_algorithm_version <> ?::text
                         OR an.best_efforts_version <> ?::text
+                        OR an.metrics_algorithm_version <> ?::text
                     ORDER BY a.started_at, a.id
                     """.trimIndent(),
                 ).use { stmt ->
@@ -289,6 +290,7 @@ class ActivityAnalysisStore(
                     stmt.setInt(++i, ANALYSIS_SCHEMA_VERSION)
                     stmt.setString(++i, HR_ALGORITHM_VERSION)
                     stmt.setString(++i, BEST_EFFORTS_ALGORITHM_VERSION)
+                    stmt.setString(++i, METRICS_ALGORITHM_VERSION)
                     stmt.executeQuery().use { rs ->
                         buildList {
                             while (rs.next()) {
