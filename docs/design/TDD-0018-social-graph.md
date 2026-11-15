@@ -14,7 +14,7 @@ Profiles, follow with approval, visibility enforced on every read, and a chronol
 
 Goals: a public profile (display name, sport, optional bio, no required real name); follow requests the followed approves; per-activity visibility (`private` default, `followers`, `public`, `link`); a feed of the followed people's visible activities.
 
-Non-goals (this TDD): likes, comments and push ([next slice](../adr/0031-social-and-community.md)), groups, segments, federation, ranking, any use of health data.
+Non-goals (this TDD): likes, comments and push ([next slice](../adr/0031-social-and-community.md)), groups, segments, federation, ranking, any use of health data, and the additions of [ADR-0034](../adr/0034-social-scope-and-device-openness.md) (search, gear and goals, photos, trained together, live tracking, heatmap), each with its own TDD when it starts.
 
 ## 3. Functional requirements
 

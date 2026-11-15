@@ -17,7 +17,7 @@ Data path: band → BLE → phone (Averyn) → sync → Averyn cloud. Nothing el
 
 ## Principle
 
-A Synapse band is one BLE sensor among others. Averyn's generic sensor support (standard Heart Rate, Battery, Device Information, FIT import, HealthKit, Health Connect) works with **zero** Synapse-specific code. Everything below the first level is the additional, optional layer for the band's extra signals, and it never gates a core feature.
+A Synapse band is one BLE sensor among others. Averyn's generic sensor support (standard Heart Rate, Battery, Device Information, FIT import, HealthKit, Health Connect) works with **zero** Synapse-specific code. Everything below the first level is the additional, optional layer for the band's extra signals, and it never gates a core feature. A feature may need the band only when it needs a signal no other supported source gives accurately; the rule follows the signal, not the brand ([ADR-0034](../adr/0034-social-scope-and-device-openness.md)).
 
 ## 1. The pinned contract
 

@@ -10,14 +10,14 @@ Averyn is free and fully functional without any hardware purchase. Nothing in [v
 
 | User type | What they get free | What funds their cost |
 |---|---|---|
-| Everyone (GPS-only or Synapse owner) | Tracking, analysis, export, self-host option, the managed sync with a fair-use quota per account — everything in [vision.md](vision.md)'s never-paywalled list | The managed cloud at launch is small (activities and their analysis, no maps hosting, no photos, no routing). Its cost is paid by the margin of the Synapse band and by donations; see below for the limit of that promise |
+| Everyone (GPS-only or Synapse owner) | Tracking, analysis, export, self-host option, the managed sync with a high anti-abuse limit per account — everything in [vision.md](vision.md)'s never-paywalled list | The managed cloud at launch is small (activities and their analysis, no maps hosting, no photos, no routing). Its cost is paid by the margin of the Synapse band and by donations; see below for the limit of that promise |
 | Synapse hardware owner | Everything above, plus the band's own data through the [Synapse integration](../integrations/synapse.md) | Hardware margin, see below |
 
 **Since 2026-11-15 ([ADR-0032](../adr/0032-revenue-model.md)):** no feature is limited by plan, the users' data is never used to profile or to aim advertising, and the band is presented openly in the app (sensors page, pairing, first run), the same for everyone. Where this page says "quota", read an **anti-abuse limit**: high, published, and never lowered for a single account.
 
-Fair-use quotas are a **cost-shape decision, not a feature lock**: a self-hoster pays nothing extra (their own infrastructure), and the managed cloud has a per-account quota on stored raw data (it already exists in the backend). Quotas on offline maps, routing and photos are not part of the launch: those features do not exist before MVP-3 and the model is revisited then.
+The anti-abuse limit is a **cost-shape decision, not a feature lock**: a self-hoster pays nothing extra (their own infrastructure), and the managed cloud has a per-account limit on stored raw data (it already exists in the backend). Photos, maps and routing are not part of the launch; their limits are set when they exist, on the same rule ([ADR-0034](../adr/0034-social-scope-and-device-openness.md)).
 
-**The promise has a limit, written down so it is not forgotten.** "The band pays for the free cloud" holds only while the number of cloud users is covered by the margin of the bands sold. Until bands are sold the cloud is paid by the project itself (one small VM, see [ADR-0027](../adr/0027-managed-cloud-baseline.md)). If the free users grow faster than the margin, the order of reaction is: tighten the quota, ask for donations, and only then discuss a paid tier for something that is not on the never-paywalled list. Local use without an account and self-hosting are never affected.
+**The promise has a limit, written down so it is not forgotten.** "The band pays for the free cloud" holds only while the number of cloud users is covered by the margin of the bands sold. Until bands are sold the cloud is paid by the project itself (one small VM, see [ADR-0027](../adr/0027-managed-cloud-baseline.md)). If the free users grow faster than the margin, the order of reaction is: ask for donations, check what the limit costs, and, if that is not enough, a new ADR; there is no paid tier ([ADR-0032](../adr/0032-revenue-model.md), [ADR-0034](../adr/0034-social-scope-and-device-openness.md)). Local use without an account and self-hosting are never affected.
 
 ## Hardware economics (corrected)
 
@@ -32,7 +32,7 @@ The original figures (BOM ~€120, price €249, margin €129 ≈ 52%) miscount
 | Gross margin before overhead | ~€84 (≈34% of net, not 52% of gross) | BOM subtracted from **net**, not gross, revenue |
 | Not yet subtracted | packaging, shipping, payment processing fees, returns/warranty reserve, one-off costs (certification, tooling, PCB NRE) | Each is `[assumption: unknown]` — these commonly run in the low tens of thousands of euros one-off, plus a few euros per unit ongoing |
 
-**"Margin funds N years of cloud" only holds after those deductions and only for the Synapse-owning subset of users** — it is only a partial answer for users who do not own a band, which is why the quota and the donations stay in the model (see the limit above).
+**"Margin funds N years of cloud" only holds after those deductions and only for the Synapse-owning subset of users** — it is only a partial answer for users who do not own a band, which is why the anti-abuse limit and the donations stay in the model (see the limit above).
 
 ## Regulatory constraints on the hardware business
 
@@ -44,7 +44,6 @@ Flagged here so they aren't quietly assumed solved — actual legal review is re
 
 ## Open decisions
 
-- Fair-use quota thresholds of the managed sync — set from the first months of real usage, not guessed now. Maps, routing and photos: at MVP-3.
-- Club/team plan pricing — deferred to when there's a plan worth pricing.
+- Anti-abuse limit thresholds of the managed sync — set from the first months of real usage, not guessed now. Photos, maps and routing: when they exist.
 - Legal entity: the apps are published by a natural person at launch ([ADR-0028](../adr/0028-consumer-launch-target.md)). **Selling the band needs a company** (VAT, RED, warranty, product liability) and so does a managed service that grows; the controller of the managed cloud is the same person until then, and that has a liability cost to weigh before the cloud opens.
 - Real BOM, certification and one-off costs — replace the `[assumption]` figures above once known.
