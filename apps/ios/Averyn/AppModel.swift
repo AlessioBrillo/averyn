@@ -123,9 +123,12 @@ final class AppModel {
     /// stops GPS tracking.
     private func startHeartRate() {
         guard !heartRateActive, let activityId = recorder.currentActivityId else { return }
+        let source: HeartRateSource = BandPrefs.useBand ? band : heartRate
+        // Bluetooth off or not yet known at the first fix: nothing is marked as started, so the next fix tries again
+        // (the Android service does the same on every fix).
+        guard source.isAvailable else { return }
         heartRateActive = true
         startConsentRefresh()
-        let source: HeartRateSource = BandPrefs.useBand ? band : heartRate
         activeSource = source
         source.onSample = { [weak self] sample in
             self?.feedHeartRate(sample)
@@ -136,13 +139,11 @@ final class AppModel {
         source.onInvalid = { [weak self] in
             self?.recorder.recordDroppedInput(reason: .invalidHeartRate)
         }
-        if source.isAvailable {
-            Task {
-                do {
-                    try await source.start(sessionId: activityId)
-                } catch {
-                    // Sensor errors are non-fatal: recording continues without HR.
-                }
+        Task {
+            do {
+                try await source.start(sessionId: activityId)
+            } catch {
+                // Sensor errors are non-fatal: recording continues without HR.
             }
         }
     }
@@ -245,9 +246,16 @@ final class AppModel {
     func backfillLocalSummaries() {
         // Read on the main actor, where the recorder lives: the activity being prepared right now is not that file.
         let live = recorder.currentActivityId
-        DispatchQueue.global(qos: .utility).async { [store] in
-            // Killed before the first fix: nothing was recorded, and the file would stay for good.
-            store.discardEmptyPreparing(exceptId: live)
+        DispatchQueue.global(qos: .utility).async { [store, weak self] in
+            // Killed before the first fix: nothing was recorded, and the file would stay for good. A file started in
+            // the last 10 minutes is left alone: it may be an activity the user is starting while this scan runs.
+            let now = nowTimeMs()
+            _ = try? store.discardEmptyPreparing(exceptId: live, nowTimeMs: now, minAgeMs: 600_000)
+            // Killed before the first usable fix but holding data: closed as FAILED, kept, and due for upload.
+            if let closed = try? store.failOrphanedPreparing(exceptId: live, nowTimeMs: now, minAgeMs: 600_000),
+               closed.intValue > 0 {
+                Task {  in await self?.sync.syncNow() }
+            }
             store.backfillLocalSummaries(limit: 20)
         }
     }
@@ -277,18 +285,21 @@ final class AppModel {
             // The user may have pressed Start while the files were read: that recording owns the recorder.
             guard let decision = plan.decision, decision.action == ResumeAction.resumeNow, recorder.currentState == .idle
             else { return }
-            applyRecovery(decision, elapsedMs: elapsedMs, timeMs: timeMs)
+            await applyRecovery(decision, elapsedMs: elapsedMs, timeMs: timeMs)
         }
     }
 
-    private func applyRecovery(_ decision: ResumeDecision, elapsedMs: Int64, timeMs: Int64) {
-        // A full disk makes the replay's RECOVERED event fail: the file stays interrupted and the user is asked at
-        // the next launch, instead of the app being killed for it.
-        guard let result = try? recorder.recover(
-            activityId: decision.metadata.activityId,
-            nowElapsedRealtimeMs: elapsedMs,
-            nowTimeMs: timeMs
-        ) else { return }
+    private func applyRecovery(_ decision: ResumeDecision, elapsedMs: Int64, timeMs: Int64) async {
+        // The replay reads the whole file (a 3 h one is ~10k lines): off the main thread, where a slow relaunch is
+        // killed by iOS. The recorder is single-threaded and nothing else touches it meanwhile (it is idle, and the
+        // caller has just checked that). A full disk makes the RECOVERED event fail: the file stays interrupted and
+        // the user is asked at the next launch, instead of the app being killed for it.
+        let recorder = self.recorder
+        let activityId = decision.metadata.activityId
+        let recovered = await Task.detached(priority: .userInitiated) {
+            try? recorder.recover(activityId: activityId, nowElapsedRealtimeMs: elapsedMs, nowTimeMs: timeMs)
+        }.value
+        guard let result = recovered else { return }
         if result is RecoveryResult.Resumed {
             tracker.start()
             resumedAtLaunch = true
