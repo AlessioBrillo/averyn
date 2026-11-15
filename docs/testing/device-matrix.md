@@ -79,7 +79,7 @@ Setup common to all: fully charged unless the scenario says otherwise, precise l
 
 ### Recovery loss (S5/S6)
 
-"Loses ≤ 1 sample interval" is a durability claim: every fix the app received before the kill is on disk. It cannot be read from the phone alone, so the tester records the **kill instant** (wall clock, to the second: `adb shell date +%T` before `am kill`, or a stopwatch app for a swipe). In the diagnostics, `recoveryGaps[n].lastSampleBeforeMs` is the wall time of the last stored sample. Pass: `kill instant − lastSampleBeforeMs ≤ 1 s` (one 1 s interval; +1 s tolerance for clock reading). `gapMs` (time without GPS until recording resumed) is reported separately as resume latency; it is not part of the criterion.
+"Loses ≤ 1 sample interval" is a durability claim: every fix the app received before the kill is on disk. It cannot be read from the phone alone, so the tester records the **kill instant** (wall clock, to the second: `tools/campaign/adb-kill.sh` kills the app and prints the phone's clock as epoch milliseconds for `--kill-at`; a stopwatch app for a swipe). In the diagnostics, `recoveryGaps[0].lastSampleBeforeMs` is the wall time of the last stored sample. Pass: `kill instant − lastSampleBeforeMs ≤ 1 s` (one 1 s interval; +1 s tolerance for clock reading). `gapMs` (time without GPS until recording resumed) is reported separately as resume latency; it is not part of the criterion.
 
 ### GPX validation
 
