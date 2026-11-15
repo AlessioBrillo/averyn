@@ -366,14 +366,18 @@ class ActivityRecorder(
         elapsedRealtimeMs: Long,
         timeMs: Long,
     ): CompletedActivity {
-        val stopping = state.transitionTo(ActivityState.STOPPING)
-        logEvent(elapsedRealtimeMs, timeMs, ActivityState.STOPPING, Reason.USER)
-        state = stopping
-        metrics.finish(effective(elapsedRealtimeMs))
-        trackLastKnown(elapsedRealtimeMs, timeMs)
-        // The counts of a reason repeated fewer than ten times since the last write are still only in memory:
-        // the history reads them from the file, so they go there before the activity is closed.
-        if (droppedInputs.isNotEmpty()) persistDroppedInputs()
+        // STOPPING already: an earlier stop() wrote that event and then could not write COMPLETED (a full disk). The
+        // retry only closes the activity; the first half is not repeated.
+        if (state != ActivityState.STOPPING) {
+            val stopping = state.transitionTo(ActivityState.STOPPING)
+            logEvent(elapsedRealtimeMs, timeMs, ActivityState.STOPPING, Reason.USER)
+            state = stopping
+            metrics.finish(effective(elapsedRealtimeMs))
+            trackLastKnown(elapsedRealtimeMs, timeMs)
+            // The counts of a reason repeated fewer than ten times since the last write are still only in memory:
+            // the history reads them from the file, so they go there before the activity is closed.
+            if (droppedInputs.isNotEmpty()) persistDroppedInputs()
+        }
         val completed = state.transitionTo(ActivityState.COMPLETED)
         logEvent(elapsedRealtimeMs, timeMs, ActivityState.COMPLETED, Reason.USER)
         state = completed

@@ -18,6 +18,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -93,8 +94,15 @@ class TrackingService : Service() {
     private var lastFixMs: Long = 0
     private var gpsLostPosted = false
 
+    // The watchdog, the consent refresh and the strap rescan are Handler timers, which stop while the CPU sleeps; with
+    // no fix arriving (a tunnel, a pocket) nothing else wakes it. Held only while PREPARING/RECORDING (D4); S8 measures
+    // its cost.
+    private var wakeLock: PowerManager.WakeLock? = null
+
     companion object {
         private const val WATCHDOG_CHECK_INTERVAL_MS = 2L * 60 * 1000 // check every 2 minutes
+        private const val WAKE_LOCK_MAX_MS = 14L * 60 * 60 * 1000 // a leak ends by itself; the longest run is far below
+        private val ACTIVE_STATES = setOf(ActivityState.PREPARING, ActivityState.RECORDING, ActivityState.PAUSED)
     }
 
     private val watchdogRunnable: Runnable =
@@ -176,6 +184,9 @@ class TrackingService : Service() {
                 // lost while still PREPARING (before the first fix) has no "resume" to offer, so it fails
                 // outright instead of pausing — otherwise the activity would wait for GPS forever.
                 interrupt(Reason.PROVIDER_DISABLED)
+                // The phone is in a pocket: without this the run is lost to PAUSED while the notification still says
+                // "Recording". The same tap-to-resume notice the recovery uses.
+                if (recorder.currentState == ActivityState.PAUSED) postInterruptedNotification(this@TrackingService)
             }
         }
 
@@ -187,6 +198,7 @@ class TrackingService : Service() {
         removeRecorderListener =
             (application as AverynApplication).addRecorderListener { snapshot ->
                 if (snapshot.state.isTerminal) stopHr()
+                updateWakeLock(snapshot.state)
                 // A FAILED activity (the provider lost before the first fix, a full disk) has nothing left to feed: the
                 // service ends instead of sitting in the foreground with a notification and no recording.
                 if (snapshot.state == ActivityState.FAILED) stopSelf()
@@ -248,7 +260,7 @@ class TrackingService : Service() {
         // The consent is the server's answer, not the app's: ask before the first interval is recorded.
         app.refreshConsents()
         // If the recorder already serves an activity (started from the UI), just keep feeding fixes.
-        if (recorder.currentState != ActivityState.IDLE) {
+        if (recorder.currentState in ACTIVE_STATES) {
             startLocationUpdates()
             return START_STICKY
         }
@@ -316,6 +328,7 @@ class TrackingService : Service() {
         locationManager.removeUpdates(listener)
         watchdogHandler.removeCallbacks(watchdogRunnable)
         cancelGpsLostNotification(this)
+        updateWakeLock(ActivityState.IDLE)
         stopHr()
         hrScope.coroutineContext[Job]?.cancel()
         super.onDestroy()
@@ -345,6 +358,20 @@ class TrackingService : Service() {
         sensor = null
     }
 
+    private fun updateWakeLock(state: ActivityState) {
+        val wanted = state == ActivityState.PREPARING || state == ActivityState.RECORDING
+        val held = wakeLock
+        if (wanted && held == null) {
+            wakeLock =
+                getSystemService(PowerManager::class.java)
+                    .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "averyn:recording")
+                    .apply { acquire(WAKE_LOCK_MAX_MS) }
+        } else if (!wanted && held != null) {
+            if (held.isHeld) held.release()
+            wakeLock = null
+        }
+    }
+
     private fun hasPreciseLocation() =
         ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
@@ -368,6 +395,7 @@ class TrackingService : Service() {
             // Android 14+: background restart with only while-in-use location throws here. The activity stays
             // interrupted in the store; the user is one tap away from resuming it — never a crash loop.
             interruptAndStop(Reason.PERMISSION_REVOKED)
+            return
         }
         // Start watching for a silent loss of fixes while recording (F1.7 / S5). The clock starts now, so a restart
         // that never gets a fix (no background location on Android 11-13) is told apart from a quiet start.

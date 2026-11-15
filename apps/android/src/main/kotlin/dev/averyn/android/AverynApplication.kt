@@ -25,6 +25,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.io.IOException
 import kotlinx.io.files.Path
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
@@ -217,10 +218,17 @@ fun AverynApplication.feedInvalidHeartRate() {
 fun AverynApplication.feedRrInterval(rr: RrInterval) {
     if (!hasRrConsent) return
     val activityId = recorder.currentActivityId ?: return
-    // The sidecar gets its own header before the first interval: a file without one has no activity to
-    // belong to (ADR-0020). The check is a file existence test, not a read of the file, for every interval.
-    if (!store.hasRr(activityId)) {
-        recorder.currentMetadata()?.let { store.createRrMetadata(it) }
+    // A callback already posted when the activity ended: its sidecar belongs to a finished (possibly uploaded) one.
+    if (recorder.currentState.isTerminal) return
+    try {
+        // The sidecar gets its own header before the first interval: a file without one has no activity to
+        // belong to (ADR-0020). The check is a file existence test, not a read of the file, for every interval.
+        if (!store.hasRr(activityId)) {
+            recorder.currentMetadata()?.let { store.createRrMetadata(it) }
+        }
+        store.appendRrInterval(activityId, rr)
+    } catch (_: IOException) {
+        // A full disk: the interval is lost and counted, and the main thread (where this runs) stays up.
+        recorder.recordDroppedInput(DroppedInputReason.STORAGE_WRITE_FAILED)
     }
-    store.appendRrInterval(activityId, rr)
 }
