@@ -88,7 +88,8 @@ class AverynClient(
             busyOnServiceUnavailable = true,
         ) { json.decodeFromString(ActivityAnalysis.serializer(), it) }
 
-    /** The caller's active consent grants (ADR-0021). Fail-closed: an empty list when the server cannot
+    /** The caller's active consent grants (ADR-0021): the server also lists the revoked ones, they are dropped here
+     *  so no adapter reads a revoked scope as a grant. Fail-closed: an empty list when the server cannot
      *  be reached or answers unsuccessfully, so the adapter never self-grants RR recording. */
     override suspend fun consents(accessToken: String): ApiResult<List<ConsentGrant>> =
         get(
@@ -98,10 +99,9 @@ class AverynClient(
             val element = json.decodeFromString(JsonElement.serializer(), body)
             when (element) {
                 is JsonArray ->
-                    element.map { item ->
-                        val itemStr = item.toString()
-                        json.decodeFromString(ConsentGrant.serializer(), itemStr)
-                    }
+                    element
+                        .map { json.decodeFromString(ConsentGrant.serializer(), it.toString()) }
+                        .filter { it.revokedAt == null }
                 else -> emptyList()
             }
         }
