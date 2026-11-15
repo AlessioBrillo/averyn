@@ -89,6 +89,8 @@ stateDiagram-v2
   FAILED --> [*]
 ```
 
+The edges `RECORDING --> FAILED`, `PAUSED --> FAILED` and `STOPPING --> FAILED` are allowed by `ActivityState` but no code takes them today: only `PREPARING` fails (`fail()`); once there is data, an interruption pauses (`interrupt()`) and a failed close can be retried from `STOPPING`, so the data is kept.
+
 `FAILED` never means "data discarded": a failed activity keeps its durable raw samples and can be exported or recovered.
 
 Two moves are outside the diagram on purpose, both in `ActivityRecorder`: `start()` takes a finished activity (COMPLETED or FAILED) back to IDLE, because the apps keep one recorder for the life of the process and it serves many activities; and `recover()` sets the state found in the stored file (RECORDING, PAUSED or STOPPING) without walking the transitions, because the file already holds the ones that led there.

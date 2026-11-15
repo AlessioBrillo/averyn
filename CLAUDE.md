@@ -49,7 +49,8 @@ The pipelines are two and they do not cover the same things: `.woodpecker/ci.yml
   install steps would overwrite host dependencies.
 - **Server:** push the branch; the check is `ci/woodpecker/push/ci` (`gh pr checks <n> --watch`). The pipeline now also runs on `pull_request` events; confirm the check appears on the next PR.
 - **Only on GitHub:** iOS (needs macOS), compose/compose-TLS smoke tests (need docker-in-docker), the signed-in round trip, the restore drill, CodeQL.
-- **Status:** first green run recorded 2026-10-17 on commit a4d810b:
+- **Open since 2026-11-05:** no GitHub run is green (the billing lock, not the code) and the Swift of the commits since then has never been compiled; there is no XCTest target. The owner is unlocking the billing (2026-11-15). Until a macOS job is green on the final tree, an iOS change stays a draft and is flagged NOT COMPILED. Treat this as a red `main` for iOS, not as a pass.
+- **Status:** first green run recorded- **Status:** first green run recorded 2026-10-17 on commit a4d810b:
   `:backend:compileKotlin`, `:backend:test` (Testcontainers), `:shared:*:jvmTest`,
   `:apps:android:compileDebugKotlin`, `:apps:android:lintDebug` all green.
   `ci-local` from Windows fails in the Android Gradle Plugin tasks (the pipeline bind-mounts a
