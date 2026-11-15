@@ -290,6 +290,30 @@ class SynapseRoutesTest {
         }
 
     @Test
+    fun deletingTheActivityTombstonesItsSidecarsSoALateUploadGetsGone() =
+        app {
+            val id = activity()
+            grant(ConsentScope.SIGNAL_QUALITY)
+            grant(ConsentScope.RAW_SIGNALS)
+            putSidecar(id, "features", featureSidecar)
+            val serverId =
+                db.connection.use { c ->
+                    c.prepareStatement("SELECT id FROM activities WHERE client_activity_id = ?").use { s ->
+                        s.setObject(1, id)
+                        s.executeQuery().use { rs ->
+                            rs.next()
+                            rs.getString(1)
+                        }
+                    }
+                }
+
+            assertEquals(HttpStatusCode.NoContent, delete("/v1/activities/$serverId") { bearerAuth(alice) }.status)
+
+            assertEquals(HttpStatusCode.Gone, putSidecar(id, "features", featureSidecar).status)
+            assertEquals(HttpStatusCode.Gone, putSidecar(id, "raw", rawSidecar).status)
+        }
+
+    @Test
     fun anotherUserSeesNothingAndCannotAttach() =
         app {
             val id = activity()

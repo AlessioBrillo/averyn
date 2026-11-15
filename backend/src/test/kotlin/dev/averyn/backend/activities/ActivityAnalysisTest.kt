@@ -362,6 +362,20 @@ class ActivityAnalysisTest {
     }
 
     @Test
+    fun theBackfillAlsoFindsAnAnalysisWithAnOlderMetricsVersion() {
+        app {
+            val (id, bytes) = record()
+            upload(id, bytes)
+            assertEquals(0, ActivityAnalysisStore(db).outdated().size)
+            db.connection.use {
+                it.createStatement().execute("UPDATE activity_analyses SET metrics_algorithm_version = 'distance-v0'")
+            }
+
+            assertEquals(1, ActivityAnalysisStore(db).outdated().size)
+        }
+    }
+
+    @Test
     fun deletingTheActivityDeletesItsAnalysis() {
         app {
             val (id, bytes) = record()

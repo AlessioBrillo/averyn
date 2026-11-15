@@ -120,6 +120,8 @@ class ActivitySync internal constructor(
                     // Distinct, permanent reasons the apps can explain (TDD-0006 R11): not "HTTP_403" / "HTTP_410".
                     403 -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "ACCOUNT_DELETED")
                     410 -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "DELETED_ON_SERVER")
+                    // The server holds another recording under this id: a reason of its own, not an "HTTP_409".
+                    409 -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "CONFLICT")
                     408, 429, in 500..599 -> SyncStatus(SyncState.FAILED_RETRYABLE, attempts, "HTTP_$code")
                     else -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "HTTP_$code")
                 }
@@ -200,7 +202,7 @@ class ActivitySync internal constructor(
                 200, 201 -> SyncStatus(SyncState.READY, attempts)
                 401 -> SyncStatus(SyncState.FAILED_RETRYABLE, attempts, "AUTH")
                 null -> SyncStatus(SyncState.FAILED_RETRYABLE, attempts, "NETWORK")
-                403 -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "CONSENT_REVOKED")
+                403 -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, forbiddenReason(response))
                 410 -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "DELETED_ON_SERVER")
                 408, 429, in 500..599 -> SyncStatus(SyncState.FAILED_RETRYABLE, attempts, "HTTP_$code")
                 else -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "HTTP_$code")
@@ -211,6 +213,24 @@ class ActivitySync internal constructor(
             store.deleteRr(activityId)
         }
         return status
+    }
+
+    /**
+     * Why the server answered 403 to a sidecar: a deleted account (the local copy stays, the user has not withdrawn
+     * anything) or, as before, a consent not granted (the local copy goes with it).
+     */
+    private suspend fun forbiddenReason(response: HttpResponse?): String {
+        val body =
+            try {
+                response?.bodyAsText()
+            } catch (
+                e: CancellationException,
+            ) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+        return if (body != null && "account" in body && "deleted" in body) "ACCOUNT_DELETED" else "CONSENT_REVOKED"
     }
 
     private fun allowed(kind: SynapseSidecarKind) = kind == SynapseSidecarKind.FEATURES || rawUploads
@@ -250,7 +270,7 @@ class ActivitySync internal constructor(
                 200, 201, 204 -> SyncStatus(SyncState.READY, attempts)
                 401 -> SyncStatus(SyncState.FAILED_RETRYABLE, attempts, "AUTH")
                 null -> SyncStatus(SyncState.FAILED_RETRYABLE, attempts, "NETWORK")
-                403 -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "CONSENT_REVOKED")
+                403 -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, forbiddenReason(response))
                 410 -> SyncStatus(SyncState.FAILED_PERMANENT, attempts, "DELETED_ON_SERVER")
                 404 -> SyncStatus(SyncState.FAILED_RETRYABLE, attempts, "HTTP_404")
                 // The quota does not free itself; the file stays on the device for the user to decide.

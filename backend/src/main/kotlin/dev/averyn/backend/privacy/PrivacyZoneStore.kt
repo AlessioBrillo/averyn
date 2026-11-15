@@ -35,6 +35,11 @@ class PrivacyZoneStore(
     ) = db.connection.use { conn ->
         conn.autoCommit = false
         try {
+            // Two saves at once would both delete and then both insert the same positions: the second waits here.
+            conn.prepareStatement("SELECT 1 FROM users WHERE id = ? FOR UPDATE").use { stmt ->
+                stmt.setObject(1, ownerId)
+                stmt.executeQuery().use { it.next() }
+            }
             conn.prepareStatement("DELETE FROM privacy_zones WHERE owner_id = ?").use { stmt ->
                 stmt.setObject(1, ownerId)
                 stmt.executeUpdate()

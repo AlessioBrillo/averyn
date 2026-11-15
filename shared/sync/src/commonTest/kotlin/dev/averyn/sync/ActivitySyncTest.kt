@@ -270,6 +270,35 @@ class ActivitySyncTest {
         }
 
     @Test
+    fun aConflictingIdIsAReasonOfItsOwnAndNotRetried() =
+        runTest {
+            finishedActivity("a1")
+
+            sync(failing(HttpStatusCode.Conflict)).syncPending("tok")
+
+            assertEquals(SyncStatus(SyncState.FAILED_PERMANENT, 1, "CONFLICT"), statuses.statusOf("a1"))
+        }
+
+    @Test
+    fun aSidecarRefusedBecauseTheAccountIsDeletedKeepsTheLocalCopy() =
+        runTest {
+            withSynapse("a1", SynapseSidecarKind.FEATURES)
+            sync { request ->
+                if ("/synapse/" in request.url.encodedPath) {
+                    respond("""{"error":"account deleted"}""", HttpStatusCode.Forbidden)
+                } else {
+                    created(this, request)
+                }
+            }.syncPending("tok")
+
+            assertEquals(
+                SyncStatus(SyncState.FAILED_PERMANENT, 1, "ACCOUNT_DELETED"),
+                statuses.readSynapse("a1", SynapseSidecarKind.FEATURES),
+            )
+            assertTrue(store.hasSynapse("a1", SynapseSidecarKind.FEATURES))
+        }
+
+    @Test
     fun aRejectedActivityIsPermanentAndNotRetried() =
         runTest {
             finishedActivity("a1")
