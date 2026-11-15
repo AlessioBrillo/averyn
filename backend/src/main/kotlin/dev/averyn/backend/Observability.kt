@@ -2,8 +2,14 @@ package dev.averyn.backend
 
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationCallPipeline
+import io.ktor.server.application.call
 import io.ktor.server.application.install
+import io.ktor.server.application.log
 import io.ktor.server.metrics.micrometer.MicrometerMetrics
+import io.ktor.server.plugins.BadRequestException
+import io.ktor.server.plugins.ContentTransformationException
+import io.ktor.server.plugins.NotFoundException
 import io.ktor.server.plugins.callid.CallId
 import io.ktor.server.plugins.callid.callIdMdc
 import io.ktor.server.plugins.calllogging.CallLogging
@@ -14,6 +20,9 @@ import io.ktor.server.routing.routing
 import io.micrometer.prometheusmetrics.PrometheusConfig
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import java.util.UUID
+import kotlin.coroutines.cancellation.CancellationException
+
+private const val UNHANDLED_FRAMES_LOGGED = 6
 
 /**
  * ADR-0009: request ids in logs, Prometheus metrics, liveness and readiness probes.
@@ -30,6 +39,29 @@ fun Application.observability(isReady: () -> Boolean) {
     }
     install(CallLogging) { callIdMdc("request_id") }
     install(MicrometerMetrics) { this.registry = registry }
+
+    // An exception nobody handled would reach the engine, which logs it with its message, and a message can carry
+    // user content (a path, a parsed value). Here it is logged by class and call site only, and the client gets a
+    // fixed body. The ones Ktor maps to a 4xx itself, and a cancelled call, pass through untouched.
+    intercept(ApplicationCallPipeline.Monitoring) {
+        try {
+            proceed()
+        } catch (e: Throwable) {
+            if (e is CancellationException ||
+                e is BadRequestException ||
+                e is NotFoundException ||
+                e is ContentTransformationException
+            ) {
+                throw e
+            }
+            call.application.log.error(
+                "unhandled {} at {}",
+                e::class.qualifiedName,
+                e.stackTrace.take(UNHANDLED_FRAMES_LOGGED).joinToString(" < "),
+            )
+            call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "internal error"))
+        }
+    }
 
     routing {
         get("/health") { call.respond(HttpStatusCode.OK, mapOf("status" to "ok")) }

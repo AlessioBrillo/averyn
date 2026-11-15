@@ -14,8 +14,6 @@ B=$(cd "$B" && pwd)
 db_user=$(sed -n 's/^POSTGRES_USER=//p' "$B/.env" | head -n 1)
 db_user="${db_user:-averyn}"
 
-cp "$B/.env" "$env_file"
-[ -f "$B/seaweedfs-s3.local.json" ] && cp "$B/seaweedfs-s3.local.json" .
 # Unpacking over a volume that has data would mix two states of the instance: restore onto an empty host, or say so.
 # Checked before the containers are created: creating them seeds a volume from the image (the storage one is never
 # empty after that), and a volume that does not exist yet is empty by definition.
@@ -27,6 +25,16 @@ for v in storage-data idp-bootstrap oidc-config caddy-data; do
     exit 1
   fi
 done
+# The database comes from the dump, not from a volume archive, so the loop above skips it: a cluster that already holds
+# data would take the dump on top (table collisions hide behind the "already exists" filter below).
+if docker volume inspect averyn_db-data >/dev/null 2>&1 &&
+  [ -n "$(docker run --rm -v averyn_db-data:/v:ro alpine ls -A /v)" ] && [ "${RESTORE_FORCE:-}" != 1 ]; then
+  echo "volume averyn_db-data is not empty: restore onto a new host, or RESTORE_FORCE=1 to load the dump over it" >&2
+  exit 1
+fi
+# Only now is the current .env replaced: a refused restore (above) must leave the instance's secrets as they were.
+cp "$B/.env" "$env_file"
+[ -f "$B/seaweedfs-s3.local.json" ] && cp "$B/seaweedfs-s3.local.json" .
 dc up --no-start
 for v in storage-data idp-bootstrap oidc-config caddy-data; do
   [ -f "$B/$v.tgz" ] || continue
