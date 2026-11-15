@@ -21,11 +21,11 @@ Non-goals: changing the recorded data, the distance, the time or any metric (zon
 | Id | Requirement |
 |---|---|
 | Z1 | A zone is `latitude`, `longitude`, `radiusM` (50 to 2000 m) and an optional `label` (up to 40 characters, never drawn). At most 10 zones. The rules are `PrivacyZones.problem()` in `shared/api`, applied on the phone before saving and on the server, which answers `422` and stores nothing. |
-| Z2 | A point of a track inside any zone (great-circle distance to its centre at most the radius) is hidden. A hidden stretch breaks the line, so a map never draws a segment across a zone; a piece left with one point is dropped; a track with nothing left has no geometry. |
+| Z2 | A point of a track inside any zone (great-circle distance to its centre at most the radius) is hidden. A hidden stretch breaks the line, so a map never draws a segment across a zone (this also holds for a segment whose two ends are visible but which passes within the radius of a zone, as in a sparse file: it is hidden too); a piece left with one point is dropped; a track with nothing left has no geometry. |
 | Z3 | `GET /v1/activities/{id}/track` applies the zones of the owner. The summary, the splits, the series and every number are the real ones. |
 | Z4 | The raw file, the GPX export and the account export keep every sample. The zones themselves are part of the account export (`privacy-zones.json`) and are deleted with the account. |
 | Z5 | The phone keeps its zones in its own file (`zones.json`, next to the profile): they work with no account, and a change made offline goes up with the next sync. The track the phone shows from the copy of the server has the phone's zones applied again, so a zone made after the copy was taken still covers it. |
-| Z6 | `GET` and `PUT /v1/privacy-zones`, authenticated, owner-only, under the per-user rate limit; the `PUT` replaces the whole list. |
+| Z6 | `GET` and `PUT /v1/privacy-zones`, authenticated, owner-only, under the per-user rate limit; the `PUT` replaces the whole list. `GET` and `PUT` answer an `ETag`; a `PUT` with `If-Match` is refused with `412` when the list changed since it was read (nothing is stored), so a phone that never saw the zones another device saved cannot wipe them. `If-Match` is optional on the server; the phones send it when the screens that set a zone exist ([#126](https://github.com/AlessioBrillo/averyn/issues/126)). Two saves at once are serialised on the user's row. |
 
 ## 4. Non-functional requirements
 

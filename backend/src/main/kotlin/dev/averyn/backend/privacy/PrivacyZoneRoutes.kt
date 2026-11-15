@@ -6,11 +6,13 @@ import dev.averyn.backend.activities.errorBody
 import dev.averyn.backend.activities.owner
 import dev.averyn.backend.activities.perUserRateLimit
 import dev.averyn.backend.auth.OIDC_AUTH
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
 import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.request.receiveChannel
+import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.get
 import io.ktor.server.routing.put
@@ -42,7 +44,9 @@ fun Application.privacyZones(
             rateLimit(PER_USER) {
                 get("/v1/privacy-zones") {
                     val owner = call.owner(db) ?: return@get
-                    call.respond(withContext(Dispatchers.IO) { store.get(owner) })
+                    val zones = withContext(Dispatchers.IO) { store.get(owner) }
+                    call.response.header(HttpHeaders.ETag, PrivacyZoneStore.etagOf(zones))
+                    call.respond(zones)
                 }
 
                 put("/v1/privacy-zones") {
@@ -65,7 +69,17 @@ fun Application.privacyZones(
                         call.respond(HttpStatusCode.UnprocessableEntity, errorBody(problem ?: "not a list of zones"))
                         return@put
                     }
-                    withContext(Dispatchers.IO) { store.put(owner, parsed) }
+                    // Optional: a writer that sends the validator it read is refused when the list changed meanwhile.
+                    val ifMatch = call.request.headers[HttpHeaders.IfMatch]
+                    val stored = withContext(Dispatchers.IO) { store.put(owner, parsed, ifMatch) }
+                    if (!stored) {
+                        call.respond(
+                            HttpStatusCode.PreconditionFailed,
+                            errorBody("the zones changed since you read them"),
+                        )
+                        return@put
+                    }
+                    call.response.header(HttpHeaders.ETag, PrivacyZoneStore.etagOf(parsed))
                     call.respond(parsed)
                 }
             }
