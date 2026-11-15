@@ -92,6 +92,65 @@ class EvaluateTest {
         assertEquals(Verdict.MANUAL, evaluate("S15", Inputs(report, d)).verdict)
     }
 
+    /** An export of a run that was killed at 1.5 s and recovered at 5 s, as S5 reads it. */
+    private fun exportWithKill(): String {
+        val dir = Files.createTempDirectory("campaign-kill").toFile()
+        try {
+            val store = ActivityStore(Path(dir.path))
+            val first = ActivityRecorder(store)
+            first.start("a1", Sport.RUN, 0, 0)
+            first.gpsReady(0, 0)
+            first.onSample(LocationSample(0, 0, 45.0, 9.0, 5.0))
+            first.onSample(LocationSample(1_000, 1_000, 45.0001, 9.0, 5.0))
+            val second = ActivityRecorder(store)
+            second.recover("a1", 5_000, 5_000)
+            second.onSample(LocationSample(5_500, 5_500, 45.0002, 9.0, 5.0))
+            return second.stop(6_000, 6_000).diagnostics.toJson(device)
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun s5ReadsTheFirstRecoveryGapAndTheKillInstantInEitherFormat() {
+        val (report, d) = parseExport(exportWithKill())
+
+        val near = evaluate("S5", Inputs(report, d, killAtMs = parseKillAt("1500")))
+        assertEquals(Verdict.PASS, near.verdict, near.checks.joinToString { "${it.name}=${it.ok}" })
+        val far = evaluate("S5", Inputs(report, d, killAtMs = parseKillAt("1970-01-01T00:00:03Z")))
+        assertEquals(Verdict.FAIL, far.verdict)
+        assertEquals(parseKillAt("1970-01-01T00:00:01.5Z"), parseKillAt("1500"))
+    }
+
+    @Test
+    fun s29NeverPassesOnTheNumbersAloneBecauseThreeCriteriaAreReadByAPerson() {
+        val (report, d) = parseExport(export(bpm = 140))
+        val ref = hrReference(strap(bpm = 141), 0, 720_000)
+
+        assertEquals(Verdict.PASS, evaluate("S15", Inputs(report, d, hrReference = ref)).verdict)
+        assertEquals(Verdict.MANUAL, evaluate("S29", Inputs(report, d, hrReference = ref)).verdict)
+    }
+
+    @Test
+    fun aLongGapInS2IsForAPersonBecauseKnownSignalLossIsExcluded() {
+        val (report, d) = parseExport(export(bpm = 140)) // GPS fixes 12 minutes apart
+
+        val gap = evaluate("S2", Inputs(report, d)).checks.single { it.name.startsWith("no gap") }
+
+        assertEquals(null, gap.ok)
+    }
+
+    @Test
+    fun theRowsOfTheDiagnosticsAreDecidedByNumber() {
+        val (report, d) = parseExport(export(bpm = 140))
+
+        assertEquals(Verdict.FAIL, evaluate("S3", Inputs(report, d)).verdict) // no pause was made
+        assertEquals(Verdict.FAIL, evaluate("S11", Inputs(report, d)).verdict) // 12 min is not 3 h
+        assertEquals(Verdict.FAIL, evaluate("S19", Inputs(report, d)).verdict) // 12 min is not 30 min
+        assertTrue(evaluate("S8", Inputs(report, d)).checks.any { it.name.contains("saver") && it.ok == true })
+        assertEquals(Verdict.FAIL, evaluate("S10", Inputs(report, d)).verdict) // never recovered
+    }
+
     @Test
     fun aRowWithoutAMachineCheckIsManual() {
         val (report, d) = parseExport(export(bpm = 140))

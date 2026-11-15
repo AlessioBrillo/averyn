@@ -11,11 +11,12 @@ import javax.xml.validation.SchemaFactory
 import kotlin.system.exitProcess
 
 private const val USAGE = """usage: campaign evaluate <diagnostics.json> --row S15 [options]
-  --row <ID>              the scenario of docs/testing/device-matrix.md (S1, S2, S5, S6, S15, S29 are checked by number)
+  --row <ID>              the scenario of docs/testing/device-matrix.md (S1-S8, S10, S11, S15, S19, S29 are checked by number)
   --ref <strap.fit>       the strap's own FIT file (S15, S29)
   --gpx <activity.gpx>    the exported GPX, validated against the GPX 1.1 schema (S1)
   --xsd <gpx-1.1.xsd>     default: tests/gps-fixtures/schema/gpx-1.1.xsd
-  --kill-at <ISO instant> the instant of the kill, e.g. 2026-11-09T10:15:30Z (S5)
+  --kill-at <instant>     the instant of the kill: ISO (2026-11-09T10:15:30Z) or the epoch milliseconds adb-kill.sh prints (S5)
+  --paused-s <seconds>    the sum of the pauses you timed (S3)
   --ref-distance-m <m>    the reference distance of the route (S1)
   --date <YYYY-MM-DD>     default: today
 Prints the row for the Results table, then each criterion. Exit 0 = PASS, 1 = FAIL, 2 = MANUAL (a criterion needs a person
@@ -57,8 +58,9 @@ fun main(args: Array<String>) {
             device = device,
             hrReference = reference,
             gpxValid = gpxValid,
-            killAtMs = options["--kill-at"]?.let { Instant.parse(it).toEpochMilli() },
+            killAtMs = options["--kill-at"]?.let(::parseKillAt),
             referenceDistanceM = options["--ref-distance-m"]?.toDouble(),
+            expectedPausedMs = options["--paused-s"]?.let { (it.toDouble() * 1000).toLong() },
         )
     val result = evaluate(row, input)
     println(render(result, input, options["--date"] ?: LocalDate.now().toString()))
@@ -70,6 +72,9 @@ fun main(args: Array<String>) {
         },
     )
 }
+
+/** An ISO instant, or the epoch milliseconds that tools/campaign/adb-kill.sh prints. */
+internal fun parseKillAt(text: String): Long = text.toLongOrNull() ?: Instant.parse(text).toEpochMilli()
 
 private fun usage(why: String): Nothing {
     if (why.isNotEmpty()) System.err.println("campaign: $why")

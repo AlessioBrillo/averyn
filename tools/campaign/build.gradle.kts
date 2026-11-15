@@ -21,3 +21,7 @@ dependencies {
 }
 
 tasks.test { useJUnitPlatform() }
+
+// The documented command runs from the repository root and the defaults (the GPX schema) are relative to it: Gradle's
+// own default for run is the project directory, which made --gpx fail with exit 64.
+tasks.named<JavaExec>("run") { workingDir = rootProject.projectDir }

@@ -78,9 +78,17 @@ Run the scenarios of the device matrix. In the app, **History** exports the GPX,
 | Row | Inputs besides the diagnostics | Decided by number |
 |---|---|---|
 | S1 | `--gpx activity.gpx` (checked against the GPX 1.1 schema), `--ref-distance-m <m>` | grade, GPX validity, distance within 2 % |
-| S2 | none | at least 1 h, no gap over 10 s |
-| S5 | `--kill-at <ISO instant>` (the second you noted) | recovered, last stored sample within 1 s of the kill |
-| S6 | none | recovered, reboot detected, no `NON_MONOTONIC_TIME` burst (at most 3) |
-| S15, S29 | `--ref strap.fit` (the strap's own FIT export) | at least 10 min, average and maximum within 5 bpm, no dropout over 30 s |
+| S2 | none | at least 1 h; a gap over 10 s is `?` (the matrix excludes known signal loss, a person decides) |
+| S3 | `--paused-s <s>` (the pauses you timed) | paused time recorded, `pausedMs` within 2 s of the sum |
+| S4 | none | POOR_ACCURACY or a gap counted, the track continues |
+| S5 | `--kill-at <instant>`: the epoch milliseconds that `tools/campaign/adb-kill.sh force-stop` (or `kill9`) prints, or an ISO instant | recovered, first recovery gap: last stored sample within 1 s of the kill |
+| S6 | none (`adb-kill.sh reboot` for the reboot) | recovered, reboot detected, samples after it, no `NON_MONOTONIC_TIME` burst (at most 3) |
+| S7 | none | a `PERMISSION_*` pause in the timeline (iOS); the banner is read by hand |
+| S8 | none | battery drain per hour and the saver state are in the report |
+| S10 | none | recovered, no stored record lost |
+| S11 | `--gpx activity.gpx` | at least 3 h, GPX valid, battery drain present |
+| S15 | `--ref strap.fit` (the strap's own FIT export) | at least 10 min, average and maximum within 5 bpm, no dropout over 30 s |
+| S19 | none | at least 30 min, heart-rate coverage at least 95 % |
+| S29 | `--ref strap.fit` | the numbers of S15; the name of the band, the reconnect and the permissions are `?` (read by hand), so it never prints PASS alone |
 
-Any other row prints `MANUAL`. Exit code: 0 PASS, 1 FAIL, 2 MANUAL. The strap's file must be a FIT file: a GPX with heart-rate extensions is not read yet.
+The paths of the files you give are relative to the repository root (the command runs there). Any other row prints `MANUAL`. Exit code: 0 PASS, 1 FAIL, 2 MANUAL. The strap's file must be a FIT file: a GPX with heart-rate extensions is not read yet.
