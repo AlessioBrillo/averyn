@@ -1121,6 +1121,16 @@
         }
       }
     },
+    "The phone could not write to its storage (full?). Free some space and try again.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il telefono non riesce a scrivere in memoria (piena?). Libera spazio e riprova."
+          }
+        }
+      }
+    },
     "Precise location was turned off: the activity is paused. Turn Precise Location on to continue.": {
       "localizations": {
         "it": {

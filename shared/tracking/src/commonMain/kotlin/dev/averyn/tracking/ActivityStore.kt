@@ -8,6 +8,7 @@ import dev.averyn.domain.StateEvent
 import dev.averyn.sensors.HeartRateSample
 import dev.averyn.sensors.RrInterval
 import dev.averyn.sensors.SynapseSidecarSink
+import kotlinx.io.IOException
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
@@ -430,6 +431,7 @@ class ActivityStore(
      * [minAgeMs] ago is left alone, so a Start tapped during the scan is not deleted under the recorder (its next
      * append would recreate the file without the metadata line, and the activity would vanish silently).
      */
+    @Throws(IOException::class)
     fun discardEmptyPreparing(
         exceptId: String?,
         nowTimeMs: Long,
@@ -454,6 +456,7 @@ class ActivityStore(
      *
      * @return how many were closed.
      */
+    @Throws(IOException::class)
     fun failOrphanedPreparing(
         exceptId: String?,
         nowTimeMs: Long,
