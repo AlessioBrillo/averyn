@@ -5,3 +5,16 @@ config:
   MD041: false
   MD024: { siblings_only: true }
   MD060: false
+
+# Frozen inputs are kept in their original language and format: linting them
+# would mean rewriting history, not fixing documentation.
+ignores:
+  - "docs/product/reference-report-v0.1.md"
+  - "docs/strategy/00-visione-strategica-completa.md"
+  - "docs/strategy/01-synapse24-restructure-plan.md"
+  - "docs/strategy/02-averyn-synapse-integration.md"
+  - "docs/strategy/03-synapse-cloud-adr.md"
+  - "docs/strategy/04-synapse-device-sdk-spec.md"
+  - "docs/strategy/05-master-index.md"
+  - "LICENSE"
+  - "**/node_modules/**"

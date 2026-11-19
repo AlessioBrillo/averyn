@@ -1,1 +1,8 @@
 blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/AlessioBrillo/averyn/security/advisories/new
+    about: Report a vulnerability privately. Never open a public issue for a security problem.
+  - name: Code of conduct report
+    url: https://github.com/AlessioBrillo/averyn/security/advisories/new
+    about: Use the same private channel with "Code of Conduct" in the title; only the maintainer can read it.

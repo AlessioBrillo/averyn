@@ -1,3 +1,9 @@
+> **Frozen input (before 2026-09-27).** Kept for history, in its original
+> Italian, and **not a source of truth**. This is not repository ADR-0010 (that
+> is [docs/adr/0010-ecosystem-boundary.md](../adr/0010-ecosystem-boundary.md)).
+> It is superseded by the ADRs, `docs/integrations/synapse.md` and the roadmap;
+> read [review-2026-09-27.md](review-2026-09-27.md) for every correction.
+
 # ADR-0010: Synapse Cloud Architecture
 ## Cloud Ingestion, Batch Inference & Multi-Device Sync per Synapse Ecosystem
 

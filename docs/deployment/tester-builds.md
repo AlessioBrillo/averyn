@@ -6,24 +6,24 @@ Tester builds go to Play **internal testing** and **TestFlight** only, never to 
 
 ## What a build carries
 
-- A version (`versionName` chosen when the build is made, `versionCode` = the workflow run number) and the **commit id** it was built from. The commit id is part of every exported diagnostics report (`device.buildId`), so a device-matrix row and a store crash report can be matched to the same build.
+- A version (`versionName` and a monotonic `versionCode` chosen when the build is made) and the **commit id** it was built from. The commit id is part of every exported diagnostics report (`device.buildId`), so a device-matrix row and a store crash report can be matched to the same build.
 - The display name "Averyn Beta".
 
 ## Android
 
-The manual workflow **Release (tester build)** (`.github/workflows/release.yml`) builds `:apps:android:bundleRelease` and attaches the signed `.aab` to the run. Locally, the same build needs the same environment:
+There is **no release automation today**: the GitHub Actions workflows are disabled and the Woodpecker gate does not sign builds. The signed bundle is built by hand with the keystore environment below; the old `.github/workflows/release.yml` is kept only as history and is not run.
 
 ```sh
 AVERYN_KEYSTORE_FILE=/path/to/upload.jks AVERYN_KEYSTORE_PASSWORD=... AVERYN_KEY_ALIAS=... AVERYN_KEY_PASSWORD=... \
   ./gradlew :apps:android:bundleRelease -Paveryn.versionCode=12 -Paveryn.versionName=0.1.0-beta.1 -Paveryn.commit=$(git rev-parse HEAD)
 ```
 
-Without `AVERYN_KEYSTORE_FILE` there is no release signing configuration (a developer build is unaffected).
+The command is the one above, run by hand. Without `AVERYN_KEYSTORE_FILE` there is no release signing configuration (a developer build is unaffected).
 
 **One-time setup, done by the owner** (it needs accounts and keys this repository must never hold):
 
 1. A Google Play Console app with the id `dev.averyn.app`, an internal testing track and the testers' addresses.
-2. An upload keystore (`keytool -genkeypair ...`), kept offline. Repository secrets: `AVERYN_KEYSTORE_BASE64` (the keystore, base64), `AVERYN_KEYSTORE_PASSWORD`, `AVERYN_KEY_ALIAS`, `AVERYN_KEY_PASSWORD`.
+2. An upload keystore (`keytool -genkeypair ...`), kept offline. The build reads `AVERYN_KEYSTORE_FILE`, `AVERYN_KEYSTORE_PASSWORD`, `AVERYN_KEY_ALIAS` and `AVERYN_KEY_PASSWORD` from the environment; none of them is ever committed. (`AVERYN_KEYSTORE_BASE64` in the disabled workflow was the base64 form of the same file.)
 3. Upload the downloaded `.aab` to the internal track in the Play Console.
 
 ## iOS

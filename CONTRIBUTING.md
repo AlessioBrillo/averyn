@@ -2,26 +2,27 @@
 
 ## Ground rules
 
-1. **Nothing lands on `main` without a PR and green CI.** `main` is protected, history is linear (squash merge).
-2. **Conventional Commits** for PR titles (`feat(tracking): …`, `fix(backend): …`, `docs: …`, `chore: …`). CI enforces this. Scopes: `tracking`, `metrics`, `domain`, `backend`, `android`, `ios`, `web`, `infra`, `docs`.
+1. **Nothing lands on `main` without a PR and a green Woodpecker gate.** `main` is protected (PR required, linear history). The Woodpecker server is not connected to the repository yet: until it is, run `tools/ci/ci-local.sh` before opening the PR, and the check will be made required when the server reports it.
+2. **Conventional Commits** for PR titles (`feat(tracking): …`, `fix(backend): …`, `docs: …`, `chore: …`). Scopes: `tracking`, `metrics`, `domain`, `backend`, `android`, `ios`, `web`, `sync`, `import`, `records`, `infra`, `docs`, `deps`, `ci`.
 3. **Decisions are written down.** Anything that is hard to reverse (framework, storage format, protocol, license, public API shape) needs an ADR in `docs/adr/` in the same PR or before it.
 4. **Non-trivial features start with a design doc** in `docs/design/` (copy `template.md`). Trivial changes don't.
 5. **Tests ship with logic.** Tracking, metrics and sync code without tests will not be merged. GPS behavior is tested against fixtures in `tests/gps-fixtures/`.
 6. **Metrics are versioned.** Changing an algorithm's output means a new `algorithm_version` and an update to its doc in `docs/metrics/`; never silently change an existing version.
 7. **Privacy impact is part of review.** Location data is sensitive (see `docs/privacy/data-classification.md`). New data collected, stored or logged must be justified in the PR.
-8. **No secrets in the repo.** `.env.example` only. CI runs gitleaks.
+8. **No secrets in the repo.** `.env.example` only. The Woodpecker gate runs gitleaks.
 
 ## Workflow
 
 ```sh
 git switch -c feat/tracking-state-machine
 # work, commit small
-./gradlew check            # JVM/KMP: tests + ktlint
+./gradlew check                  # JVM/KMP: tests + ktlint
 (cd apps/web && npm run check)   # lint + typecheck + test
-git push -u origin HEAD    # open a PR using the template
+tools/ci/ci-local.sh             # the full gate, same commands as Woodpecker (Docker)
+git push -u origin HEAD          # open a PR using the template
 ```
 
-Branch names: `feat/…`, `fix/…`, `docs/…`, `chore/…`. Track work in GitHub issues with `area/*`, `type/*`, `priority/*` labels and an MVP milestone.
+Branch names: `feat/…`, `fix/…`, `docs/…`, `chore/…`. Track work in GitHub issues with `area/*` labels and the active milestone (`MVP-L` until the launch). Type is expressed with GitHub's default labels (`bug`, `enhancement`, `documentation`); there is no separate `priority/*` taxonomy.
 
 ## Code style
 
@@ -40,7 +41,22 @@ Branch names: `feat/…`, `fix/…`, `docs/…`, `chore/…`. Track work in GitH
 
 ## Licensing of contributions
 
-The project is AGPL-3.0-or-later. Every contribution requires signing the [CLA](CLA.md) (enforced by `cla-assistant` on your first PR) — see [ADR-0012](docs/adr/0012-cla-and-store-distribution.md) for why a CLA rather than a DCO.
+The project is AGPL-3.0-or-later (see [NOTICE](NOTICE) for the copyright and the
+"or later" grant). External contributions require a signed [CLA](CLA.md); the
+signing flow is being finalized, so **contact the maintainer before opening a
+non-trivial PR** and the signature will be recorded manually. See
+[ADR-0012](docs/adr/0012-cla-and-store-distribution.md) for why a CLA rather than
+a DCO. A CLA draft is not legal advice and will be reviewed before it is relied
+on.
+
+## CI gate
+
+Woodpecker is the only gate (`.woodpecker/ci.yml`): JVM, backend, Android, web,
+docs, link check, OpenAPI lint and secret scan. Run the same pipeline locally
+with `tools/ci/ci-local.sh` (Docker required); until the server is connected,
+that local run is the gate. iOS is not covered by CI: build it
+on macOS following [apps/ios/README.md](apps/ios/README.md) and say so in the PR.
+A Swift change that has not been compiled stays a draft.
 
 ## Reporting security issues
 

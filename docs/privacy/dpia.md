@@ -1,5 +1,11 @@
 # Data protection impact assessment (DPIA) — managed Averyn service
 
+> **Draft for the future controller - not legal advice and not a public
+> compliance statement.** The controller identity and the legal review are not
+> public: they belong to the company that will run the managed service and must
+> be completed before it opens. This page is the technical basis that the final
+> DPIA will use.
+
 - **Status:** draft v0.1 — the technical part, written from what the system does today. It is **not** legal advice and it is not final: the items marked **[controller]** need decisions and signatures of the company that runs the service, and the legal basis, the retention periods and the conclusion need review by a data protection professional before the managed service processes anyone's data ([ADR-0013](../adr/0013-health-data-special-category.md): the DPIA is a release gate).
 - **Date:** 2026-10-26
 - **Scope:** the managed cloud described in [ADR-0027](../adr/0027-managed-cloud-baseline.md) and the apps and web of the launch ([MVP-L](../product/mvp-launch.md)). Self-hosters are their own controllers; they get the same mechanisms.

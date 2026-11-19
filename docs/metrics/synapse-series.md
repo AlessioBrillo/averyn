@@ -1,6 +1,6 @@
 # Metric: Synapse series (what Averyn derives from a band's sidecars)
 
-- **Status:** draft (implemented with tests on the device repository's synthetic sessions; nothing has run on a band)
+- **Status:** implemented (tested on the device repository's synthetic sessions; nothing has run on a band)
 - **Current algorithm version:** `synapse-series-v1`
 
 This is the transformation Averyn applies to what a Synapse band sent ([ADR-0030](../adr/0030-synapse-contract-v2-1-and-raw-signals.md)); it is **not** a metric about the athlete. Every number it shows was computed by the band, is stored as imported data with `source: "synapse-device"`, and is shown as "via Synapse" ([ADR-0014](../adr/0014-sensor-integration-contract.md)). The version below is the version of the *transformation* (units, gap detection, decimation), not of the band's firmware.

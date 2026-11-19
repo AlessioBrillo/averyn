@@ -1,6 +1,6 @@
 # Metric: Best efforts
 
-- **Status:** draft
+- **Status:** implemented (pending device evidence)
 - **Current algorithm version:** `best-efforts-v1`
 
 ## Definition

@@ -26,3 +26,10 @@ React + TypeScript (strict) + Vite SPA, oxlint (ships with the Vite template) fo
 ## Revisit when
 
 Public pages need real SSR, or admin's release/security cadence must diverge from the user app.
+
+---
+
+**Editorial note (2026-11-19):** the "admin inside the web app" part of this
+decision is superseded by [ADR-0035](0035-no-admin-interface-before-moderation.md):
+there is no admin interface before moderation (MVP-4). The web stack decision
+(React + TypeScript + Vite) stands.

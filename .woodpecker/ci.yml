@@ -1,5 +1,7 @@
-# CI gate (was GitHub ci.yml): jvm check, android assembleDebug+lint, web, docs. iOS excluded
-# (needs macOS); compose smoke not included (needs docker-in-docker). Local: `ci-local`.
+# CI gate: JVM/KMP and backend tests, Android build and lint, web, docs,
+# link check, OpenAPI lint and secret scan. iOS is excluded (needs macOS);
+# the Compose smoke test is excluded (needs docker-in-docker).
+# Local, without a server: `tools/ci/ci-local.sh` (Docker required).
 # The jvm step mounts the Docker socket for the backend Testcontainers tests.
 when:
   - event: [push, pull_request, manual]
@@ -18,9 +20,11 @@ steps:
       - ci-android-sdk:/ci-android
       - /var/run/docker.sock:/var/run/docker.sock
     commands:
-      # The sibling containers publish their ports on the engine that owns the socket: its bridge gateway reaches them,
-      # while host.docker.internal may point elsewhere (the Windows LAN address under WSL). ponytail: assumes a /24 bridge.
-      - echo "$(hostname -i | awk '{print $1}' | sed 's/\.[0-9]*$/.1/') host.docker.internal" >> /etc/hosts
+      # Docker Desktop already resolves this name to the engine VM, which is the right address for
+      # published ports; overriding it with the bridge gateway makes Ryuk (and every other mapped
+      # port) refuse the connection. On a plain Linux runner the name does not resolve, so add the
+      # bridge gateway there. Assumes a /24 bridge, as Docker's default does.
+      - getent hosts host.docker.internal >/dev/null 2>&1 || echo "$(hostname -i | awk '{print $1}' | sed 's/\.[0-9]*$/.1/') host.docker.internal" >> /etc/hosts
       - apt-get update -q && apt-get install -y -q unzip curl git
       - |
         if [ ! -x /ci-android/cmdline-tools/latest/bin/sdkmanager ]; then
@@ -48,7 +52,22 @@ steps:
   - name: docs
     image: node:24
     commands:
-      - npx --yes markdownlint-cli2 "**/*.md" "!docs/product/reference-report-v0.1.md" "!docs/strategy/00-visione-strategica-completa.md" "!docs/strategy/01-synapse24-restructure-plan.md" "!docs/strategy/02-averyn-synapse-integration.md" "!docs/strategy/03-synapse-cloud-adr.md" "!docs/strategy/04-synapse-device-sdk-spec.md" "!docs/strategy/05-master-index.md" "!LICENSE" "!**/node_modules/**"
-      # The API contract is a YAML file: a colon in a description is enough to make it unreadable, and
-      # nothing else in the pipeline would notice.
-      - npx --yes js-yaml docs/api/openapi.yaml > /dev/null
+      # Ignores (frozen inputs, LICENSE, node_modules) are in .markdownlint-cli2.yaml.
+      - npx --yes markdownlint-cli2@0.24.1 "**/*.md"
+      # The API contract is YAML: parse it first, because a colon in a description is enough to make the
+      # document unreadable. Then the semantic lint.
+      - npx --yes js-yaml@5.5.0 docs/api/openapi.yaml > /dev/null
+      - npx --yes @stoplight/spectral-cli@6.17.1 lint docs/api/openapi.yaml --ruleset .spectral.yaml --fail-severity error
+
+  - name: links
+    # lychee publishes no version tags on Docker Hub; v0.24.2 is pinned by digest.
+    image: lycheeverse/lychee@sha256:eaff3e0a13603c9a701accfcc84f44158bb77bf36ecfa4622b626056c3463892
+    commands:
+      - lychee --config .lychee.toml --no-progress --extensions md .
+
+  - name: secrets
+    image: ghcr.io/gitleaks/gitleaks:v8.28.0
+    commands:
+      # The tree, not the history: the gate answers "does this commit add a secret?".
+      # .gitleaks.toml keeps the generated and third-party folders out of the scan.
+      - gitleaks dir . --config .gitleaks.toml --no-banner --redact --max-target-megabytes 20

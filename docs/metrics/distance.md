@@ -1,6 +1,6 @@
 # Metric: Distance
 
-- **Status:** draft
+- **Status:** implemented (pending device evidence)
 - **Current algorithm version:** `distance-v1`
 
 ## Definition

@@ -108,26 +108,33 @@ Health checks: object store and backend with `wget` (`/healthz`, `/ready`), IdP 
 
 ## 6. Test strategy
 
+The CI jobs named below ran in GitHub Actions; those workflows are disabled. Until
+the Compose jobs are ported to Woodpecker, the HTTP/TLS/iOS rows are **manual
+pre-release checks**.
+
 | What | How |
 |---|---|
 | Internal discovery | backend auth test: the test issuer served at a different internal URL; token accepted; wrong `issuer` in the document rejected |
 | Rate limit | backend test: limit + 1 requests → `429` + `Retry-After`; a second user still `200` |
 | Quota | integration test (real PostGIS and object store): over quota → `507`, no row, no object; re-`PUT` of a stored id with a full quota → `200` |
-| HTTP stack | CI Compose job: generated `.env`, all services healthy, existing checks, CSP header present |
-| TLS stack | CI job with the overlay on `averyn.localhost`: Caddy's local root CA, discovery issuer `https://auth.averyn.localhost`, same issuer in client config, `/v1` `401`, `/metrics` not proxied, 80 → 443, HSTS |
+| HTTP stack | Compose job (manual until ported): generated `.env`, all services healthy, existing checks, CSP header present |
+| TLS stack | TLS Compose job (manual until ported) on `averyn.localhost`: Caddy's local root CA, discovery issuer `https://auth.averyn.localhost`, same issuer in client config, `/v1` `401`, `/metrics` not proxied, 80 → 443, HSTS |
 | Browser | real-browser run before merge (both stacks): sign-in, list, detail with map, export, no CSP violations |
 | Runbooks | one manual backup → `down -v` → restore → sign-in, activities visible |
-| iOS | CI: the Release build's Info.plist has no ATS exception |
+| iOS | macOS build: the Release build's Info.plist has no ATS exception |
 
 ## 7. Rollout and migration
 
-No database migration. The HTTP stack keeps working as before; existing `.env` files keep working (new variables have defaults). TLS is for new instances only (ADR-0018). The OpenAPI file, threat model, self-hosting guide and runbooks are updated in the same slice.
+No database migration. The HTTP stack keeps working as before. Existing `.env`
+files must add `S3_ACCESS_KEY`, `S3_SECRET_KEY` and `S3_CONFIG_FILE`: the default
+object-store credentials were removed (see the upgrade runbook). TLS is for new
+instances only (ADR-0018). The OpenAPI file, threat model, self-hosting guide and runbooks are updated in the same slice.
 
 ## 8. Risks and mitigations
 
 | Risk | Mitigation |
 |---|---|
-| The IdP stops selecting its instance from `X-Forwarded-Host` after an upgrade | TLS CI job checks discovery through the backend path; pinned IdP version |
+| The IdP stops selecting its instance from `X-Forwarded-Host` after an upgrade | TLS stack check (manual until the Compose jobs are ported) of discovery through the backend path; pinned IdP version |
 | The CSP breaks the map or sign-in (e.g. a style host not listed) | origins are configuration; browser run before merge; violations show in the console |
 | A domain chosen at first start cannot be changed | documented as a first-start decision; ADR-0018 |
 | In-memory buckets reset on restart | acceptable: a restart costs a user at most one extra minute of requests |

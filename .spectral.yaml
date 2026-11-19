@@ -1,0 +1,13 @@
+extends: ["spectral:oas"]
+
+rules:
+  # Errors: the contract is not publishable without these.
+  info-contact: error
+  info-license: error
+  oas3-schema: error
+  oas3-api-servers: error
+
+  # Warnings: useful, but the pre-alpha surface is not fully tagged yet.
+  operation-operationId: warn
+  operation-tags: warn
+  operation-description: warn

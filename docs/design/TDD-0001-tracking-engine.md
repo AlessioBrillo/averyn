@@ -164,7 +164,7 @@ PoC apps are tester builds on Play internal testing and TestFlight ([ADR-0019](.
 | iOS suspends/terminates the app | Correct background mode + significant-change/relaunch handling; recovery is a first-class flow |
 | KMP↔Swift interop friction on hot path | Keep hot path in native adapter → shared calls coarse-grained (batches); measure |
 | Filtering hides real data | Filtering only flags; raw always stored; export can choose raw or cleaned |
-| Can't test iOS locally (Windows dev machine) | macOS CI runner + real iPhone via Xcode when available; tracked as a project risk |
+| Can't test iOS locally (Windows dev machine) | Manual macOS build plus a real iPhone via Xcode when available; tracked as a project risk (there is no macOS CI) |
 
 ## 9. Open questions
 

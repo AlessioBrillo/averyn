@@ -1,3 +1,8 @@
+> **Frozen input (before 2026-09-27).** Kept for history, in its original
+> Italian, and **not a source of truth**. It is superseded by the ADRs,
+> `docs/integrations/synapse.md` and the roadmap; read
+> [review-2026-09-27.md](review-2026-09-27.md) for every correction.
+
 # Averyn × Synapse Integration Specification
 ## Come Averyn Diventa la "Finestra" sui Dati Synapse — Senza Scrivere Firmware
 

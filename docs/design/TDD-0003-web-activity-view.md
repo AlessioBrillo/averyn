@@ -68,7 +68,7 @@ Plain `history` navigation, three states: `/` (list, or a sign-in button), `/cal
 
 - **Backend (Testcontainers, as TDD-0002):** summary speed and pace equal the replayed snapshot; list order and keyset paging (3 activities, `limit=2`); user B's list never contains user A's activities; track coordinates match the accepted samples; track of someone else's activity → `404`; `400` for bad `limit` and `cursor`; `401` without a token; `client-config` carries the new fields.
 - **Web (Vitest):** the formatters (0 m, 1 km, 3 h, null pace, ride vs run); the signed-out render.
-- **Compose smoke (CI):** the web container serves the SPA, proxies `/v1/client-config`, and `/v1/activities` answers `401`.
+- **Compose smoke (manual until ported):** the web container serves the SPA, proxies `/v1/client-config`, and `/v1/activities` answers `401`.
 - **Manual, real stack:** sign in with a browser, see an uploaded fixture in the list, open it, compare the metrics with its `expected.json`, confirm another user gets "not found", and check that logs hold no coordinates or tokens.
 
 ## 7. Rollout and migration

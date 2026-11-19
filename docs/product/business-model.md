@@ -1,5 +1,10 @@
 # Business model
 
+> **Public draft, not a commitment.** The figures below are illustrative
+> assumptions, not supplier quotes or an offer. Detailed unit economics and legal
+> advice are not published here and will be reviewed before they are relied on.
+> The principles are in [ADR-0032](../adr/0032-revenue-model.md).
+
 Status: v0.2 — draft (2026-10-29: aligned with [ADR-0028](../adr/0028-consumer-launch-target.md)), corrects the economics in [`docs/strategy/00-visione-strategica-completa.md`](../strategy/00-visione-strategica-completa.md) per [`docs/strategy/review-2026-09-27.md`](../strategy/review-2026-09-27.md) #22. Figures below are **assumptions to validate**, not commitments — marked where they need real data (supplier quotes, actual VAT/accounting advice, actual cloud usage).
 
 ## Principle

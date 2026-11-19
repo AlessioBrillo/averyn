@@ -1,7 +1,8 @@
 # Metric: <name>
 
-- **Status:** draft | stable | deprecated
+- **Status:** draft | implemented | stable | deprecated
 - **Current algorithm version:** `<metric>-vN`
+- **Evidence:** pending | device matrix row `Sxx` green (with the build id)
 
 Every metric must fill in all eleven fields ([report §4.3](../product/reference-report-v0.1.md)). New behavior = new version section; **existing versions are never edited** and results from different versions must not be mixed silently.
 

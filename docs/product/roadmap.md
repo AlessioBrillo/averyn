@@ -1,6 +1,6 @@
 # Roadmap
 
-Rule: **vertical slices, GPS validated on real devices first.** The biggest risk is building tracking, analysis, maps, social, watch, self-hosting and cloud at the same time ([report §26](reference-report-v0.1.md)). Each milestone is a GitHub milestone; issues carry `area/*` labels. No code lands without an issue in the current milestone, and a spec without code and tests in the same increment stays `draft` and off this page.
+Rule: **vertical slices, GPS validated on real devices first.** The biggest risk is building tracking, analysis, maps, social, watch, self-hosting and cloud at the same time ([report §26](reference-report-v0.1.md)). The table below is the canonical scope; GitHub tracks only the active milestone (`MVP-L`), and issues carry `area/*` labels. No code lands without an issue in the current milestone, and a spec without code and tests in the same increment stays `draft` and off this page.
 
 | Milestone | Goal | Exit criteria |
 |---|---|---|
@@ -19,7 +19,7 @@ Later (Phase 6): standalone smartwatch, training load / fitness-fatigue, challen
 
 ## MVP-L: launch
 
-MVP-L is the first public release: **a free, privacy-first app that is good to use**, built from the slices of MVP-0 to MVP-2 plus what the three moments need ([ADR-0028](../adr/0028-consumer-launch-target.md), which replaced the earlier "managed-cloud, 13 weeks, company" framing). There is **no fixed date**; the order of work and the cut line are the control. One developer. The apps go to the stores under the owner's own name; the public name is the owner's decision before the listing ([ADR-0008](../adr/0008-project-codename.md)).
+MVP-L is the first public release: **a free, privacy-first app that is good to use**, built from the slices of MVP-0 to MVP-2 plus what the three moments need ([ADR-0028](../adr/0028-consumer-launch-target.md), which replaced the earlier "managed-cloud, 13 weeks, company" framing). There is **no fixed date**; the order of work and the cut line are the control. Any date in the GitHub milestone or in older planning notes is an internal target, not a commitment. One developer. The apps go to the stores under the owner's own name; the public name is the owner's decision before the listing ([ADR-0008](../adr/0008-project-codename.md)).
 
 Exit criteria (each one is verifiable; the checklist with owners and issues is [mvp-launch.md](mvp-launch.md)):
 
@@ -30,7 +30,7 @@ Exit criteria (each one is verifiable; the checklist with owners and issues is [
 5. **Sensors.** Standard BLE HR on both platforms (a Synapse band works as a plain strap, level L0). The Synapse feature frame stays a beta that starts when the prototype exists.
 6. **Managed cloud.** Open sign-up with email verification, an EU instance, off-site backups proven by a restore, monitoring and alerting, a high published anti-abuse limit per account ([ADR-0032](../adr/0032-revenue-model.md)).
 7. **Legal and stores.** Privacy policy and terms, Apple privacy label, Play data safety, in-app account deletion, store accounts (personal), the closed test that a new personal Play account requires.
-8. **Quality.** The checks of the [CI gate](../../CLAUDE.md) are green on the final tree, the iOS job and the signed-in round trip included.
+8. **Quality.** The checks of the [CI gate](../../CLAUDE.md) are green on the final tree; iOS and the signed-in round trip have a recorded run (CI or the documented manual pre-release check) until their jobs are ported to Woodpecker.
 
 Out of MVP-L: TCX, reading from HealthKit / Health Connect, the Synapse inference worker, laps, offline maps and navigation (MVP-3), social and segments (MVP-4).
 
@@ -42,7 +42,7 @@ Everything below is **code in place, not verified on a device**: the device matr
 
 - **MVP-1 code:** sync, identity, web list and detail ([TDD-0002](../design/TDD-0002-activity-sync.md), [TDD-0003](../design/TDD-0003-web-activity-view.md)), data deletion and export ([TDD-0004](../design/TDD-0004-data-deletion-and-export.md)), self-host hardening ([TDD-0005](../design/TDD-0005-self-host-hardening.md)), field readiness ([TDD-0006](../design/TDD-0006-field-readiness.md)).
 - **MVP-2 slices:** heart-rate channel with consent-gated RR ([TDD-0007](../design/TDD-0007-sensor-channels.md)), GPX import ([TDD-0008](../design/TDD-0008-gpx-import.md)), analysis ([TDD-0009](../design/TDD-0009-activity-analysis.md)), personal records ([TDD-0010](../design/TDD-0010-best-efforts.md)), the read path on the phone ([TDD-0011](../design/TDD-0011-mobile-read-path.md)).
-- **Launch slices already built:** the profile, heart-rate zones and phone map ([TDD-0012](../design/TDD-0012-profile-zones-phone-map.md)); FIT and archive import ([TDD-0013](../design/TDD-0013-fit-import.md)); HealthKit and Health Connect write ([TDD-0014](../design/TDD-0014-health-platforms.md)); account deletion on the phones; IT/EN; legal links; backup and restore with a drill in CI; a DPIA draft and an incident runbook; the Synapse frame parser and the pinned contract. Since 2026-10-30, also logic without a screen yet: the weekly and monthly totals and the calendar (`shared/client`, `Progress.kt`), the per-kilometre events for the voice cues (`shared/tracking`, `SplitCues.kt`), and the profile kept on the phone, which works with no account. The design of the consumer experience is [TDD-0015](../design/TDD-0015-consumer-ux.md), a draft until the owner approves the mockups.
+- **Launch slices already built:** the profile, heart-rate zones and phone map ([TDD-0012](../design/TDD-0012-profile-zones-phone-map.md)); FIT and archive import ([TDD-0013](../design/TDD-0013-fit-import.md)); HealthKit and Health Connect write ([TDD-0014](../design/TDD-0014-health-platforms.md)); account deletion on the phones; IT/EN; legal links; backup and restore with a drill (manual until the Compose job is ported to Woodpecker); a DPIA draft and an incident runbook; the Synapse frame parser and the pinned contract. Since 2026-10-30, also logic without a screen yet: the weekly and monthly totals and the calendar (`shared/client`, `Progress.kt`), the per-kilometre events for the voice cues (`shared/tracking`, `SplitCues.kt`), and the profile kept on the phone, which works with no account. The design of the consumer experience is [TDD-0015](../design/TDD-0015-consumer-ux.md), a draft until the owner approves the mockups.
 
 ### Work order
 
@@ -74,7 +74,7 @@ Optional third-party sensor integration. The rules are [ADR-0010](../adr/0010-ec
 
 ## MVP-0 and MVP-1 gates still open
 
-Real-device runs (device matrix S1–S28) take priority over any new feature. [TDD-0006](../design/TDD-0006-field-readiness.md) fixed the defects an audit found on 2026-10-15; what is left is the campaign itself, the tester distribution ([ADR-0019](../adr/0019-crash-reporting-and-tester-builds.md)). The end-to-end CI job against the real identity provider exists (the signed-in round trip and the restore drill of `.github/workflows/ci.yml`, TDD-0006 Q3); Q4 is the campaign.
+Real-device runs (device matrix S1–S28) take priority over any new feature. [TDD-0006](../design/TDD-0006-field-readiness.md) fixed the defects an audit found on 2026-10-15; what is left is the campaign itself, the tester distribution ([ADR-0019](../adr/0019-crash-reporting-and-tester-builds.md)). The end-to-end run against the real identity provider was written for the GitHub Actions compose smoke test (the signed-in round trip and the restore drill); that workflow is now disabled, so it is a manual pre-release check until it is ported to Woodpecker (TDD-0006 Q3). Q4 is the campaign.
 
 MVP-0 work order, from [report §22](reference-report-v0.1.md): requirements → sample model → iOS adapter → Android adapter → local storage → pause/resume/recovery → base metrics → fixtures and tests → real-device validation. Spec: [TDD-0001](../design/TDD-0001-tracking-engine.md).
 

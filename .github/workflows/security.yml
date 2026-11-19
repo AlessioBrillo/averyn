@@ -1,3 +1,7 @@
+# DEPRECATED (2026-11-19): GitHub Actions is not the CI gate. This workflow is
+# disabled and kept only for history. Secret scanning now runs in
+# .woodpecker/ci.yml (gitleaks); CodeQL is not running until it is replaced or
+# ported. Do not re-enable without an ADR.
 name: Security
 
 on:

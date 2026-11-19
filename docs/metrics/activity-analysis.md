@@ -1,6 +1,6 @@
 # Metric: Activity analysis (the display series)
 
-- **Status:** draft
+- **Status:** implemented (pending device evidence)
 - **Current algorithm version:** `series-v2`
 
 ## Definition

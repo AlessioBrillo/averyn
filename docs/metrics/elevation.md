@@ -1,6 +1,6 @@
 # Metric: Elevation
 
-- **Status:** draft
+- **Status:** implemented (pending device evidence)
 - **Current algorithm version:** `elevation-v1`
 
 ## Definition

@@ -1,6 +1,6 @@
 # Metric: Automatic splits
 
-- **Status:** draft
+- **Status:** implemented (pending device evidence)
 - **Current algorithm version:** `splits-v1`
 
 ## Definition
