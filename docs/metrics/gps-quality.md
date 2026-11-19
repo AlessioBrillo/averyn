@@ -1,6 +1,6 @@
 # Metric: GPS quality
 
-- **Status:** draft
+- **Status:** implemented (pending device evidence)
 - **Current algorithm version:** `quality-v2`
 
 ## Definition

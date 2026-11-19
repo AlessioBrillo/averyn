@@ -1,3 +1,8 @@
+# INERT: the .disabled suffix means GitHub never loads this file. Kept for history only.
+# DEPRECATED (2026-11-19): GitHub Actions is not the CI gate and release
+# automation is not running. Tester builds are made by hand following
+# docs/deployment/tester-builds.md. This workflow is disabled and kept only for
+# history. Do not re-enable without an ADR.
 name: Release (tester build)
 
 # Manual only. Builds the Android tester bundle (AAB) and attaches it to the run; uploading it to Play internal

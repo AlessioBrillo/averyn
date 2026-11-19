@@ -85,7 +85,7 @@ A map on the recording screen (it costs battery and attention while moving; the 
 
 - Logic is tested where it lives (`commonTest` for progress and cues).
 - Screens are checked on the matrix: S47 (readability outdoors), S48 (large text, screen reader, contrast), S43-S46 for the features. Android gets Compose screenshot or semantics tests for the recording and summary screens; iOS gets the same through its test target once it exists.
-- The contrast ratios of the token table are recomputed by a script in CI when the tokens file exists, so a token change cannot lower them unseen.
+- The contrast ratios of the token table are recomputed by a script in the gate once the tokens file exists, so a token change cannot lower them unseen.
 
 ## 7. Rollout and migration
 

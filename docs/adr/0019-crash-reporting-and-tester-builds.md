@@ -35,3 +35,5 @@ Tester builds:
 A beta beyond the author's own testers, or a crash class that store reports cannot explain.
 
 _Editorial edit 2026-11-08: the diagnostics version is no longer named in the text (it was `diagnostics-v3`; the TDD keeps the current one)._
+
+_Editorial note 2026-11-19: the GitHub Actions workflows are disabled (Woodpecker is the gate), so the CI signing and tag workflow described above is **not implemented today**. Tester builds are made by hand with the keystore kept offline, as described in [tester builds](../deployment/tester-builds.md). The decisions to sign tester builds and to keep the keys out of the repository stand._

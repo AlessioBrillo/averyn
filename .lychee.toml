@@ -1,0 +1,18 @@
+# Link check for the Woodpecker gate (`lycheeverse/lychee`).
+# The local instance URLs in the docs are examples, not reachable links.
+max_retries = 2
+timeout = 30
+max_concurrency = 12
+
+exclude = [
+  "localhost",
+  "127\\.0\\.0\\.1",
+  "0\\.0\\.0\\.0",
+]
+
+exclude_path = [
+  ".git",
+  "node_modules",
+  "apps/web/dist",
+  "infrastructure/compose/data",
+]

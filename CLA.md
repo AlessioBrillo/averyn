@@ -1,6 +1,6 @@
 # Contributor License Agreement
 
-**Status: draft template. Needs real legal review before the project relies on it — see [ADR-0012](docs/adr/0012-cla-and-store-distribution.md).** This is not legal advice.
+**Status: draft template. Needs real legal review before the project relies on it — see [ADR-0012](docs/adr/0012-cla-and-store-distribution.md).** This is not legal advice. The signing flow is being finalized: until it is announced, contact the maintainer before opening a non-trivial PR and the signature is recorded manually.
 
 By contributing to this repository, you agree:
 
@@ -10,4 +10,4 @@ By contributing to this repository, you agree:
 4. **No obligation.** The maintainer isn't obligated to use your contribution.
 5. **Assignment on entity formation.** If a legal entity (company) is formed to hold this project's assets, this agreement's rights transfer to that entity automatically; you don't need to re-sign.
 
-Sign-off is recorded automatically by `cla-assistant` on your first pull request; no separate action is needed beyond that.
+Sign-off is recorded by `cla-assistant` on your first pull request once the signing flow is installed; until then the maintainer records it manually.

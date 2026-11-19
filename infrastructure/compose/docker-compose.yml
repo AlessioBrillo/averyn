@@ -1,6 +1,8 @@
 # Local development and single-node self-hosting stack.
-#   sh init-env.sh         # generates .env with random secrets (or: cp .env.example .env, then edit)
+#   sh init-env.sh         # required: generates .env and the object store's identity file with random secrets
 #   docker compose --env-file .env up -d --build
+# Copying .env.example by hand works too, but every CHANGE placeholder and the S3 identity file must be filled in:
+# the stack refuses to start with unset credentials.
 name: averyn
 
 services:
@@ -35,7 +37,8 @@ services:
     volumes:
       - storage-data:/data
       # init-env.sh writes seaweedfs-s3.local.json (git-ignored) with generated keys and points S3_CONFIG_FILE at it.
-      - ${S3_CONFIG_FILE:-./seaweedfs-s3.json}:/etc/seaweedfs/s3.json:ro
+      # No tracked default: the stack must not start with known credentials.
+      - ${S3_CONFIG_FILE:?set S3_CONFIG_FILE in .env (run init-env.sh)}:/etc/seaweedfs/s3.json:ro
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8333/healthz"]
       interval: 5s
@@ -155,11 +158,11 @@ services:
       DATABASE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-averyn}
       DATABASE_USER: ${POSTGRES_USER:-averyn}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
-      # Raw activity files (ADR-0016). These match the identity in seaweedfs-s3.json: change both together.
+      # Raw activity files (ADR-0016). These match the identity in the file named by S3_CONFIG_FILE.
       AVERYN_S3_ENDPOINT: http://storage:8333
       AVERYN_S3_BUCKET: averyn
-      AVERYN_S3_ACCESS_KEY: ${S3_ACCESS_KEY:-averyn-dev-access}
-      AVERYN_S3_SECRET_KEY: ${S3_SECRET_KEY:-averyn-dev-secret-change-me}
+      AVERYN_S3_ACCESS_KEY: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY in .env (run init-env.sh)}
+      AVERYN_S3_SECRET_KEY: ${S3_SECRET_KEY:?set S3_SECRET_KEY in .env (run init-env.sh)}
       # Web basemap (MapLibre style URL). Empty = a demo style; the tile host sees the areas users view.
       AVERYN_MAP_STYLE_URL: ${AVERYN_MAP_STYLE_URL:-}
       # The operator's own documents, linked from the web and the apps (empty = no link).

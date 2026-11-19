@@ -14,7 +14,7 @@ settings:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "0.0.1"
     CURRENT_PROJECT_VERSION: "1"
-    # The release workflow overrides this with the commit id (ADR-0019); it is shown in the diagnostics report.
+    # A build overrides this with the commit id (ADR-0019, docs/deployment/tester-builds.md); it is shown in the diagnostics report.
     AVERYN_COMMIT: dev
 packages:
   AppAuth:

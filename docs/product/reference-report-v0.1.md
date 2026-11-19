@@ -2,6 +2,12 @@
 
 **Documento di riferimento tecnico e strategico — v0.1**
 
+> **Frozen input (24 September 2026).** This is the original reference report,
+> kept for history. It is **not a source of truth**: the license, the name, the
+> budget and the scope have been decided since. The current decisions are in the
+> [ADRs](../adr/README.md) and the [roadmap](roadmap.md); the corrections are
+> listed in [review-2026-09-27.md](../strategy/review-2026-09-27.md).
+
 - **Data:** 24 settembre 2026
 - **Obiettivo:** progettare una piattaforma sportiva open-source, multipiattaforma e self-hostable, con ampia parità funzionale rispetto alle piattaforme sportive esistenti senza imporre un abbonamento per ogni funzione.
 - **Target:** iOS, Android e Web.

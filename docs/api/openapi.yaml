@@ -1,12 +1,38 @@
 openapi: 3.1.0
 info:
   title: Averyn API
-  version: 0.0.1
+  version: 0.1.0
   description: |
     Contract-first: change this file in the same PR as the code.
     Versioning: breaking changes go to a new URL prefix (/v2); additive changes stay in /v1.
     Operational endpoints plus the MVP-1 sync surface (TDD-0002). Everything under /v1 except /v1/client-config
     requires a bearer token from the configured OIDC issuer (ADR-0011).
+    This is a pre-alpha contract: it describes what the code does today, not a stability promise.
+  license:
+    name: AGPL-3.0-or-later
+    identifier: AGPL-3.0-or-later
+  contact:
+    name: Averyn maintainers
+    url: https://github.com/AlessioBrillo/averyn/issues
+externalDocs:
+  description: API guide, versioning policy and how to lint the contract
+  url: https://github.com/AlessioBrillo/averyn/blob/main/docs/api/README.md
+servers:
+  - url: http://localhost:8080
+    description: Local self-hosted stack (plain HTTP)
+  - url: https://your-instance.example
+    description: A self-hosted instance; replace with your own origin
+tags:
+  - name: Operational
+    description: Liveness, readiness and Prometheus metrics
+  - name: Activities
+    description: Sync, listing, detail, track, analysis and deletion
+  - name: Imports
+    description: GPX, FIT and archive import
+  - name: Profile
+    description: The caller's profile, privacy zones, consents and records
+  - name: Account
+    description: The caller's identity, export and account deletion
 paths:
   /health:
     get:
@@ -70,14 +96,18 @@ paths:
         "401": { description: Missing or invalid token }
         "403": { description: The account was deleted (ADR-0017) }
         "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
-  /v1/activities/{clientActivityId}:
+  /v1/activities/{id}:
     put:
       summary: Upload a completed activity (idempotent, TDD-0002)
+      description: >
+        `id` is the activity's client id. The first upload stores it and answers 201; uploading the same bytes
+        again answers 200 with the same activity.
       security: [{ oidc: [] }]
       parameters:
-        - name: clientActivityId
+        - name: id
           in: path
           required: true
+          description: The activity's client id, the same value returned as `clientActivityId` in the summary.
           schema: { type: string, format: uuid }
       requestBody:
         required: true
@@ -103,10 +133,9 @@ paths:
         "409": { description: Same id already uploaded with different bytes }
         "410": { description: This activity id was deleted by its owner and is not accepted again (ADR-0017) }
         "413": { description: Body over the size limit }
-        "422": { description: Unparseable file, no metadata, or activity not in a terminal state }
-        "503": { description: Too many uploads in progress, retry after the Retry-After seconds }
+        "422": { description: "Unparseable file, no metadata, or activity not in a terminal state" }
+        "503": { description: "Too many uploads in progress, retry after the Retry-After seconds" }
         "507": { description: "Storing this file would exceed the caller's storage quota; nothing was stored (TDD-0005)" }
-  /v1/activities/{id}:
     get:
       summary: Read one activity summary (owner only; 404 for anyone else)
       security: [{ oidc: [] }]
@@ -125,7 +154,7 @@ paths:
         "401": { description: Missing or invalid token }
         "403": { description: The account was deleted (ADR-0017) }
         "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
-        "404": { description: Not found, or not owned by the caller }
+        "404": { description: "Not found, or not owned by the caller" }
     delete:
       summary: Delete one activity and its raw file (owner only; 404 for anyone else, ADR-0017)
       security: [{ oidc: [] }]
@@ -140,7 +169,7 @@ paths:
         "401": { description: Missing or invalid token }
         "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
         "403": { description: The account was deleted }
-        "404": { description: Not found, or not owned by the caller }
+        "404": { description: "Not found, or not owned by the caller" }
   /v1/activities/{id}/track:
     get:
       summary: The activity's track as GeoJSON (owner only; 404 for anyone else, TDD-0003)
@@ -167,7 +196,7 @@ paths:
         "401": { description: Missing or invalid token }
         "403": { description: The account was deleted (ADR-0017) }
         "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
-        "404": { description: Not found, or not owned by the caller }
+        "404": { description: "Not found, or not owned by the caller" }
   /v1/activities/{id}/analysis:
     get:
       summary: The analysis of the activity — the automatic splits, the elevation and the series (owner only; TDD-0009)
@@ -192,10 +221,10 @@ paths:
         "401": { description: Missing or invalid token }
         "403": { description: The account was deleted (ADR-0017) }
         "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
-        "404": { description: Not found, or not owned by the caller }
+        "404": { description: "Not found, or not owned by the caller" }
         "500": { description: The analysis could not be computed; the activity itself is untouched }
-        "503": { description: Too many analyses in progress, retry after the Retry-After seconds }
-  /v1/activities/{clientActivityId}/rr:
+        "503": { description: "Too many analyses in progress, retry after the Retry-After seconds" }
+  /v1/activities/{id}/rr:
     put:
       summary: Upload the heart-rate sidecar of an activity (consent-gated, ADR-0021)
       description: >
@@ -204,7 +233,7 @@ paths:
         its own META line, and the activity must exist.
       security: [{ oidc: [] }]
       parameters:
-        - name: clientActivityId
+        - name: id
           in: path
           required: true
           schema: { type: string, format: uuid }
@@ -223,8 +252,8 @@ paths:
         "410": { description: The sidecar was deleted (consent withdrawn) and is not accepted again }
         "413": { description: Body over the size limit }
         "422": { description: The file has no metadata line }
-        "503": { description: Too many uploads in progress, retry after the Retry-After seconds }
-  /v1/activities/{clientActivityId}/synapse/{kind}:
+        "503": { description: "Too many uploads in progress, retry after the Retry-After seconds" }
+  /v1/activities/{id}/synapse/{kind}:
     put:
       summary: Upload what a Synapse band sent during an activity (consent-gated, ADR-0030)
       description: >
@@ -234,7 +263,7 @@ paths:
         available" before it is stored (ADR-0021). The activity must exist, and the file needs at least one whole record.
       security: [{ oidc: [] }]
       parameters:
-        - name: clientActivityId
+        - name: id
           in: path
           required: true
           schema: { type: string, format: uuid }
@@ -252,17 +281,17 @@ paths:
         "400": { description: Malformed activity id }
         "401": { description: Missing or invalid token }
         "403": { description: The consent of that kind is not granted }
-        "404": { description: Unknown kind, or the activity does not exist or is not owned by the caller }
+        "404": { description: "Unknown kind, or the activity does not exist or is not owned by the caller" }
         "410": { description: The sidecar was deleted (consent withdrawn) and is not accepted again }
         "413": { description: Body over the size limit }
         "422": { description: The file has no whole record }
         "507": { description: Storage quota exceeded }
-  /v1/activities/{clientActivityId}/synapse:
+  /v1/activities/{id}/synapse:
     get:
       summary: What the band recorded in an activity, as the consents allow (SynapseSummaryDto)
       security: [{ oidc: [] }]
       parameters:
-        - name: clientActivityId
+        - name: id
           in: path
           required: true
           schema: { type: string, format: uuid }
@@ -274,12 +303,12 @@ paths:
               schema: { type: object, description: SynapseSummaryDto in shared/api }
         "401": { description: Missing or invalid token }
         "404": { description: The activity does not exist or is not owned by the caller }
-  /v1/activities/{clientActivityId}/synapse/raw/{stream}:
+  /v1/activities/{id}/synapse/raw/{stream}:
     get:
       summary: A bounded window of one raw stream, decimated to at most `maxPoints` per segment (SynapseWindowDto)
       security: [{ oidc: [] }]
       parameters:
-        - name: clientActivityId
+        - name: id
           in: path
           required: true
           schema: { type: string, format: uuid }
@@ -307,7 +336,7 @@ paths:
         "400": { description: Malformed activity id or an empty window }
         "401": { description: Missing or invalid token }
         "403": { description: The `raw_signals` consent is not granted }
-        "404": { description: Unknown stream, a stream that was not recorded, or no such activity }
+        "404": { description: "Unknown stream, a stream that was not recorded, or no such activity" }
         "507": { description: "Storing this file would exceed the caller's storage quota; nothing was stored" }
   /v1/imports/gpx:
     post:
@@ -349,7 +378,7 @@ paths:
         "415": { description: The body is not a GPX file }
         "422": { description: The file is not a track this importer can read; the code says why }
         "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
-        "503": { description: Too many imports in progress, retry after the Retry-After seconds }
+        "503": { description: "Too many imports in progress, retry after the Retry-After seconds" }
         "507": { description: "Storing this file would exceed the caller's storage quota; nothing was stored" }
   /v1/imports/fit:
     post:
@@ -395,7 +424,7 @@ paths:
         "415": { description: The body type is not one a FIT file is sent with }
         "422": { description: "The file is not an activity this importer can read; the code says why (not_fit, fit_crc, fit_truncated, fit_structure, fit_not_activity, no_track, invalid_time, invalid_coordinate, too_many_points, sport_unknown)" }
         "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
-        "503": { description: Too many imports in progress, retry after the Retry-After seconds }
+        "503": { description: "Too many imports in progress, retry after the Retry-After seconds" }
         "507": { description: "Storing this file would exceed the caller's storage quota; nothing was stored" }
   /v1/imports/archive:
     post:
@@ -435,7 +464,7 @@ paths:
         "415": { description: The body is not a ZIP archive }
         "422": { description: "The archive as a whole cannot be imported (zip_error, archive_too_large); nothing was stored" }
         "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
-        "503": { description: Too many imports in progress, retry after the Retry-After seconds }
+        "503": { description: "Too many imports in progress, retry after the Retry-After seconds" }
   /v1/consents:
     get:
       summary: The caller's consent grants, granted and revoked (ADR-0021)
@@ -503,7 +532,7 @@ paths:
               schema: { $ref: "#/components/schemas/UserProfile" }
         "401": { description: Missing or invalid token }
         "403": { description: The account was deleted }
-        "422": { description: Not a valid profile (unknown unit system, maximum heart rate out of 100–230); nothing was stored }
+        "422": { description: "Not a valid profile (unknown unit system, maximum heart rate out of 100–230); nothing was stored" }
   /v1/privacy-zones:
     get:
       summary: The caller's privacy zones, places hidden on every map and card (TDD-0016)
@@ -562,7 +591,7 @@ paths:
         "401": { description: Missing or invalid token }
         "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
         "403": { description: The account was deleted }
-        "503": { description: Too many exports in progress, retry after the Retry-After seconds }
+        "503": { description: "Too many exports in progress, retry after the Retry-After seconds" }
   /v1/me/records:
     get:
       summary: The personal records of the caller — the fastest effort of every sport and distance (TDD-0010)

@@ -1,6 +1,6 @@
 name: Feature request
 description: Propose a feature or improvement
-labels: ["type/feature"]
+labels: ["enhancement"]
 body:
   - type: textarea
     id: problem
@@ -21,4 +21,4 @@ body:
     id: milestone
     attributes:
       label: Roadmap fit
-      options: [MVP-0 tracking, MVP-1 core, MVP-2 analysis, MVP-3 maps, MVP-4 social, Later, Not sure]
+      options: [MVP-L launch, MVP-3 maps, MVP-4 social, Later, Not sure]

@@ -1,6 +1,6 @@
 # Documentation system
 
-Docs live in the repo, are reviewed like code, and are checked in CI (markdownlint in both pipelines; the link check only in the GitHub one).
+Docs live in the repo, are reviewed like code, and are checked in the Woodpecker gate: markdownlint, the link check (lychee) and the OpenAPI lint (Spectral).
 
 | Type | Where | Purpose | Lifecycle |
 |---|---|---|---|
@@ -9,7 +9,7 @@ Docs live in the repo, are reviewed like code, and are checked in CI (markdownli
 | **Integrations** | [`integrations/`](integrations/synapse.md) | Contracts required from a third-party device/vendor to integrate | Kept current with what Averyn actually requires |
 | **ADR** (Architecture Decision Record) | [`adr/`](adr/README.md) | One hard-to-reverse decision: problem, options, decision, consequences | `proposed` → `accepted` → (`superseded` \| `deprecated`). **Immutable once accepted**; supersede with a new ADR |
 | **Design doc** (TDD) | [`design/`](design/template.md) | How a non-trivial feature/system will work, before it is built | `draft` → `in-review` → `approved` → `implemented` (code and tests merged) → `verified` (the rows of the [device matrix](testing/device-matrix.md) that cover it are green). Updated to reflect reality after shipping |
-| **Metric spec** | [`metrics/`](metrics/template.md) | The 11-field definition of one metric, versioned | New version = new section; old versions are never edited |
+| **Metric spec** | [`metrics/`](metrics/README.md) | The 11-field definition of one metric, versioned | `draft` (spec only) → `implemented` (code and tests) → `stable` (the device-matrix row is green); new version = new section, old versions are never edited |
 | **Architecture** | [`architecture/`](architecture/overview.md) | C4 diagrams and system overview | Kept current with `main` |
 | **Privacy** | [`privacy/`](privacy/data-classification.md) | Data classification, [threat model](privacy/threat-model.md), retention | Reviewed on any change to collected data |
 | **Testing** | [`testing/`](testing/device-matrix.md) | Device matrix, test strategy | Updated as devices are tested |

@@ -10,7 +10,7 @@ Format: [MADR](https://adr.github.io/madr/)-style, see [template](template.md). 
 | [0004](0004-kotlin-multiplatform-shared-native-ui.md) | KMP shared logic, native UI and native tracking | accepted |
 | [0005](0005-ktor-modular-monolith.md) | Backend: Ktor modular monolith | accepted |
 | [0006](0006-postgres-postgis-s3-storage.md) | PostgreSQL/PostGIS and S3-compatible object storage | accepted |
-| [0007](0007-web-stack.md) | Web: React + TypeScript + Vite, admin inside the web app | accepted |
+| [0007](0007-web-stack.md) | Web: React + TypeScript + Vite, admin inside the web app | accepted (admin part superseded by [0035](0035-no-admin-interface-before-moderation.md)) |
 | [0008](0008-project-codename.md) | Project name: "Averyn" is a codename | accepted |
 | [0009](0009-observability-baseline.md) | Observability baseline | accepted |
 | [0010](0010-ecosystem-boundary.md) | Ecosystem boundary: Averyn is the platform, Synapse is an optional integration | accepted |
@@ -38,5 +38,6 @@ Format: [MADR](https://adr.github.io/madr/)-style, see [template](template.md). 
 | [0032](0032-revenue-model.md) | The users' data is never the product; the band is sold in the open; limits only against abuse | accepted |
 | [0033](0033-no-federation.md) | The social graph lives inside one instance; no federation for now | accepted |
 | [0034](0034-social-scope-and-device-openness.md) | Social scope additions; features follow the signal, never the brand; any device connects through open formats | accepted |
+| [0035](0035-no-admin-interface-before-moderation.md) | No admin interface before moderation (MVP-4); the operator uses runbooks and the database | accepted |
 
 Open decisions still without an ADR are tracked in [product/roadmap.md](../product/roadmap.md#open-decisions).

@@ -1,6 +1,6 @@
 # Metric: Speed and pace
 
-- **Status:** draft
+- **Status:** implemented (pending device evidence)
 - **Current algorithm version:** `speed-v1`
 
 ## Definition

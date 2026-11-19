@@ -1,6 +1,6 @@
 # Metric: Heart-rate zones
 
-- **Status:** draft (implemented; `stable` after the device matrix row S33 is green)
+- **Status:** implemented (pending device evidence; `stable` after the device matrix row S33 is green)
 - **Current algorithm version:** `hr-zones-v1`
 
 ## Definition

@@ -27,3 +27,11 @@ Single repo. Gradle Kotlin DSL with a version catalog and convention plugins (`b
 ## Revisit when
 
 Full CI exceeds ~15 minutes with path filtering, or a second team needs independent release cadence.
+
+---
+
+**Editorial note (2026-11-19):** the admin reference is superseded by
+[ADR-0035](0035-no-admin-interface-before-moderation.md): there is no admin
+interface before moderation (MVP-4). The CI notes above describe the old GitHub
+Actions setup; the gate is now Woodpecker (`.woodpecker/ci.yml`), which runs on
+Linux and has no macOS/iOS job.

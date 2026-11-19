@@ -1,0 +1,11 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Generated, vendored and local-only files are not part of the committed tree."
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)\.git/''',
+  '''(^|/)apps/web/dist/''',
+  '''(^|/)infrastructure/compose/data/''',
+]

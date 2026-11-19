@@ -1,6 +1,6 @@
 # Metric: Moving, paused and stationary time
 
-- **Status:** draft
+- **Status:** implemented (pending device evidence)
 - **Current algorithm version:** `time-v1`
 
 ## Definition

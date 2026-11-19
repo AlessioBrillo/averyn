@@ -1,3 +1,7 @@
+# INERT: the .disabled suffix means GitHub never loads this file. Kept for history only.
+# DEPRECATED (2026-11-19): GitHub Actions is not the CI gate. This workflow is
+# disabled and kept only for history. PR titles are checked in review; the gate
+# is .woodpecker/ci.yml. Do not re-enable without an ADR.
 name: PR title
 
 on:
