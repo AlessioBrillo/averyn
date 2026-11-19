@@ -1,3 +1,4 @@
+# INERT: the .disabled suffix means GitHub never loads this file. Kept for history only.
 # DEPRECATED (2026-11-19): GitHub Actions is not the CI gate. This workflow is
 # disabled and kept only for history. The gate is .woodpecker/ci.yml; run it
 # locally with tools/ci/ci-local.sh. Do not re-enable without an ADR.

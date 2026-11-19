@@ -29,8 +29,8 @@ a commit on `main`; the upgrade runbook uses commit ids.
   is missing.
 - The self-hosting quickstart is the canonical `init-env.sh` path; the README
   points to it instead of duplicating a different one.
-- Woodpecker is the only declared CI gate; the GitHub workflows are disabled and
-  marked deprecated.
+- Woodpecker is the only declared CI gate; the GitHub workflows are inert
+  (`.disabled`), disabled in the repository settings too, and marked deprecated.
 - Issue templates and CONTRIBUTING use the labels and milestones that actually
   exist.
 - Frozen inputs (reference report and strategy files) start with a banner that

@@ -8,6 +8,7 @@ Thumbs.db
 .claude/
 
 # Secrets — never commit
+CLAUDE.local.md
 .env
 .env.*
 !.env.example

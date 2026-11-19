@@ -1,3 +1,4 @@
+# INERT: the .disabled suffix means GitHub never loads this file. Kept for history only.
 # DEPRECATED (2026-11-19): GitHub Actions is not the CI gate. This workflow is
 # disabled and kept only for history. Secret scanning now runs in
 # .woodpecker/ci.yml (gitleaks); CodeQL is not running until it is replaced or

@@ -129,7 +129,7 @@ Android requests `ACCESS_FINE_LOCATION` and `ACCESS_COARSE_LOCATION` together an
 
 ### 5.8 Tester builds (R10)
 
-See [ADR-0019](../adr/0019-crash-reporting-and-tester-builds.md). `versionCode` = a monotonic integer chosen at build time, `versionName` = the chosen version, the commit SHA in `DeviceInfo`. Display name "Averyn Beta"; application id and bundle id stay `dev.averyn.app` ([ADR-0008](../adr/0008-project-codename.md)). Release builds are made by hand following [tester builds](../deployment/tester-builds.md); the old `.github/workflows/release.yml` is disabled and kept only as history. The Play internal and TestFlight uploads are manual steps. A CI job for the iOS upload is deliberately not written: it cannot be tested without the signing material.
+See [ADR-0019](../adr/0019-crash-reporting-and-tester-builds.md). `versionCode` = a monotonic integer chosen at build time, `versionName` = the chosen version, the commit SHA in `DeviceInfo`. Display name "Averyn Beta"; application id and bundle id stay `dev.averyn.app` ([ADR-0008](../adr/0008-project-codename.md)). Release builds are made by hand following [tester builds](../deployment/tester-builds.md); the old `.github/workflows/release.yml.disabled` is inert and kept only as history. The Play internal and TestFlight uploads are manual steps. A CI job for the iOS upload is deliberately not written: it cannot be tested without the signing material.
 
 ### 5.9 Backend and sync (R11)
 

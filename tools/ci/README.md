@@ -49,5 +49,5 @@ only adds the gateway alias when the name does not resolve, which is the case on
 a plain Linux runner. The same rule applies to local Testcontainers runs: on
 Docker Desktop, leave `host.docker.internal` to Docker's DNS.
 
-The pipeline is the gate. GitHub Actions is not: the workflows there are
-disabled and kept only for history.
+The pipeline is the gate. GitHub Actions is not: the workflows there are kept
+only for history with a `.disabled` suffix, so GitHub never loads them.

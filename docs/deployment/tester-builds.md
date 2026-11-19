@@ -11,7 +11,7 @@ Tester builds go to Play **internal testing** and **TestFlight** only, never to 
 
 ## Android
 
-There is **no release automation today**: the GitHub Actions workflows are disabled and the Woodpecker gate does not sign builds. The signed bundle is built by hand with the keystore environment below; the old `.github/workflows/release.yml` is kept only as history and is not run.
+There is **no release automation today**: the GitHub Actions workflows are disabled and the Woodpecker gate does not sign builds. The signed bundle is built by hand with the keystore environment below; the old `.github/workflows/release.yml.disabled` is kept only as history and cannot run.
 
 ```sh
 AVERYN_KEYSTORE_FILE=/path/to/upload.jks AVERYN_KEYSTORE_PASSWORD=... AVERYN_KEY_ALIAS=... AVERYN_KEY_PASSWORD=... \
