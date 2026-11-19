@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var viewModel = RecorderViewModel()
+    @State private var confirmingStop = false
 
     /// How the numbers of the history are written (TDD-0012).
     private var format: UnitFormat { UnitFormat(units: viewModel.units) }
@@ -314,8 +315,18 @@ struct ContentView: View {
         }
     }
 
-    @ViewBuilder
     private var controls: some View {
+        controlsForState
+            .confirmationDialog("Stop this activity?", isPresented: $confirmingStop, titleVisibility: .visible) {
+                Button("Stop", role: .destructive) { viewModel.stop() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("It will be saved and cannot be continued.")
+            }
+    }
+
+    @ViewBuilder
+    private var controlsForState: some View {
         switch viewModel.snapshot.state {
         case .idle, .failed, .completed:
             HStack {
@@ -326,17 +337,27 @@ struct ContentView: View {
         case .preparing:
             VStack {
                 Text("Waiting for GPS…")
+                // A notice, never a reason to give up: a late fix still starts the activity.
+                TimelineView(.periodic(from: .now, by: 10)) { _ in
+                    if PreparingNoticeKt.preparingTooLong(
+                        nowMs: nowTimeMs(),
+                        startedMs: viewModel.recorder.currentMetadata()?.startedAtMs ?? 0,
+                        thresholdMs: PreparingNoticeKt.PREPARING_NOTICE_MS
+                    ) {
+                        Text("Still no GPS fix. Move to open sky, or cancel and start again.")
+                    }
+                }
                 Button("Cancel") { viewModel.cancel() }
             }
         case .recording:
             HStack {
                 Button("Pause") { viewModel.pause() }
-                Button("Stop") { viewModel.stop() }
+                Button("Stop") { confirmingStop = true }
             }
         case .paused:
             HStack {
                 Button("Resume") { viewModel.resume() }
-                Button("Stop") { viewModel.stop() }
+                Button("Stop") { confirmingStop = true }
             }
         case .stopping:
             Text("Finishing…")

@@ -281,6 +281,36 @@
         }
       }
     },
+    "Still no GPS fix. Move to open sky, or cancel and start again.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ancora nessun segnale GPS. Spostati all'aperto, oppure annulla e riprova."
+          }
+        }
+      }
+    },
+    "Stop this activity?": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fermare l'attività?"
+          }
+        }
+      }
+    },
+    "It will be saved and cannot be continued.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verrà salvata e non potrà essere ripresa."
+          }
+        }
+      }
+    },
     "Waiting for GPS…": {
       "localizations": {
         "it": {
