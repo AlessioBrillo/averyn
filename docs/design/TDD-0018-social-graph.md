@@ -23,12 +23,12 @@ Non-goals: feed, likes, comments, push, groups, segments, search (a person is fo
 | F1 | A new activity gets the owner's default visibility, which starts `private`. Only the owner changes it, per activity, and a re-upload never changes it. |
 | F2 | A follow is a request; it is active only when the followed accepts. A profile marked private shows only handle and display name to non-followers. |
 | F3 | Every read of an activity by a non-owner goes through one function, `ActivityAccess`, that decides visible / not visible from (viewer, owner, visibility, follow state, block state, profile privacy) and applies the owner's privacy zones before returning coordinates. Not visible and not existing answer the same `404`. |
-| F4 | A non-owner sees the summary (sport, date, distance, time, pace, elevation) and the zone-cut track. Never heart rate, RR, HRV, stress or analysis series of those (F5). |
+| F4 | A non-owner sees the summary (sport, date, distance, time, pace) and the zone-cut track. Never heart rate, RR, HRV, stress or analysis series of those (F5). |
 | F5 | Health-class data is never in a non-owner view without a separate consent per scope ([ADR-0013](../adr/0013-health-data-special-category.md)). Not part of S1. |
 | F6 | Deleting an account or an activity removes it from every other person's view at once. Follows and blocks of the account go with it. |
 | F7 | A block removes the follow in both directions, hides both people from each other, and refuses a new follow either way. |
 | F8 | A handle is 3-30 chars of `a-z 0-9 _ .`, unique ignoring case, not reserved (`admin`, `averyn`, `support`, `me`, `help`, `root`, `system`, `moderator`...), changed at most once every 30 days. Setting one needs `ageConfirmed = true` (16 or older). |
-| F9 | An avatar is decoded and re-encoded as a 256 px JPEG by the server; the original is discarded, so no metadata survives. Max 5 MB in; counts in the quota. |
+| F9 | An avatar is decoded and re-encoded as a 256 px JPEG by the server; the original is discarded, so no metadata survives. Max 5 MB in; the result is small and replaces the previous one, so it is not counted in the quota. |
 | F10 | `link` visibility creates an unguessable token (128-bit random); changing to another visibility clears it. The shared page is served without a login, rate limited per IP. |
 | F11 | Every non-owner response, and every page for `link` and `public`, carries `X-Robots-Tag: noindex` and the web pages a robots meta. |
 | F12 | A report names a user or an activity, one reason from a closed list and an optional note (≤ 500). One open report per (reporter, target). |

@@ -30,7 +30,7 @@
 - Pages with visibility `link` or `public` are **never indexed** (`X-Robots-Tag: noindex` and a robots meta): a shared link must not become a map of where a person runs.
 - A user can set the **default visibility** of their new activities; it starts at `private`, only the user changes it, and it never touches an existing activity.
 - A handle (`@name`) is 3-30 characters of `a-z 0-9 _ .`, unique ignoring case, changeable once every 30 days; the API refers to users by opaque id.
-- An avatar is re-encoded by the server (metadata gone) and counts in the user's quota.
+- An avatar is re-encoded by the server (metadata gone) to 256 px and replaces the previous one, so it stays small and is not counted in the quota.
 - **After an account is deleted:** follows and blocks go at once; a *report* is kept for **6 months with the reporter removed**, as proof of the notice-and-action process, then deleted by the runbook.
 
 ### The slices, in order
