@@ -632,8 +632,8 @@ class ActivityIngestTest {
             assertEquals("application/zip", response.contentType()?.withoutParameters().toString())
             assertTrue(response.headers[HttpHeaders.ContentDisposition]!!.contains("averyn-export.zip"))
             val files = unzip(response.readRawBytes())
-            // 2 raw + 2 gpx + 2 analysis + profile.json + privacy-zones.json + consents.json + records.json + activities.json
-            assertEquals(11, files.size, files.keys.toString())
+            // 2 raw + 2 gpx + 2 analysis + profile, privacy-zones, social, consents, records and activities .json
+            assertEquals(12, files.size, files.keys.toString())
             for (rec in listOf(a, b)) {
                 assertContentEquals(rec.bytes, files.getValue("raw/${rec.id}.jsonl"))
                 val gpx = String(files.getValue("gpx/${rec.id}.gpx"))

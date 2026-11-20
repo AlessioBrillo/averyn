@@ -31,6 +31,8 @@ tags:
     description: GPX, FIT and archive import
   - name: Profile
     description: The caller's profile, privacy zones, consents and records
+  - name: Social
+    description: Public profile, follow, block, report, visibility (TDD-0018)
   - name: Account
     description: The caller's identity, export and account deletion
 paths:
@@ -563,6 +565,446 @@ paths:
         "401": { description: Missing or invalid token }
         "403": { description: The account was deleted }
         "422": { description: "Not a valid list (more than 10 zones, a radius outside 50–2000 m, a coordinate out of range, a label over 40 characters, a body over 4 kB); nothing was stored. The answer never repeats a coordinate" }
+  /v1/me/public-profile:
+    get:
+      summary: The caller's public profile, as the owner edits it (TDD-0018)
+      security: [{ oidc: [] }]
+      tags: [Social]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SocialProfile" }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+    put:
+      summary: Save the public profile (TDD-0018 F8)
+      description: A null handle keeps the current one. A handle is 3-30 characters of a-z, 0-9, _ and ., stored in lower case, unique, not reserved, and needs ageConfirmed (16 or older). The first handle and the first change are free; after that one change every 30 days.
+      security: [{ oidc: [] }]
+      tags: [Social]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SocialProfile" }
+      responses:
+        "200":
+          description: Stored; the body is the stored profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SocialProfile" }
+        "409": { description: "The handle is taken, or it changed less than 30 days ago" }
+        "422": { description: "Not a valid profile; nothing was stored" }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+  /v1/me/avatar:
+    put:
+      summary: Set the avatar (TDD-0018 F9)
+      description: The body is the picture itself (JPEG, PNG or GIF, at most 5 MB and 25 megapixels). The server cuts the central square, scales it to 256 px and writes a new JPEG, so no metadata survives.
+      security: [{ oidc: [] }]
+      tags: [Social]
+      requestBody:
+        required: true
+        content:
+          image/*: { schema: { type: string, format: binary } }
+      responses:
+        "200":
+          description: Stored; the body is the profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SocialProfile" }
+        "413": { description: Over 5 MB }
+        "422": { description: Not a picture the server can read }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+    delete:
+      summary: Remove the avatar
+      security: [{ oidc: [] }]
+      tags: [Social]
+      responses:
+        "204": { description: Removed }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+  /v1/activities/{id}/visibility:
+    put:
+      summary: Set who may see one of the caller's activities (TDD-0018 F1, F10)
+      description: private, followers, public or link. link returns an unguessable shareToken (kept if it already has one); any other value clears it, so an old link stops working at once.
+      security: [{ oidc: [] }]
+      tags: [Social]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VisibilityRequest" }
+      responses:
+        "200":
+          description: Set
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VisibilityResult" }
+        "404": { description: Not the caller's activity }
+        "422": { description: Not a visibility }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+  /v1/users/by-handle/{handle}:
+    get:
+      summary: The card of a person by handle
+      security: [{ oidc: [] }]
+      tags: [Social]
+      parameters:
+        - { name: handle, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserCard" }
+        "404": { description: "Not visible to the caller or not existing: the two look the same (TDD-0018 F3)" }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+  /v1/users/{id}:
+    get:
+      summary: The card of a person (TDD-0018 F2)
+      description: A private profile shows only the handle and the name to people who do not follow (restricted = true). A person who blocked the caller does not exist for the caller. Every response on /v1/users/ carries X-Robots-Tag noindex.
+      security: [{ oidc: [] }]
+      tags: [Social]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserCard" }
+        "404": { description: "Not visible to the caller or not existing: the two look the same (TDD-0018 F3)" }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+  /v1/users/{id}/avatar:
+    get:
+      summary: The avatar of a person (a 256 px JPEG)
+      security: [{ oidc: [] }]
+      tags: [Social]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: OK, content: { image/jpeg: { schema: { type: string, format: binary } } } }
+        "404": { description: "Not visible to the caller or not existing: the two look the same (TDD-0018 F3)" }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+  /v1/users/{id}/activities:
+    get:
+      summary: The activities of a person that the caller may see, newest first (TDD-0018 F3, F4)
+      description: Only the summary, never a heart-rate, RR, HRV or stress value. A visibility of link is never listed. A person whose activities are all hidden from the caller gives an empty page, not an error.
+      security: [{ oidc: [] }]
+      tags: [Social]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicActivityPage" }
+        "400": { description: "Malformed id, limit or cursor" }
+        "404": { description: "Not visible to the caller or not existing: the two look the same (TDD-0018 F3)" }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+  /v1/users/{id}/activities/{aid}:
+    get:
+      summary: One activity of a person, as the caller may see it
+      security: [{ oidc: [] }]
+      tags: [Social]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: aid
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicActivity" }
+        "404": { description: "Not visible to the caller or not existing: the two look the same (TDD-0018 F3)" }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+  /v1/users/{id}/activities/{aid}/track:
+    get:
+      summary: The track of such an activity, with the owner's privacy zones cut out (TDD-0016, TDD-0018 F3)
+      security: [{ oidc: [] }]
+      tags: [Social]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: aid
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: A GeoJSON Feature, content: { application/geo+json: { schema: { type: object } } } }
+        "404": { description: "Not visible to the caller or not existing: the two look the same (TDD-0018 F3)" }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+  /v1/shared/{token}:
+    get:
+      summary: The activity behind a share link, no sign-in (TDD-0018 F10)
+      description: Opens only an activity whose visibility is link and whose token matches. Rate limited per address. Carries X-Robots-Tag noindex.
+      tags: [Social]
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicActivity" }
+        "404": { description: "The token opens nothing (never existed, or the visibility changed)" }
+        "429": { description: Per-address limit reached }
+  /v1/shared/{token}/track:
+    get:
+      summary: The track behind a share link, privacy zones cut out
+      tags: [Social]
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: A GeoJSON Feature, content: { application/geo+json: { schema: { type: object } } } }
+        "404": { description: The token opens nothing }
+        "429": { description: Per-address limit reached }
+  /v1/users/{id}/follow:
+    post:
+      summary: Ask to follow a person (TDD-0018 F2)
+      description: The follow is a request until the person accepts. A repeat changes nothing. A blocked pair, in either direction, gets 404. At most 200 requests may wait.
+      security: [{ oidc: [] }]
+      tags: [Social]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The relation after the call
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RelationResult" }
+        "400": { description: Yourself }
+        "404": { description: "Not visible to the caller or not existing: the two look the same (TDD-0018 F3)" }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+    delete:
+      summary: Cancel a request or stop following
+      security: [{ oidc: [] }]
+      tags: [Social]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Done (also when there was nothing to do) }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+  /v1/me/follow-requests:
+    get:
+      summary: The requests waiting for the caller's answer; count is the in-app badge
+      security: [{ oidc: [] }]
+      tags: [Social]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FollowRequests" }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+  /v1/me/follow-requests/{id}/accept:
+    post:
+      summary: Accept a request (only the followed accepts)
+      security: [{ oidc: [] }]
+      tags: [Social]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Accepted }
+        "404": { description: There is no such request }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+  /v1/me/follow-requests/{id}/decline:
+    post:
+      summary: Decline a request
+      security: [{ oidc: [] }]
+      tags: [Social]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Declined }
+        "404": { description: There is no such request }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+  /v1/me/followers/{id}:
+    delete:
+      summary: Remove a follower
+      security: [{ oidc: [] }]
+      tags: [Social]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Done }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+  /v1/users/{id}/followers:
+    get:
+      summary: The people who follow a person (up to 200; people blocked with the caller left out)
+      security: [{ oidc: [] }]
+      tags: [Social]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK; empty for a private profile the caller does not follow
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/UserRef" } }
+        "404": { description: "Not visible to the caller or not existing: the two look the same (TDD-0018 F3)" }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+  /v1/users/{id}/following:
+    get:
+      summary: The people a person follows
+      security: [{ oidc: [] }]
+      tags: [Social]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK; empty for a private profile the caller does not follow
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/UserRef" } }
+        "404": { description: "Not visible to the caller or not existing: the two look the same (TDD-0018 F3)" }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+  /v1/me/blocks:
+    get:
+      summary: The people the caller blocked
+      security: [{ oidc: [] }]
+      tags: [Social]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/UserRef" } }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+  /v1/me/blocks/{id}:
+    put:
+      summary: Block a person (TDD-0018 F7)
+      description: The follow is removed in both directions. Unblocking does not bring it back.
+      security: [{ oidc: [] }]
+      tags: [Social]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Blocked }
+        "400": { description: Yourself }
+        "404": { description: "Not visible to the caller or not existing: the two look the same (TDD-0018 F3)" }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+    delete:
+      summary: Unblock a person
+      security: [{ oidc: [] }]
+      tags: [Social]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Done }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
+  /v1/reports:
+    post:
+      summary: Report a profile or an activity (TDD-0018 F12)
+      description: The reporter can only report what they can see. The same open report twice is one. At most 20 may be open. Kept 6 months, without the reporter once that account is deleted (ADR-0036).
+      security: [{ oidc: [] }]
+      tags: [Social]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReportRequest" }
+      responses:
+        "201": { description: Filed }
+        "404": { description: The target is not visible to the caller }
+        "422": { description: "Not a valid report, or the caller reported themselves" }
+        "401": { description: Missing or invalid token }
+        "403": { description: The account was deleted }
+        "429": { description: "Per-user request limit reached, retry after the Retry-After seconds (TDD-0005)" }
   /v1/me:
     delete:
       summary: Delete all of the caller's data held by Averyn (idempotent; the identity at the IdP is not touched, ADR-0017)
@@ -902,6 +1344,88 @@ components:
       properties:
         units: { type: string, enum: [metric, imperial], default: metric }
         maxHrBpm: { type: [integer, "null"], minimum: 100, maximum: 230, default: null }
+    SocialProfile:
+      type: object
+      properties:
+        handle: { type: [string, "null"], pattern: "^[a-z0-9_.]{3,30}$" }
+        displayName: { type: [string, "null"], minLength: 1, maxLength: 40 }
+        bio: { type: [string, "null"], maxLength: 160 }
+        sport: { type: [string, "null"], maxLength: 30 }
+        profilePrivate: { type: boolean, default: false }
+        defaultVisibility: { type: string, enum: [private, followers, public], default: private, description: "Only for new activities; link is not allowed because its token is made per activity" }
+        ageConfirmed: { type: boolean, default: false, description: "Input: the user says they are 16 or older. Output: it was said" }
+        hasAvatar: { type: boolean, description: Output only }
+        id: { type: [string, "null"], format: uuid, description: "Output only: the account's opaque id" }
+    UserRef:
+      type: object
+      required: [id, hasAvatar]
+      properties:
+        id: { type: string, format: uuid }
+        handle: { type: [string, "null"] }
+        displayName: { type: [string, "null"] }
+        hasAvatar: { type: boolean }
+    UserCard:
+      type: object
+      required: [id, hasAvatar, relation, restricted]
+      properties:
+        id: { type: string, format: uuid }
+        handle: { type: [string, "null"] }
+        displayName: { type: [string, "null"] }
+        bio: { type: [string, "null"], description: Null when restricted }
+        sport: { type: [string, "null"], description: Null when restricted }
+        hasAvatar: { type: boolean }
+        relation: { type: string, enum: [self, none, requested, following, blocked] }
+        restricted: { type: boolean }
+    PublicActivity:
+      type: object
+      description: An activity as a non-owner sees it. It has no heart-rate, RR, HRV or stress field (ADR-0013).
+      required: [id, ownerId, sport, startedAt, distanceM, elapsedMs, movingMs, averageSpeedMps]
+      properties:
+        id: { type: string, format: uuid }
+        ownerId: { type: string, format: uuid }
+        sport: { type: string }
+        startedAt: { type: string, format: date-time }
+        distanceM: { type: number }
+        elapsedMs: { type: integer, format: int64 }
+        movingMs: { type: integer, format: int64 }
+        averageSpeedMps: { type: number }
+        paceSecPerKm: { type: [number, "null"] }
+    PublicActivityPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/PublicActivity" } }
+        nextCursor: { type: [string, "null"] }
+    VisibilityRequest:
+      type: object
+      required: [visibility]
+      properties:
+        visibility: { type: string, enum: [private, followers, public, link] }
+    VisibilityResult:
+      type: object
+      required: [visibility]
+      properties:
+        visibility: { type: string, enum: [private, followers, public, link] }
+        shareToken: { type: [string, "null"], description: Only for link }
+    RelationResult:
+      type: object
+      required: [relation]
+      properties:
+        relation: { type: string, enum: [self, none, requested, following, blocked] }
+    FollowRequests:
+      type: object
+      required: [count, items]
+      properties:
+        count: { type: integer }
+        items: { type: array, items: { $ref: "#/components/schemas/UserRef" } }
+    ReportRequest:
+      type: object
+      required: [targetUserId, reason]
+      properties:
+        targetUserId: { type: string, format: uuid }
+        targetActivityId: { type: [string, "null"], format: uuid }
+        reason: { type: string, enum: [spam, abuse, impersonation, privacy, minor, illegal, other] }
+        note: { type: [string, "null"], maxLength: 500 }
     PrivacyZone:
       type: object
       required: [latitude, longitude, radiusM]

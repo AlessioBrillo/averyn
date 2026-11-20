@@ -72,6 +72,12 @@ const val DEFAULT_REQUESTS_PER_MINUTE = 120
 
 /** The rate limit every authenticated call shares, whatever it does. */
 internal val PER_USER = RateLimitName("per-user")
+
+/** Unauthenticated requests per address and minute: the shared pages (`/v1/shared/{token}`, TDD-0018 F10). */
+internal val PER_IP = RateLimitName("per-ip")
+
+/** Requests per address and minute on the unauthenticated routes: a page and its track need two. */
+private const val PUBLIC_REQUESTS_PER_MINUTE = 60
 private val exportLog = LoggerFactory.getLogger("dev.averyn.backend.activities.Export")
 
 /** Reads the `META` line of a sidecar: a newer client may add fields, which are not an error. */
@@ -88,6 +94,18 @@ internal fun Application.perUserRateLimit(requestsPerMinute: Int = DEFAULT_REQUE
         register(PER_USER) {
             rateLimiter(limit = requestsPerMinute, refillPeriod = 1.minutes)
             requestKey { call -> checkNotNull(call.principal<JWTPrincipal>()).payload.subject }
+        }
+        register(PER_IP) {
+            rateLimiter(limit = PUBLIC_REQUESTS_PER_MINUTE, refillPeriod = 1.minutes)
+            // ponytail: behind the edge the first X-Forwarded-For entry is the caller (the edge sets it); a caller who
+            // forges it only weakens this limit for themselves. Trust the edge's header exclusively if it ever matters.
+            requestKey { call ->
+                call.request.headers["X-Forwarded-For"]
+                    ?.substringBefore(',')
+                    ?.trim()
+                    ?.ifEmpty { null }
+                    ?: call.request.local.remoteAddress
+            }
         }
     }
 }

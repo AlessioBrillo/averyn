@@ -248,13 +248,17 @@ class ActivityIngest(
                                 stationary_ms, average_speed_mps, pace_sec_per_km, quality_grade, dropped_records,
                                 metrics_algorithm_version, quality_algorithm_version, track,
                                 avg_hr_bpm, max_hr_bpm, hr_source, hr_algorithm_version,
-                                source, source_object_key, source_sha256, source_size_bytes, import_version, imported_at)
+                                source, source_object_key, source_sha256, source_size_bytes, import_version, imported_at,
+                                visibility)
                             SELECT ?::uuid, ?::uuid, ?::text, ?::timestamptz, ?::text, ?::text, ?::text, ?::bigint,
                                 ?::double precision, ?::bigint, ?::bigint, ?::bigint, ?::bigint, ?::double precision,
                                 ?::double precision, ?::text, ?::integer, ?::text, ?::text,
                                 ST_GeomFromText(?::text, 4326),
                                 ?::integer, ?::integer, ?::text, ?::text,
-                                ?::text, ?::text, ?::text, ?::bigint, ?::text, ?::timestamptz
+                                ?::text, ?::text, ?::text, ?::bigint, ?::text, ?::timestamptz,
+                                -- The owner's default for a NEW activity (ADR-0036); a re-upload hits ON CONFLICT and
+                                -- never changes the visibility of an existing one.
+                                coalesce((SELECT default_visibility FROM user_profiles WHERE owner_id = ?::uuid), 'private')
                             WHERE NOT EXISTS (SELECT 1 FROM users WHERE id = ?::uuid AND deleted_at IS NOT NULL)
                                 AND NOT EXISTS (
                                     SELECT 1 FROM deleted_activities
@@ -305,6 +309,7 @@ class ActivityIngest(
                             stmt.setLong(++i, sourceBytes)
                             stmt.setString(++i, importVersion)
                             stmt.setTimestamp(++i, if (sourceKey == null) null else Timestamp.from(Instant.now()))
+                            stmt.setObject(++i, ownerId) // the default visibility
                             stmt.setObject(++i, ownerId)
                             stmt.setObject(++i, ownerId)
                             stmt.setObject(++i, clientActivityId)
