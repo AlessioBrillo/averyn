@@ -59,3 +59,5 @@ The owner's intent, stated in this session: the first public release must be wha
 The campaign finds that the tracking itself needs a redesign (then the experience work waits), or the free cloud's cost exceeds what the band margin and the donations can pay (then the business-model reaction order applies).
 
 *Editorial note, 2026-11-15: the "Money" paragraph is amended by [ADR-0032](0032-revenue-model.md) (the quota becomes an anti-abuse limit), and the order after the launch is extended by [ADR-0031](0031-social-and-community.md).*
+
+*Editorial note, 2026-11-20: the launch scope now includes the first social slices ([ADR-0036](0036-social-in-the-launch.md)).*

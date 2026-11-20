@@ -1,6 +1,6 @@
 # ADR-0031: Social and community come after the launch, inside one instance, private by default
 
-- **Status:** accepted
+- **Status:** superseded by [ADR-0036](0036-social-in-the-launch.md)
 - **Date:** 2026-11-15
 - **Deciders:** @AlessioBrillo
 
@@ -39,3 +39,5 @@ The tension: [vision.md](../product/vision.md) says private by default, health d
 ## Revisit when
 
 The campaign finds that the tracking needs a redesign (social waits), or moderation turns out to cost more than one person can carry (then groups wait, or the slice is cut back to follow and feed).
+
+*Editorial note, 2026-11-20: the timing (after the launch) and the slice order are superseded by [ADR-0036](0036-social-in-the-launch.md); the rules above stay in force.*

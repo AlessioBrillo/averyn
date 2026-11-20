@@ -51,7 +51,7 @@ Systematic, large-scale processing of location data and health-adjacent data of 
 
 | # | Risk to the user | Likelihood × impact | Measures in place | Residual / to decide |
 |---|---|---|---|---|
-| R1 | Someone obtains a user's tracks and learns their home, work and routine | Medium × High | Private by default; per-object access checks on every read, covered by IDOR tests; no sharing feature at launch; TLS everywhere; tokens never in logs | The operator's own administrators can read the storage: access is limited to the operator and logged by the host **[controller: access policy]** |
+| R1 | Someone obtains a user's tracks and learns their home, work and routine | Medium × High | Private by default; per-object access checks on every read, covered by IDOR tests; visibility per activity (R11) when the social slices are on; TLS everywhere; tokens never in logs | The operator's own administrators can read the storage: access is limited to the operator and logged by the host **[controller: access policy]** |
 | R2 | A data breach of the object store or the database | Low × High | Encryption in transit; the host's encryption at rest **[controller: confirm with the provider]**; secrets generated, not in the repository; per-user rate limits and quotas | An incident runbook ([incident.md](../runbooks/incident.md)); notification duties to the authority and the users are the controller's |
 | R3 | Health-class data (RR) is collected without a valid consent | Low × High | The adapter does not subscribe without a grant (fail-closed); the consent is re-read while recording; revocation stops the stream and deletes what was stored, leaving a tombstone | None identified |
 | R4 | A deleted user's data stays somewhere | Medium × Medium | Hard delete of the objects and rows, repeatable if it fails half-way; the export and the deletion are tested; the copy on the phone ends with the session | Backups keep deleted data until they expire (documented, ADR-0017) |
@@ -61,6 +61,10 @@ Systematic, large-scale processing of location data and health-adjacent data of 
 | R8 | Wellness estimates (zones, stress classes) are read as medical advice | Medium × Medium | Wellness wording only, no diagnostic claim; the zones are cut from a maximum the user typed | The product copy and the store listings need review by counsel **[counsel]** |
 | R9 | A third-party sensor sends more than was agreed | Low × High | A vendor adapter never subscribes to a raw stream; the vendor's cloud is at most a stateless job worker, with no user identifier ([ADR-0010](../adr/0010-ecosystem-boundary.md), ADR-0026) | The Synapse feature frame is a beta behind its own consent scopes |
 | R10 | Another process on the phone reads the copy | Low × Medium | The copy is in the app's private storage, excluded from the backup, bounded and cleared with the session | A lost, unlocked phone shows what the user opened |
+| R11 | A social surface shows where a person lives or trains | Medium × High | One server function decides every non-owner read and applies the privacy zones; `404` for "not visible" and "not existing"; a test fails if a route skips the function; `link` and `public` pages are never indexed; the share token is random and cleared when the visibility changes ([TDD-0018](../design/TDD-0018-social-graph.md), [ADR-0036](../adr/0036-social-in-the-launch.md)) | A follower can still infer habits from what the owner chose to show: the app says in plain words what each visibility shows **[counsel: wording]** |
+| R12 | Free text or an image hosted by the instance is abusive, illegal or identifies a child | Medium × Medium | Report from the first slice; closed reason list; the avatar is re-encoded (no metadata) and counted in the quota; the operator acts by runbook ([moderation.md](../runbooks/moderation.md)); no admin console yet ([ADR-0035](../adr/0035-no-admin-interface-before-moderation.md)) | Response times and the notice-and-action process are the controller's **[controller]**; the console is designed with the groups slice |
+| R13 | A minor uses the public features | Medium × High | A handle (the door to the public features) needs a declaration of 16 or older; the terms say so | An age declaration is not verification: whether to verify is the controller's decision **[controller / counsel]** (issue #74) |
+| R14 | A block or a report keeps data about a person after they left | Low × Medium | Follows and blocks are deleted with the account; a report keeps no reporter after the reporter's deletion and is deleted after 6 months by the runbook | None |
 
 ## 5. Conclusion and what is still needed before launch
 
@@ -72,6 +76,7 @@ The design answers the risks above with measures that exist in the code and are 
 4. Counsel has reviewed the privacy notice, the terms and the product wording (R8).
 5. A restore drill from an off-site backup has been done and logged ([ADR-0027](../adr/0027-managed-cloud-baseline.md)), and the incident runbook has been read by whoever is on call.
 6. The decision on RR intervals at launch (section 3) is taken.
+7. **Before any social surface opens on the managed cloud** (R11-R14): the terms with the age gate, the report process and its response time, and counsel's review of what each visibility says to the user.
 
 Reviewed by: **[controller / DPO — name, date]**. Next review: before the first release that processes a new kind of data, and at the latest a year after launch.
 

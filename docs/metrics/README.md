@@ -33,4 +33,4 @@ Existing versions are immutable.
 
 The device matrix and the rows are in
 [../testing/device-matrix.md](../testing/device-matrix.md). Nothing in this
-table is `stable` yet: the campaign has 0 of 50 rows filled.
+table is `stable` yet: the campaign has 0 of 56 rows filled.
