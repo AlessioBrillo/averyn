@@ -35,3 +35,5 @@ Raw routes are **Restricted** data ([data classification](../privacy/data-classi
 ## Revisit when
 
 A public hosted service needs a legal retention period, undo, or a deletion audit trail; or an IdP gains a standard deprovisioning hook worth using.
+
+*Editorial note, 2026-11-20: reports of the social slices are kept 6 months without the reporter after an account deletion ([ADR-0036](0036-social-in-the-launch.md)).*

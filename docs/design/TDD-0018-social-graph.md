@@ -1,57 +1,93 @@
-# TDD-0018: Social graph: profiles, follow, visibility, feed
+# TDD-0018: Social graph: profiles, follow, block, visibility (slice S1)
 
-- **Status:** draft (no code; slices start after MVP-L and a green campaign, [ADR-0031](../adr/0031-social-and-community.md))
-- **Version:** 0.1
+- **Status:** draft (becomes `accepted` in the PR that ships the backend; slice order and gates in [ADR-0036](../adr/0036-social-in-the-launch.md))
+- **Version:** 0.2
 - **Author:** @AlessioBrillo
-- **Date:** 2026-11-15
-- **Related:** [ADR-0031](../adr/0031-social-and-community.md), [ADR-0033](../adr/0033-no-federation.md), [data classification](../privacy/data-classification.md), [TDD-0016](TDD-0016-privacy-zones.md)
+- **Date:** 2026-11-20
+- **Related:** [ADR-0036](../adr/0036-social-in-the-launch.md), [ADR-0033](../adr/0033-no-federation.md), [ADR-0013](../adr/0013-health-data-special-category.md), [data classification](../privacy/data-classification.md), [TDD-0016](TDD-0016-privacy-zones.md), [moderation runbook](../runbooks/moderation.md)
 
 ## 1. Summary
 
-Profiles, follow with approval, visibility enforced on every read, and a chronological feed, in the Ktor monolith (package `social`), on PostgreSQL. This is the base the later slices (interactions, groups, segments, challenges) stand on; it holds the rule that matters: **one visibility check and one zone cut for every non-owner surface**.
+Public profile with a handle, follow with approval, block, report, and visibility enforced on every read, in the Ktor monolith (package `social`), on PostgreSQL. It is the base every later slice (feed, interactions, groups, segments, challenges) stands on and it holds the rule that matters: **one visibility check and one zone cut for every non-owner surface**. The feed is the next slice (S2).
 
 ## 2. Goals and non-goals
 
-Goals: a public profile (display name, sport, optional bio, no required real name); follow requests the followed approves; per-activity visibility (`private` default, `followers`, `public`, `link`); a feed of the followed people's visible activities.
+Goals: a profile (display name, `@handle`, sport, bio, avatar; no real name required); follow requests the followed approves; per-activity visibility (`private` default, `followers`, `public`, `link`) and a per-user default for new activities; block; report; an in-app count of pending requests; web and Android screens.
 
-Non-goals (this TDD): likes, comments and push ([next slice](../adr/0031-social-and-community.md)), groups, segments, federation, ranking, any use of health data, and the additions of [ADR-0034](../adr/0034-social-scope-and-device-openness.md) (search, gear and goals, photos, trained together, live tracking, heatmap), each with its own TDD when it starts.
+Non-goals: feed, likes, comments, push, groups, segments, search (a person is found by exact handle), ranking, any use of health data, iOS screens (draft PR when a Mac compiles them), an admin console. The additions of [ADR-0034](../adr/0034-social-scope-and-device-openness.md) each get their own TDD.
 
 ## 3. Functional requirements
 
 | ID | Requirement |
 |---|---|
-| F1 | A new activity is `private`. Changing visibility is an explicit act on one activity. |
-| F2 | A follow is a request; it becomes active only when the followed approves. A private profile hides everything but the name from non-followers. |
-| F3 | Every read of an activity by a non-owner goes through one function that decides visible / not visible from (viewer, owner, visibility, follow state, block state), and applies the privacy zones before returning coordinates. |
-| F4 | The feed lists the visible activities of the people the viewer follows, newest first, paginated by a cursor. No ranking. |
-| F5 | Heart rate, RR, HRV and stress never appear in a non-owner view without a separate consent per scope. |
-| F6 | Deleting an account or an activity removes it from every other person's feed and view at once. |
+| F1 | A new activity gets the owner's default visibility, which starts `private`. Only the owner changes it, per activity, and a re-upload never changes it. |
+| F2 | A follow is a request; it is active only when the followed accepts. A profile marked private shows only handle and display name to non-followers. |
+| F3 | Every read of an activity by a non-owner goes through one function, `ActivityAccess`, that decides visible / not visible from (viewer, owner, visibility, follow state, block state, profile privacy) and applies the owner's privacy zones before returning coordinates. Not visible and not existing answer the same `404`. |
+| F4 | A non-owner sees the summary (sport, date, distance, time, pace) and the zone-cut track. Never heart rate, RR, HRV, stress or analysis series of those (F5). |
+| F5 | Health-class data is never in a non-owner view without a separate consent per scope ([ADR-0013](../adr/0013-health-data-special-category.md)). Not part of S1. |
+| F6 | Deleting an account or an activity removes it from every other person's view at once. Follows and blocks of the account go with it. |
+| F7 | A block removes the follow in both directions, hides both people from each other, and refuses a new follow either way. |
+| F8 | A handle is 3-30 chars of `a-z 0-9 _ .`, unique ignoring case, not reserved (`admin`, `averyn`, `support`, `me`, `help`, `root`, `system`, `moderator`...), changed at most once every 30 days. Setting one needs `ageConfirmed = true` (16 or older). |
+| F9 | An avatar is decoded and re-encoded as a 256 px JPEG by the server; the original is discarded, so no metadata survives. Max 5 MB in; the result is small and replaces the previous one, so it is not counted in the quota. |
+| F10 | `link` visibility creates an unguessable token (128-bit random); changing to another visibility clears it. The shared page is served without a login, rate limited per IP. |
+| F11 | Every non-owner response, and every page for `link` and `public`, carries `X-Robots-Tag: noindex` and the web pages a robots meta. |
+| F12 | A report names a user or an activity, one reason from a closed list and an optional note (≤ 500). One open report per (reporter, target). |
+| F13 | After the account is deleted, the report stays 6 months without the reporter, then the runbook removes it. |
 
 ## 4. Non-functional requirements
 
-Privacy first: an IDOR test for every endpoint, with a viewer who is a stranger, a pending follower, a follower and a blocked user. Feed read cost bounded by a cursor and an index on (owner, started_at); `ponytail:` fan-out on read, move to fan-out on write only if the measured p95 requires it. No new infrastructure.
+Privacy first: an IDOR test for every route with a viewer who is the owner, a stranger, a pending follower, a follower, a blocked user and no one (unauthenticated). A test enumerates the routes under `/v1/users` and `/v1/shared` and fails if one is not registered through `ActivityAccess`. Reads bounded by a cursor and an index on `(owner_id, started_at)`. Writes rate limited per user (`PER_USER`), follows and reports with a lower limit. No new infrastructure and no new dependency (`javax.imageio` for the avatar).
 
 ## 5. Design
 
-Tables (migrations from V15): `follows(follower, followed, state, created_at)`, `blocks(blocker, blocked)`, profile columns on the existing profile table. `visibility` stays the text column of V3 with its CHECK; the Kotlin type is an enum introduced by the slice that first reads it (the wire value is lowercase). Users are referred to by opaque ids in every response ([ADR-0033](../adr/0033-no-federation.md)).
+**Tables (`V15__social.sql`; the `devices` table moves to `V16`):**
+
+- `user_profiles` gains `handle`, `handle_changed_at`, `display_name`, `bio` (≤ 160), `sport`, `avatar_key`, `profile_private`, `default_visibility` (same CHECK as V3), `age_confirmed_at`; unique index on `lower(handle)`.
+- `follows(follower_id, followed_id, state, created_at)`, state `pending | active`, PK `(follower_id, followed_id)`, index on `followed_id`.
+- `blocks(blocker_id, blocked_id, created_at)`.
+- `reports(id, reporter_id NULL, target_user_id, target_activity_id NULL, reason, note, created_at, resolved_at)`.
+- `activities.share_token` (unique, nullable).
+
+**Access.** `canView(viewer, owner, visibility, followState, blocked, profilePrivate)` is a pure function with a table test; the loader reads the activity, the follow and the block in one query. The track is `trackGeoJson` + `hideZonesIn(..., zoneStore.get(owner))` ([TDD-0016](TDD-0016-privacy-zones.md)) and nothing returns coordinates another way.
+
+**Endpoints (all authenticated, `PER_USER`, except `/v1/shared`):**
+
+| Route | Purpose |
+|---|---|
+| `GET/PUT /v1/me/public-profile` | read / write own profile (handle, name, bio, sport, private, default visibility, ageConfirmed) |
+| `PUT/DELETE /v1/me/avatar`, `GET /v1/users/{id}/avatar` | avatar |
+| `GET /v1/users/{id}`, `GET /v1/users/by-handle/{handle}` | profile card (+ relation: none, pending, following, blocked) |
+| `GET /v1/users/{id}/activities`, `.../{aid}`, `.../{aid}/track` | visible activities of a person (cursor) |
+| `PUT /v1/activities/{id}/visibility` | owner; returns the token for `link` |
+| `POST/DELETE /v1/users/{id}/follow` | request / cancel / unfollow |
+| `GET /v1/me/follow-requests`, `POST .../{id}/accept`, `.../decline`, `DELETE /v1/me/followers/{id}` | the followed's side; the list length is the badge |
+| `GET /v1/users/{id}/followers`, `.../following` | lists, visibility-checked |
+| `PUT/DELETE /v1/me/blocks/{id}`, `GET /v1/me/blocks` | block |
+| `POST /v1/reports` | report |
+| `GET /v1/shared/{token}`, `.../track` | unauthenticated, per-IP limit |
+
+Users are opaque ids in every response ([ADR-0033](../adr/0033-no-federation.md)); a handle only resolves to an id.
+
+**Deletion and export.** `UserData.deleteAccount` removes follows and blocks on both sides and the avatar object, and sets `reports.reporter_id = NULL`. The export adds the public profile, the follows, the blocks and the reports the user made.
 
 ## 6. Test strategy
 
-Backend integration tests with Testcontainers for the visibility matrix (F3, F5, F6); fixtures with a track that starts inside a private zone; a device-matrix row per user-facing screen before `verified`.
+Backend integration tests (Testcontainers): the IDOR matrix over routes × viewers × visibilities × profile privacy; a track that starts inside a zone is cut for every non-owner surface; no health field in any non-owner body; deletion removes the person from every other view (F6); handle rules and the 30-day change; avatar with GPS EXIF comes out without it; the route guard test. Shared: contract tests of the DTOs. Web: vitest for the pure modules. Android: unit tests for any logic. Device-matrix rows S51-S56 before `verified`.
 
 ## 7. Rollout and migration
 
-Behind no flag: the slice ships when its tests, its matrix row and the DPIA review for social data are done. Existing activities are `private`, so nothing becomes visible by migration.
+No feature flag: the code ships when its tests and its matrix rows are done; the public surfaces open on the managed cloud only after the gates of [ADR-0036](../adr/0036-social-in-the-launch.md). Existing activities are `private` and existing profiles have no handle, so nothing becomes visible by migration.
 
 ## 8. Risks and mitigations
 
 | Risk | Mitigation |
 |---|---|
-| A surface forgets the check and leaks a location | One function (F3), a test that lists every route returning an activity and fails if one does not call it |
-| Moderation load on one person | Block and report come before groups ([ADR-0031](../adr/0031-social-and-community.md)) |
-| Minors | Terms and an age gate decided with the legal texts (issue #74) before the first public slice |
+| A surface forgets the check and leaks a location | One function (F3); the route guard test fails if a route skips it |
+| Free text and images hosted without moderation | Report from the first slice; runbook; avatar re-encoded; the console is designed with S4/S5 |
+| Minors | Age gate of 16 on the handle (F8) and in the terms before the first public surface; issue #74 |
+| A shared link becomes a map of habits | `noindex` always (F11), zones cut, the token can be cleared by changing visibility |
+| Handle squatting or impersonation | Reserved words, 30-day change limit, report reason `impersonation` |
 
 ## 9. Open questions
 
-- Is a link-visibility page indexed or `noindex`? (owner: @AlessioBrillo; decided with F1, goes in the slice's PR)
-- Retention of reports and blocks after an account deletion. (owner: @AlessioBrillo; ADR-0017 amendment)
+None blocking S1. For S2: whether the feed shows an activity that became `followers` after the follow was accepted (default: yes, it is a read of current visibility).
