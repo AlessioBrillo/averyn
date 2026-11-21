@@ -12,6 +12,7 @@ import dev.averyn.backend.consent.consent
 import dev.averyn.backend.imports.imports
 import dev.averyn.backend.privacy.privacyZones
 import dev.averyn.backend.profile.profile
+import dev.averyn.backend.social.social
 import dev.averyn.backend.storage.RawObjectStore
 import dev.averyn.backend.synapse.SynapseStore
 import dev.averyn.backend.synapse.revocationHook
@@ -83,6 +84,7 @@ fun Application.module() {
     imports(db, raw, quotaBytes = quotaBytes)
     profile(db)
     privacyZones(db)
+    social(db, raw, quotaBytes = quotaBytes)
 }
 
 /**

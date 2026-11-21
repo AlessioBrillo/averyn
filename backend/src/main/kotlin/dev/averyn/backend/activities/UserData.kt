@@ -8,6 +8,7 @@ import dev.averyn.backend.consent.ConsentGrant
 import dev.averyn.backend.consent.ConsentStore
 import dev.averyn.backend.privacy.PrivacyZoneStore
 import dev.averyn.backend.profile.ProfileStore
+import dev.averyn.backend.social.SocialStore
 import dev.averyn.backend.storage.RawObjectStore
 import dev.averyn.tracking.ActivityStore
 import dev.averyn.tracking.exportGpxToFile
@@ -48,6 +49,7 @@ class UserData(
     private val recordStore: PersonalRecordStore = PersonalRecordStore(db),
     private val profileStore: ProfileStore = ProfileStore(db),
     private val zoneStore: PrivacyZoneStore = PrivacyZoneStore(db),
+    private val socialStore: SocialStore = SocialStore(db),
 ) {
     /**
      * Removes one activity and remembers its id so that a device retry gets `410`. Returns false when the caller
@@ -122,7 +124,24 @@ class UserData(
             }
         }
         raw.deletePrefix("raw/$ownerId/") // also removes objects orphaned by failed uploads
+        raw.deletePrefix("avatars/$ownerId/")
         inTransaction { conn ->
+            // The social side (ADR-0036): follows and blocks go on both sides at once; a report stays 6 months but
+            // loses its reporter. Each statement is safe to repeat.
+            for (sql in listOf(
+                "DELETE FROM follows WHERE follower_id = ? OR followed_id = ?",
+                "DELETE FROM blocks WHERE blocker_id = ? OR blocked_id = ?",
+            )) {
+                conn.prepareStatement(sql).use { stmt ->
+                    stmt.setObject(1, ownerId)
+                    stmt.setObject(2, ownerId)
+                    stmt.executeUpdate()
+                }
+            }
+            conn.prepareStatement("UPDATE reports SET reporter_id = NULL WHERE reporter_id = ?").use { stmt ->
+                stmt.setObject(1, ownerId)
+                stmt.executeUpdate()
+            }
             for (table in listOf(
                 "activities",
                 "deleted_activities",
@@ -321,6 +340,10 @@ class UserData(
                 // The privacy zones (TDD-0016): the user's own places, so they leave with the rest of the account.
                 zip.putNextEntry(ZipEntry("privacy-zones.json"))
                 zip.write(Json.encodeToString(PrivacyZones.serializer(), zoneStore.get(ownerId)).toByteArray())
+                zip.closeEntry()
+                // The public side (ADR-0036): profile, who follows and is followed, blocks, reports made.
+                zip.putNextEntry(ZipEntry("social.json"))
+                zip.write(Json.encodeToString(socialStore.export(ownerId)).toByteArray())
                 zip.closeEntry()
                 zip.putNextEntry(ZipEntry("consents.json"))
                 zip.write(
